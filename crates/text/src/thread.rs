@@ -4,7 +4,7 @@
 //! testing need nothing special; after an edit the engine joins the slices and re-distributes them
 //! with [`distribute`].
 
-use vectorcraft_doc::{ParaStyle, TextObject, TextRun};
+use livipen_doc::{ParaStyle, TextObject, TextRun};
 
 use crate::edit::{normalize, runs_len, slice_runs, style_at};
 use crate::{FontDb, layout};
@@ -85,14 +85,14 @@ pub struct Slice {
 
 /// The count of numbered list paragraphs after the paragraphs of `runs` (styles `paras`, one per
 /// paragraph) but the last one, counted on from `count` as the layout counts them
-/// ([`vectorcraft_doc::text::ParaList::next_marker`]). A slice's last paragraph also starts the
+/// ([`livipen_doc::text::ParaList::next_marker`]). A slice's last paragraph also starts the
 /// next frame, which counts it.
 fn count_list_paragraphs(runs: &[TextRun], paras: &[ParaStyle], mut count: u32) -> u32 {
     let text: String = runs.iter().map(|r| r.text.as_str()).collect();
     let mut pieces: Vec<&str> = text.split('\n').collect();
     pieces.pop();
     for (piece, para) in pieces.iter().zip(paras) {
-        vectorcraft_doc::text::ParaList::next_marker(para.list, piece.is_empty(), &mut count);
+        livipen_doc::text::ParaList::next_marker(para.list, piece.is_empty(), &mut count);
     }
     count
 }
@@ -179,11 +179,11 @@ pub fn distribute_continuing(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use vectorcraft_doc::{CharStyle, Justify, TextKind};
-    use vectorcraft_geom::{Affine, PathData, Rect, shapes};
+    use livipen_doc::{CharStyle, Justify, TextKind};
+    use livipen_geom::{Affine, PathData, Rect, shapes};
 
     fn frame(x: f64) -> TextObject {
-        let mut t = TextObject::point(vectorcraft_geom::Point::ZERO, "", CharStyle::default());
+        let mut t = TextObject::point(livipen_geom::Point::ZERO, "", CharStyle::default());
         t.kind = TextKind::Area { frame: shapes::rectangle(Rect::new(x, 0.0, x + 120.0, 60.0)) };
         t.xf = Affine::IDENTITY;
         t
@@ -191,7 +191,7 @@ mod tests {
 
     /// Type on a straight path `length` long.
     fn path_frame(length: f64) -> TextObject {
-        let mut t = TextObject::point(vectorcraft_geom::Point::ZERO, "", CharStyle::default());
+        let mut t = TextObject::point(livipen_geom::Point::ZERO, "", CharStyle::default());
         let line = kurbo::Line::new((0.0, 0.0), (length, 0.0));
         t.kind = TextKind::OnPath { path: PathData::from_bezpath(&kurbo::Shape::to_path(&line, 0.1)), start: 0.0, end: None };
         t.xf = Affine::IDENTITY;
@@ -301,7 +301,7 @@ mod tests {
         let text = "The quick brown fox jumps over the lazy dog. ".repeat(4) + "\nSecond paragraph.\nThird.";
         let story = vec![TextRun { text, style: CharStyle::default(), inline: None }];
         let style = |j| ParaStyle { justify: j, ..Default::default() };
-        use vectorcraft_doc::Justify::*;
+        use livipen_doc::Justify::*;
         let paras = vec![style(Left), style(Center), style(Right)];
         let parts = distribute(db, &[&a, &b], &story, &paras);
         assert!(!parts[0].runs.is_empty() && !parts[1].runs.is_empty());
@@ -329,7 +329,7 @@ mod tests {
     /// in the first frame only, and the paragraph after it takes the next number.
     #[test]
     fn numbered_list_paragraphs_count_on_through_the_frames() {
-        use vectorcraft_doc::text::{NumberStyle, ParaList};
+        use livipen_doc::text::{NumberStyle, ParaList};
         let db = FontDb::global();
         let (a, mut b) = (frame(0.0), frame(200.0));
         b.kind = TextKind::Area { frame: shapes::rectangle(Rect::new(200.0, 0.0, 320.0, 400.0)) };
@@ -383,7 +383,7 @@ mod tests {
     /// keeps both there.
     #[test]
     fn a_paragraph_continued_into_the_next_frame_has_no_first_line_indent_or_bullet_there() {
-        use vectorcraft_doc::text::{Bullet, ParaList};
+        use livipen_doc::text::{Bullet, ParaList};
         let db = FontDb::global();
         let (a, b, mut c) = (frame(0.0), frame(200.0), frame(400.0));
         c.kind = TextKind::Area { frame: shapes::rectangle(Rect::new(400.0, 0.0, 520.0, 300.0)) };
@@ -489,7 +489,7 @@ mod tests {
     /// A paragraph that continues onto type on a path starts the path without its bullet.
     #[test]
     fn a_list_paragraph_continued_onto_a_path_has_no_bullet_there() {
-        use vectorcraft_doc::text::{Bullet, ParaList};
+        use livipen_doc::text::{Bullet, ParaList};
         let db = FontDb::global();
         let para = ParaStyle { left_indent: 18.0, first_line_indent: -18.0, list: Some(ParaList::bulleted(Bullet::Dot)), ..Default::default() };
         let text = "The quick brown fox jumps over the lazy dog. ".repeat(6);

@@ -12,11 +12,11 @@
 
 use std::sync::Arc;
 
+use livipen_plugins::{Budget, Kind, Manifest, Plugin, registry};
 use serde_json::{Map, Value, json};
-use vectorcraft_plugins::{Budget, Kind, Manifest, Plugin, registry};
 
 use super::{DialogSpec, form};
-use crate::VectorcraftApp;
+use crate::LiviPenApp;
 use crate::menus::Item;
 use crate::state::Dialog;
 
@@ -59,7 +59,7 @@ pub fn object_menu() -> Vec<Item> {
 /// Effect › Plug-ins: the live-effect plug-ins (`None` while none is installed). Effects without
 /// options apply at once, as built-in ones do.
 pub fn effect_menu() -> Option<Item> {
-    let items: Vec<Item> = vectorcraft_effects::plugin_effects()
+    let items: Vec<Item> = livipen_effects::plugin_effects()
         .into_iter()
         .map(|e| match e.defaults.as_object().is_some_and(|o| o.is_empty()) {
             true => Item::Cmd(e.label, "effect.apply", json!({ "effect": e.id })),
@@ -71,7 +71,7 @@ pub fn effect_menu() -> Option<Item> {
 
 /// `plugin.dialog {id, params?}`: run filter `id` at once when it takes no parameters or `params`
 /// are given, else open its dialog prefilled with its defaults.
-pub fn open(app: &mut VectorcraftApp, p: &Value) -> Result<Value, String> {
+pub fn open(app: &mut LiviPenApp, p: &Value) -> Result<Value, String> {
     let id = p.get("id").and_then(Value::as_str).ok_or("missing `id` (see plugin.list)")?;
     let plugin = registry::get(id).ok_or_else(|| format!("no plug-in {id:?} is installed"))?;
     let m = plugin.manifest();
@@ -119,7 +119,7 @@ fn params(d: &Dialog) -> Value {
 
 /// Runs filter `plugin` with `plugin.run`'s params `p`: at once, or in the background when it is
 /// heavy.
-fn run(app: &mut VectorcraftApp, plugin: &Plugin, p: Value) -> Result<Value, String> {
+fn run(app: &mut LiviPenApp, plugin: &Plugin, p: Value) -> Result<Value, String> {
     match plugin.manifest().budget {
         Budget::Light => app.run(CMD, p),
         Budget::Heavy => crate::plugin_runs::start(app, p),
@@ -128,7 +128,7 @@ fn run(app: &mut VectorcraftApp, plugin: &Plugin, p: Value) -> Result<Value, Str
 
 /// The plug-in's description and fields, then the live Preview; a heavy filter has a note instead
 /// that it runs in the background, since a run may take minutes.
-fn body(app: &mut VectorcraftApp, ui: &mut egui::Ui, d: &mut Dialog) -> bool {
+fn body(app: &mut LiviPenApp, ui: &mut egui::Ui, d: &mut Dialog) -> bool {
     let Some(plugin) = described(ui, d) else { return true };
     form::schema_fields(app, ui, d, plugin.manifest());
     match plugin.manifest().budget {
@@ -148,7 +148,7 @@ fn body(app: &mut VectorcraftApp, ui: &mut egui::Ui, d: &mut Dialog) -> bool {
 
 /// OK: a filter keeps its previewed run as one undo step; a heavy one, which has no preview, starts
 /// in the background ([`run`]) and the dialog closes.
-fn confirm(app: &mut VectorcraftApp, d: &Dialog) -> Result<Value, String> {
+fn confirm(app: &mut LiviPenApp, d: &Dialog) -> Result<Value, String> {
     match registry::get(&d.str("__plugin")) {
         Some(plugin) if plugin.manifest().budget == Budget::Heavy => {
             let r = run(app, &plugin, params(d));
@@ -176,20 +176,20 @@ pub(super) const EXPORT_SPEC: DialogSpec = DialogSpec {
 
 /// Export As with exporter `plugin`, which has parameters: its fields at their defaults, and
 /// `export`, the export's own parameters (`format`, `path`, …), kept for Export.
-pub fn open_export(app: &mut VectorcraftApp, plugin: &Plugin, export: Value) {
+pub fn open_export(app: &mut LiviPenApp, plugin: &Plugin, export: Value) {
     let mut fields = fields_for(plugin.manifest());
     fields.insert("__export".into(), export);
     app.ui.dialog = Some(Dialog { kind: EXPORT_KIND.into(), fields });
 }
 
-fn export_body(app: &mut VectorcraftApp, ui: &mut egui::Ui, d: &mut Dialog) -> bool {
+fn export_body(app: &mut LiviPenApp, ui: &mut egui::Ui, d: &mut Dialog) -> bool {
     let Some(plugin) = described(ui, d) else { return true };
     form::schema_fields(app, ui, d, plugin.manifest());
     false
 }
 
 /// Writes the file with the export's parameters and the plug-in's, as `params`.
-fn export_confirm(app: &mut VectorcraftApp, d: &Dialog) -> Result<Value, String> {
+fn export_confirm(app: &mut LiviPenApp, d: &Dialog) -> Result<Value, String> {
     let mut p = d.fields.get("__export").cloned().filter(Value::is_object).ok_or("no format to export to")?;
     p["params"] = form::params(d);
     let format = p.get("format").and_then(Value::as_str).map(str::to_string);

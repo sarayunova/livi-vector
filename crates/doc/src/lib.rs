@@ -1,4 +1,4 @@
-//! VectorCraft document model: artboards, layers and objects, appearance, swatches (pure data + serde).
+//! Livi Pen document model: artboards, layers and objects, appearance, swatches (pure data + serde).
 //!
 //! Documents are persistent trees: children are `Arc<Node>`, and edits go through
 //! [`Document::node_mut`], which clones only the nodes on the path from the root to the edited node.
@@ -102,6 +102,8 @@ pub use hit::{Hit, HitKind};
 pub use links::{LinkInfo, PlacementOptions};
 pub use live::{BlendEase, BlendEaseType, BlendOrientation, BlendSpacing, BlendSpec, EnvelopeKind, GradientMesh, MeshPoint};
 pub use live_paint::{GapOptions, GapSize};
+pub use livipen_color as color;
+pub use livipen_geom as geom;
 pub use metadata::{CopyrightStatus, DocMetadata};
 pub use node::Knockout;
 pub use node::Scaling;
@@ -125,12 +127,10 @@ pub use text::{
 };
 pub use trace::TraceView;
 pub use variables::{DataSet, DataValue, Variable, VariableKind, Variables};
-pub use vectorcraft_color as color;
-pub use vectorcraft_geom as geom;
 
+use livipen_color::{Swatch, SwatchGroup};
+use livipen_geom::{Affine, Point, Rect, Vec2};
 use serde::{Deserialize, Serialize};
-use vectorcraft_color::{Swatch, SwatchGroup};
-use vectorcraft_geom::{Affine, Point, Rect, Vec2};
 
 /// Coordinates beyond this many points exceed the supported document range.
 pub const MAX_COORD: f64 = 4.0e6;
@@ -427,10 +427,10 @@ pub enum ColorMode {
 
 impl ColorMode {
     /// The colour model new colours take in a document of this mode.
-    pub fn model(self) -> vectorcraft_color::cms::Model {
+    pub fn model(self) -> livipen_color::cms::Model {
         match self {
-            ColorMode::Rgb => vectorcraft_color::cms::Model::Rgb,
-            ColorMode::Cmyk => vectorcraft_color::cms::Model::Cmyk,
+            ColorMode::Rgb => livipen_color::cms::Model::Rgb,
+            ColorMode::Cmyk => livipen_color::cms::Model::Cmyk,
         }
     }
 }
@@ -473,7 +473,7 @@ pub struct Artboard {
     /// without one the paper is white, or the Simulate Colored Paper color. Exports and print leave
     /// it out.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub color: Option<vectorcraft_color::Color>,
+    pub color: Option<livipen_color::Color>,
 }
 
 /// The Video Ruler Pixel Aspect Ratios an artboard takes (Artboard Options): from a pixel ten times
@@ -697,7 +697,7 @@ pub struct GraphicStyle {
     #[serde(default = "one", skip_serializing_if = "skip::is_one")]
     pub opacity: f32,
     #[serde(default, skip_serializing_if = "skip::is_default")]
-    pub blend: vectorcraft_color::BlendMode,
+    pub blend: livipen_color::BlendMode,
     #[serde(default, skip_serializing_if = "skip::is_default")]
     pub isolate: bool,
     #[serde(default, skip_serializing_if = "skip::is_default")]
@@ -937,7 +937,7 @@ pub struct Document {
     /// them (on, the default); off, auto slices cover the art and the slices.
     #[serde(default = "yes", skip_serializing_if = "skip::is_true")]
     pub slices_clip_to_artboard: bool,
-    /// File → Print: the print settings saved with the document (`vectorcraft_pdf::PrintSettings`
+    /// File → Print: the print settings saved with the document (`livipen_pdf::PrintSettings`
     /// as JSON: the print engine sits above this crate); `None` until they are set up.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub print_setup: Option<serde_json::Value>,
@@ -1190,7 +1190,7 @@ impl Document {
 
     /// [`Document::new`] in colour `mode`, with that mode's default swatches.
     pub fn new_with_mode(width: f64, height: f64, mode: ColorMode) -> Self {
-        let (swatches, swatch_groups) = vectorcraft_color::default_swatches(mode.model());
+        let (swatches, swatch_groups) = livipen_color::default_swatches(mode.model());
         let mut d = Self {
             version: FORMAT_VERSION,
             title: "Untitled-1".into(),
@@ -1783,13 +1783,13 @@ impl Document {
     pub fn bounds_of(&self, ids: &[NodeId], visual: bool) -> Option<Rect> {
         let symbols = self.symbol_boxes();
         ids.iter().filter_map(|id| self.node(*id)).fold(None, |acc, n| {
-            vectorcraft_geom::union_opt(acc, if visual { n.visual_bounds_with(&symbols) } else { n.geometric_bounds_with(&symbols) })
+            livipen_geom::union_opt(acc, if visual { n.visual_bounds_with(&symbols) } else { n.geometric_bounds_with(&symbols) })
         })
     }
     /// Visual bounds of all art, with symbol instances measured by their art.
     pub fn art_bounds(&self) -> Option<Rect> {
         let symbols = self.symbol_boxes();
-        self.layers.iter().fold(None, |acc, l| vectorcraft_geom::union_opt(acc, l.visual_bounds_with(&symbols)))
+        self.layers.iter().fold(None, |acc, l| livipen_geom::union_opt(acc, l.visual_bounds_with(&symbols)))
     }
     /// Artboard index containing point `p` (topmost = last), its edges included
     /// ([`Document::artboard_holding`]).
@@ -2260,7 +2260,7 @@ impl Document {
 }
 
 fn default_graphic_styles() -> Vec<GraphicStyle> {
-    use vectorcraft_color::{Color, Paint};
+    use livipen_color::{Color, Paint};
     let solid = |hex| Paint::solid(Color::from_hex(hex).unwrap_or(Color::BLACK));
     [
         GraphicStyle::new(DEFAULT_GRAPHIC_STYLE, Appearance::default_art()),
@@ -2303,7 +2303,7 @@ impl Document {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use vectorcraft_geom::shapes;
+    use livipen_geom::shapes;
 
     /// Zooming in on an inch ruler divided the inch into tenths (#2827). Its steps below an inch
     /// are binary fractions now, and the minor ticks between them stay binary too; every other

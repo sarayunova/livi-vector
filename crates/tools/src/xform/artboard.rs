@@ -22,8 +22,8 @@
 //! Artboards panel's lock column) is selected by a click, but a drag or an arrow key doesn't move it
 //! or copy it, it shows no handles, and Delete leaves it.
 
+use livipen_geom::{Affine, Point, Rect, Vec2};
 use serde_json::{Value, json};
-use vectorcraft_geom::{Affine, Point, Rect, Vec2};
 
 use super::{BLUE, polygon, rect_corners};
 use crate::bbox::{Handle, hit_handle, scale_for_drag};
@@ -204,7 +204,7 @@ impl ArtboardTool {
             return Point::new(p.x.round(), p.y.round());
         }
         if cx.snap_to_grid {
-            return vectorcraft_geom::snap::snap_point_to_grid(p, cx.grid_step());
+            return livipen_geom::snap::snap_point_to_grid(p, cx.grid_step());
         }
         let Some(t) = &self.targets else { return p };
         let offsets: &[Vec2] = if bleed == Vec2::ZERO { &[] } else { &[bleed] };
@@ -222,7 +222,7 @@ impl ArtboardTool {
             return Vec2::new((tl.x + d.x).round() - tl.x, (tl.y + d.y).round() - tl.y);
         }
         if cx.snap_to_grid {
-            return vectorcraft_geom::snap::snap_point_to_grid(tl + d, cx.grid_step()) - tl;
+            return livipen_geom::snap::snap_point_to_grid(tl + d, cx.grid_step()) - tl;
         }
         let Some(t) = (if copy { &self.copy_targets } else { &self.targets }) else { return d };
         let moved = rect + d;
@@ -259,7 +259,7 @@ fn create_artboard(r: Rect) -> Vec<Action> {
 
 /// The visible bounds of the topmost object under `p`, when they are large enough to be an artboard.
 fn fittable_bounds(cx: &ToolContext, p: Point) -> Option<Rect> {
-    vectorcraft_doc::hit::hit_test(cx.doc, p, cx.hit_options())
+    livipen_doc::hit::hit_test(cx.doc, p, cx.hit_options())
         .and_then(|h| cx.doc.bounds_of(&[h.top_object(cx.isolation)], true))
         .filter(|r| r.width() >= MIN_SIDE && r.height() >= MIN_SIDE && [r.x0, r.y0, r.x1, r.y1].iter().all(|n| n.is_finite()))
 }
@@ -654,7 +654,7 @@ impl Tool for ArtboardTool {
 mod tests {
     use super::*;
     use crate::testutil::*;
-    use vectorcraft_doc::Selection;
+    use livipen_doc::Selection;
 
     fn ev(kind: PointerKind, x: f64, y: f64) -> PointerEvent {
         PointerEvent::new(kind, x, y)
@@ -662,7 +662,7 @@ mod tests {
 
     /// [`doc_with_rect`] (artboard 1 at 0–500, a rectangle at 100–200) plus Artboard 2 at x 600–800,
     /// y 0–200.
-    fn two_boards() -> vectorcraft_doc::Document {
+    fn two_boards() -> livipen_doc::Document {
         let (mut d, _) = doc_with_rect();
         let mut ab = d.artboards[0].clone();
         ab.rect = Rect::new(600.0, 0.0, 800.0, 200.0);
@@ -727,8 +727,8 @@ mod tests {
         let mut d = two_boards();
         let l = d.layers[0].id;
         let id = d.alloc_id();
-        let art = vectorcraft_geom::shapes::rectangle(Rect::new(650.0, 50.0, 660.0, 60.0));
-        d.insert(Some(l), 0, vectorcraft_doc::Node::path(id, art, vectorcraft_doc::Appearance::default_art())).unwrap();
+        let art = livipen_geom::shapes::rectangle(Rect::new(650.0, 50.0, 660.0, 60.0));
+        d.insert(Some(l), 0, livipen_doc::Node::path(id, art, livipen_doc::Appearance::default_art())).unwrap();
         let (s, p) = (Selection::default(), paint());
         let c = cx(&d, &s, &p);
         let mut t = ArtboardTool::default();
@@ -754,8 +754,8 @@ mod tests {
         d.artboards.push(locked);
         let l = d.layers[0].id;
         let id = d.alloc_id();
-        let art = vectorcraft_geom::shapes::rectangle(Rect::new(650.0, 50.0, 660.0, 60.0));
-        d.insert(Some(l), 0, vectorcraft_doc::Node::path(id, art, vectorcraft_doc::Appearance::default_art())).unwrap();
+        let art = livipen_geom::shapes::rectangle(Rect::new(650.0, 50.0, 660.0, 60.0));
+        d.insert(Some(l), 0, livipen_doc::Node::path(id, art, livipen_doc::Appearance::default_art())).unwrap();
         let (s, p) = (Selection::default(), paint());
         let c = cx(&d, &s, &p);
         let mut t = ArtboardTool::default();
@@ -1053,8 +1053,8 @@ mod tests {
         let mut d = two_boards();
         let l = d.layers[0].id;
         let id = d.alloc_id();
-        let art = vectorcraft_geom::shapes::rectangle(Rect::new(700.0, 50.0, 710.0, 60.0));
-        d.insert(Some(l), 0, vectorcraft_doc::Node::path(id, art, vectorcraft_doc::Appearance::default_art())).unwrap();
+        let art = livipen_geom::shapes::rectangle(Rect::new(700.0, 50.0, 710.0, 60.0));
+        d.insert(Some(l), 0, livipen_doc::Node::path(id, art, livipen_doc::Appearance::default_art())).unwrap();
         let (s, p) = (Selection::default(), paint());
         let c = cx(&d, &s, &p);
         // Off: the right handle 3 pt past the art's right edge (710) lands on it; the height stays.

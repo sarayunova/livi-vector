@@ -5,13 +5,13 @@
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::Arc;
 
+use livipen_color::{Color, Paint};
+use livipen_doc::marks::{MarkStyle, TrimMarks};
+use livipen_doc::{Appearance, ImageObject, LiveShape, Node, NodeId, NodeKind, RasterColorModel, RasterEffectsSettings, Scaling};
+use livipen_geom::{Affine, Anchor, PathData, Point, Rect, Vec2};
+use livipen_render::AntiAlias;
+use livipen_render::encode::{RasterExportOptions, RasterFormat};
 use serde_json::{Value, json};
-use vectorcraft_color::{Color, Paint};
-use vectorcraft_doc::marks::{MarkStyle, TrimMarks};
-use vectorcraft_doc::{Appearance, ImageObject, LiveShape, Node, NodeId, NodeKind, RasterColorModel, RasterEffectsSettings, Scaling};
-use vectorcraft_geom::{Affine, Anchor, PathData, Point, Rect, Vec2};
-use vectorcraft_render::AntiAlias;
-use vectorcraft_render::encode::{RasterExportOptions, RasterFormat};
 
 use super::edit::{duplicate_in, selected_roots};
 use super::*;
@@ -382,7 +382,7 @@ fn transform_each_as(s: &mut Session, p: &Value, label: &str) -> Result<Value> {
                 k_mv = mv * (rng.next() * 2.0 - 1.0);
                 k_rot = rot * (rng.next() * 2.0 - 1.0);
             }
-            let o = vectorcraft_geom::reference_point(b, refi);
+            let o = livipen_geom::reference_point(b, refi);
             // Reflect X / Reflect Y match Object › Transform › Transform Each and Effect › Distort › Transform:
             // Reflect X flips left-right (negate x), Reflect Y flips top-bottom (negate y).
             let refl = Affine::scale_non_uniform(if rx { -1.0 } else { 1.0 }, if ry { -1.0 } else { 1.0 });
@@ -407,9 +407,9 @@ fn transform_each_as(s: &mut Session, p: &Value, label: &str) -> Result<Value> {
 pub(crate) const MAX_PIXELS: f64 = 64.0e6;
 
 /// A copy of `doc` whose only content is `nodes` (paint order), for offscreen rendering.
-pub(crate) fn isolated_doc(doc: &vectorcraft_doc::Document, nodes: Vec<Node>) -> vectorcraft_doc::Document {
+pub(crate) fn isolated_doc(doc: &livipen_doc::Document, nodes: Vec<Node>) -> livipen_doc::Document {
     let mut tmp = doc.clone();
-    let mut layer = Node::layer(NodeId(u64::MAX), "raster", vectorcraft_doc::LayerColor::Preset(0));
+    let mut layer = Node::layer(NodeId(u64::MAX), "raster", livipen_doc::LayerColor::Preset(0));
     if let Some(ch) = layer.children_mut() {
         *ch = nodes.into_iter().map(Arc::new).collect();
     }
@@ -417,7 +417,7 @@ pub(crate) fn isolated_doc(doc: &vectorcraft_doc::Document, nodes: Vec<Node>) ->
     tmp
 }
 
-pub(crate) fn unique_key(d: &vectorcraft_doc::Document, stem: &str) -> String {
+pub(crate) fn unique_key(d: &livipen_doc::Document, stem: &str) -> String {
     let mut i = d.images.len() + 1;
     loop {
         let k = format!("{stem}-{i}");
@@ -431,17 +431,17 @@ pub(crate) fn unique_key(d: &vectorcraft_doc::Document, stem: &str) -> String {
 /// `doc` rendered over `region` with `opts` as a PNG in colour model `color`, with the note that an
 /// image in it couldn't be decoded ([`super::rasterfx::undecoded_warning`]).
 fn render_png(
-    doc: &vectorcraft_doc::Document,
+    doc: &livipen_doc::Document,
     region: Rect,
     scale: f64,
-    opts: &vectorcraft_render::RenderOptions,
+    opts: &livipen_render::RenderOptions,
     color: RasterColorModel,
 ) -> Result<(Vec<u8>, u32, u32, Option<&'static str>)> {
     if region.width() * region.height() * scale * scale > MAX_PIXELS || region.width() * scale > 65535.0 || region.height() * scale > 65535.0 {
         return Err(EngineError::Other("image would be too large; lower the resolution".into()));
     }
-    let mut r = vectorcraft_render::Renderer::new();
-    let failed = vectorcraft_render::decode_failures();
+    let mut r = livipen_render::Renderer::new();
+    let failed = livipen_render::decode_failures();
     let mut img = r.render_region_with(doc, region, scale, opts);
     let warning = super::rasterfx::undecoded_warning(failed);
     RasterEffectsSettings { color_model: color, ..Default::default() }.finish_pixels(&mut img.pixels);
@@ -457,7 +457,7 @@ pub(crate) struct Rasterized {
     /// Image pixels → document.
     xf: Affine,
     /// The art's outline, with Create Clipping Mask.
-    clip: Option<(PathData, vectorcraft_geom::FillRule)>,
+    clip: Option<(PathData, livipen_geom::FillRule)>,
     /// The note that an image in the art couldn't be decoded ([`render_png`]).
     warning: Option<&'static str>,
 }
@@ -465,9 +465,9 @@ pub(crate) struct Rasterized {
 impl Rasterized {
     /// The image as a new object of `d` (its pixels in `d.images`), in a clip group with the art's
     /// outline when it has one.
-    pub(crate) fn into_node(self, d: &mut vectorcraft_doc::Document) -> Node {
+    pub(crate) fn into_node(self, d: &mut livipen_doc::Document) -> Node {
         let key = unique_key(d, "raster");
-        d.images.insert(key.clone(), vectorcraft_doc::ImageBlob::new("image/png", self.png));
+        d.images.insert(key.clone(), livipen_doc::ImageBlob::new("image/png", self.png));
         let id = d.alloc_id();
         let image = ImageObject { key, width: self.width, height: self.height, xf: self.xf, link: None, placement: Default::default(), pixels: None };
         let node = Node::new(id, NodeKind::Image(Box::new(image)));
@@ -480,8 +480,8 @@ impl Rasterized {
 
 /// Object › Rasterize's image of `nodes` (drawn also where hidden) with the params `p` of command
 /// `cmd`, each defaulting to `doc`'s raster effects settings: over the bounds of what the art draws
-/// ([`vectorcraft_render::drawn_bounds`]) and the room around them, in whole pixels.
-pub(crate) fn rasterize_art(doc: &vectorcraft_doc::Document, nodes: Vec<Node>, p: &Value, cmd: &str) -> Result<Rasterized> {
+/// ([`livipen_render::drawn_bounds`]) and the room around them, in whole pixels.
+pub(crate) fn rasterize_art(doc: &livipen_doc::Document, nodes: Vec<Node>, p: &Value, cmd: &str) -> Result<Rasterized> {
     check_numbers(p, &["ppi"], cmd)?;
     let ppi = f64_or(p, "ppi", doc.raster_effects_ppi);
     if !(1.0..=2400.0).contains(&ppi) {
@@ -489,7 +489,7 @@ pub(crate) fn rasterize_art(doc: &vectorcraft_doc::Document, nodes: Vec<Node>, p
     }
     // The document's raster effects settings, changed by the params.
     let mut look = doc.raster_effects.clone();
-    let mut background = (look.background == vectorcraft_doc::Background::White).then_some([255; 3]);
+    let mut background = (look.background == livipen_doc::Background::White).then_some([255; 3]);
     let mut anti_alias = if look.anti_alias { AntiAlias::Art } else { AntiAlias::None };
     for (k, v) in p.as_object().into_iter().flatten().filter(|(_, v)| !v.is_null()) {
         match k.as_str() {
@@ -522,7 +522,7 @@ pub(crate) fn rasterize_art(doc: &vectorcraft_doc::Document, nodes: Vec<Node>, p
         })
         .collect();
     // What the art draws, its geometry effects applied.
-    let b = nodes.iter().fold(None, |acc, n| vectorcraft_geom::union_opt(acc, vectorcraft_render::drawn_bounds(doc, n)));
+    let b = nodes.iter().fold(None, |acc, n| livipen_geom::union_opt(acc, livipen_render::drawn_bounds(doc, n)));
     let b = b.ok_or_else(|| bad(cmd, "selection has no bounds"))?.inflate(pad, pad);
     let scale = ppi / 72.0;
     // Snap to whole pixels.
@@ -533,14 +533,14 @@ pub(crate) fn rasterize_art(doc: &vectorcraft_doc::Document, nodes: Vec<Node>, p
         .clipping_mask
         .then(|| {
             let outlines = nodes.iter().filter_map(|n| {
-                let (bp, rule) = vectorcraft_render::drawn_outline(doc, n)?;
+                let (bp, rule) = livipen_render::drawn_outline(doc, n)?;
                 let mut p = Node::path(n.id, PathData::from_bezpath(&bp), Appearance::default());
                 if let NodeKind::Path { rule: r, .. } = &mut p.kind {
                     *r = rule;
                 }
                 Some(Arc::new(p))
             });
-            vectorcraft_render::effects::clip_outline(&Node::group(NodeId(u64::MAX), outlines.collect()))
+            livipen_render::effects::clip_outline(&Node::group(NodeId(u64::MAX), outlines.collect()))
         })
         .flatten()
         .map(|(bp, rule)| (PathData::from_bezpath(&bp), rule));
@@ -596,11 +596,11 @@ fn object_mosaic(s: &mut Session, p: &Value) -> Result<Value> {
     let node = st.doc.node(id).cloned().ok_or(EngineError::NoNode(id))?;
     let NodeKind::Image(im) = &node.kind else { return Err(bad(C, "select an image")) };
     let blob = st.doc.images.get(&im.key).filter(|b| !b.bytes.is_empty()).ok_or_else(|| bad(C, "the image has no embedded pixels"))?;
-    let raster = vectorcraft_trace::Raster::decode(&blob.bytes).map_err(|e| bad(C, e.to_string()))?;
+    let raster = livipen_trace::Raster::decode(&blob.bytes).map_err(|e| bad(C, e.to_string()))?;
     let cols = whole_or(p, "columns", 10, C)?.clamp(1, 1000) as u32;
     let rows = whole_or(p, "rows", 10, C)?.clamp(1, 1000) as u32;
     let gray = switch_or(p, "gray", false, C)?;
-    let colors = vectorcraft_trace::mosaic(&raster, cols, rows);
+    let colors = livipen_trace::mosaic(&raster, cols, rows);
     // Tiles in image space, placed by the image transform (scaled to a new size if asked).
     let b = node.geometric_bounds().ok_or_else(|| bad(C, "image has no bounds"))?;
     check_numbers(p, &["width", "height", "spacingX", "spacingY"], C)?;
@@ -656,7 +656,7 @@ fn object_mosaic(s: &mut Session, p: &Value) -> Result<Value> {
 }
 
 fn polygon_path(pts: &[Point]) -> PathData {
-    PathData::single(vectorcraft_geom::SubPath::new(pts.iter().map(|p| Anchor::corner(*p)).collect(), true))
+    PathData::single(livipen_geom::SubPath::new(pts.iter().map(|p| Anchor::corner(*p)).collect(), true))
 }
 
 fn crop_image(s: &mut Session, p: &Value) -> Result<Value> {
@@ -712,7 +712,7 @@ fn crop_image(s: &mut Session, p: &Value) -> Result<Value> {
         render_png(&tmp, region, scale, &RasterExportOptions::default().render_options(RasterFormat::Png), RasterColorModel::Document)?;
     s.edit("Crop Image", |d, _| {
         let key = unique_key(d, "crop");
-        d.images.insert(key.clone(), vectorcraft_doc::ImageBlob::new("image/png", png));
+        d.images.insert(key.clone(), livipen_doc::ImageBlob::new("image/png", png));
         if let Some(n) = d.node_mut(id) {
             n.kind = NodeKind::Image(Box::new(ImageObject {
                 key,
@@ -780,7 +780,7 @@ fn trim_image(s: &mut Session, id: NodeId, im: ImageObject) -> Result<Value> {
     let (cw, ch) = (x1 - x0, y1 - y0);
     s.edit("Crop Image", |d, _| {
         let key = unique_key(d, "crop");
-        d.images.insert(key.clone(), vectorcraft_doc::ImageBlob::new("image/png", png));
+        d.images.insert(key.clone(), livipen_doc::ImageBlob::new("image/png", png));
         if let Some(n) = d.node_mut(id) {
             n.kind = NodeKind::Image(Box::new(ImageObject {
                 key,
@@ -807,7 +807,7 @@ fn mask_image(s: &mut Session, _: &Value) -> Result<Value> {
         .iter()
         .find_map(|id| match st.doc.node(*id).map(|n| &n.kind) {
             Some(NodeKind::Image(im)) => {
-                Some((*id, vectorcraft_geom::shapes::rectangle(Rect::new(0.0, 0.0, im.width as f64, im.height as f64)).transformed(im.xf)))
+                Some((*id, livipen_geom::shapes::rectangle(Rect::new(0.0, 0.0, im.width as f64, im.height as f64)).transformed(im.xf)))
             }
             _ => None,
         })
@@ -972,7 +972,7 @@ fn convert_to_artboards(s: &mut Session, _: &Value) -> Result<Value> {
             // Named one past the highest artboard id the document has, whatever id it is given.
             let number = d.artboards.iter().map(|a| a.id).max().map_or(1, |m| m.saturating_add(1));
             let aid = d.next_artboard_id();
-            d.artboards.push(vectorcraft_doc::Artboard {
+            d.artboards.push(livipen_doc::Artboard {
                 id: aid,
                 name: format!("Artboard {number}"),
                 rect: b,

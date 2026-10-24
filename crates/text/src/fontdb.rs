@@ -15,7 +15,7 @@ use skrifa::{GlyphId, MetadataProvider, Tag};
 
 use crate::GlyphImage;
 use crate::colr::ColourContent;
-use vectorcraft_doc::color::Color;
+use livipen_doc::color::Color;
 
 /// The family used when a requested family is unknown (Illustrator's Myriad Pro analogue).
 pub const FALLBACK_FAMILY: &str = "Source Sans 3";
@@ -1495,12 +1495,12 @@ pub fn user_font_dirs() -> Vec<PathBuf> {
     Vec::new()
 }
 
-/// VectorCraft's own Fonts folder, set by the app ([`set_app_font_dir`]).
+/// Livi Pen's own Fonts folder, set by the app ([`set_app_font_dir`]).
 #[cfg(not(target_arch = "wasm32"))]
 static APP_FONT_DIR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
 
-/// Have [`system_font_dirs`] read `dir` with its subfolders: VectorCraft's own Fonts folder, which
-/// `text.addFontFiles` copies font files into. The desktop app and `vectorcraft-cli` set it before
+/// Have [`system_font_dirs`] read `dir` with its subfolders: Livi Pen's own Fonts folder, which
+/// `text.addFontFiles` copies font files into. The desktop app and `livipen-cli` set it before
 /// the first scan, as they install [`set_platform_font_files`]. A folder that doesn't exist yet is
 /// read once it does. Only the first call counts. Ignored on wasm.
 pub fn set_app_font_dir(dir: PathBuf) {
@@ -1519,7 +1519,7 @@ pub fn app_font_dir() -> Option<&'static Path> {
     None
 }
 
-/// The platform's font folders (the system's and the user's), VectorCraft's own Fonts folder
+/// The platform's font folders (the system's and the user's), Livi Pen's own Fonts folder
 /// ([`set_app_font_dir`]), the font files known to the platform outside them (on Windows those
 /// registered with it, and those [`set_platform_font_files`] lists) and the folders the user added
 /// ([`set_user_font_dirs`]), scanned by [`FontDb::global`].
@@ -2366,7 +2366,7 @@ impl FontDb {
 
     /// The face of character style `st`: [`Self::face_version`] of its font, instanced at its
     /// Variable Font settings ([`Self::instance`]).
-    pub fn style_face(&self, st: &vectorcraft_doc::CharStyle) -> Option<Arc<FontFace>> {
+    pub fn style_face(&self, st: &livipen_doc::CharStyle) -> Option<Arc<FontFace>> {
         let face = self.face_version(&st.font_family, &st.font_style, st.font_version.as_deref())?;
         Some(self.instance(&face, &st.font_axes))
     }
@@ -2886,7 +2886,7 @@ mod image_cache_tests {
         // Images as large as a font may make them: no test font has enough of those to fill the
         // budget, so they're made here.
         let image = || {
-            let blob = vectorcraft_doc::ImageBlob::png(vec![0; crate::bitmap::MAX_PNG_BYTES]);
+            let blob = livipen_doc::ImageBlob::png(vec![0; crate::bitmap::MAX_PNG_BYTES]);
             Some(Arc::new(GlyphImage { blob, width: 1, height: 1, xf: kurbo::Affine::IDENTITY }))
         };
         let mut cache = GlyphCache::default();

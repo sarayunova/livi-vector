@@ -2,12 +2,12 @@
 
 use std::sync::Arc;
 
+use livipen_color::{Color, Paint};
+use livipen_doc::{AppearanceItem, ImageBlob, ImageObject, LineCap, LineJoin, Node, NodeKind};
+use livipen_geom::{Affine, FillRule, PathData, Point, Rect};
+use livipen_testkit::pdf::{PdfPage, pdf};
+use livipen_tools::{Mods, PointerEvent, PointerKind, ToolKey};
 use serde_json::{Value, json};
-use vectorcraft_color::{Color, Paint};
-use vectorcraft_doc::{AppearanceItem, ImageBlob, ImageObject, LineCap, LineJoin, Node, NodeKind};
-use vectorcraft_geom::{Affine, FillRule, PathData, Point, Rect};
-use vectorcraft_testkit::pdf::{PdfPage, pdf};
-use vectorcraft_tools::{Mods, PointerEvent, PointerKind, ToolKey};
 
 use super::*;
 
@@ -39,12 +39,12 @@ fn node(s: &Session, id: NodeId) -> Node {
 }
 
 fn outline(n: &Node) -> (PathData, FillRule) {
-    vectorcraft_tools::builder::node_outline(n).expect("path")
+    livipen_tools::builder::node_outline(n).expect("path")
 }
 
 fn area(s: &Session, id: NodeId) -> f64 {
     let (p, r) = outline(&node(s, id));
-    vectorcraft_pathops::area(&p, r)
+    livipen_pathops::area(&p, r)
 }
 
 /// Rect A (0..100) and rect B (50..150), both 100 tall, selected. A red, B blue.
@@ -274,12 +274,12 @@ fn shape_builder_rect_past_the_segment_limit_merges_whole_regions_as_a_drag_does
         let mut s = session();
         let mut ids = grid(&mut s);
         let pts: Vec<Point> = (0..=segments).map(|k| Point::new(-10.0 + 320.0 * k as f64 / segments as f64, 150.0)).collect();
-        let look = vectorcraft_doc::Appearance::basic(Paint::None, Paint::solid(Color::BLACK), 1.0);
+        let look = livipen_doc::Appearance::basic(Paint::None, Paint::solid(Color::BLACK), 1.0);
         let l = s
             .edit("t", |d, _| {
                 let id = d.alloc_id();
                 let top = d.children(d.default_layer()).map_or(0, |c| c.len());
-                d.insert(d.default_layer(), top, Node::path(id, PathData::single(vectorcraft_geom::SubPath::polyline(&pts, false)), look))?;
+                d.insert(d.default_layer(), top, Node::path(id, PathData::single(livipen_geom::SubPath::polyline(&pts, false)), look))?;
                 Ok(id)
             })
             .unwrap();
@@ -288,7 +288,7 @@ fn shape_builder_rect_past_the_segment_limit_merges_whole_regions_as_a_drag_does
         let r = s.execute("shapeBuilder.merge", &params).unwrap();
         area(&s, NodeId(r["merged"].as_u64().unwrap()))
     };
-    let past = vectorcraft_pathops::SHAPE_BUILDER_MAX_SEGMENTS;
+    let past = livipen_pathops::SHAPE_BUILDER_MAX_SEGMENTS;
     let marquee = json!({"rect": [20, 120, 260, 20]});
     let drag = json!({"points": [[50, 130], [250, 130]]});
     for (segments, want) in [(2, 15000.0), (past, 30000.0)] {
@@ -436,7 +436,7 @@ fn shape_builder_cuts_gradient_shapes_from_a_pdf_along_their_outlines() {
     };
     let bytes = pdf(&[page], None);
     let mut s = Session::new();
-    s.execute("document.open", &json!({"name": "diamonds.pdf", "dataBase64": vectorcraft_format::base64_encode(&bytes)})).unwrap();
+    s.execute("document.open", &json!({"name": "diamonds.pdf", "dataBase64": livipen_format::base64_encode(&bytes)})).unwrap();
     s.execute("select.all", &json!({})).unwrap();
     let r = s.execute("shapeBuilder.merge", &json!({"points": [[250, 100]]})).unwrap();
     let mut pieces: Vec<(f64, Rect, Paint)> =
@@ -722,7 +722,7 @@ fn select_ids(s: &mut Session, list: &[NodeId]) {
     s.execute("select.set", &json!({"ids": list.iter().map(|i| i.0).collect::<Vec<_>>()})).unwrap();
 }
 
-fn merged_look(s: &Session, r: &Value) -> vectorcraft_doc::Shared<vectorcraft_doc::Appearance> {
+fn merged_look(s: &Session, r: &Value) -> livipen_doc::Shared<livipen_doc::Appearance> {
     node(s, NodeId(r["merged"].as_u64().unwrap())).appearance
 }
 
@@ -886,13 +886,13 @@ fn shape_builder_arrow_keys_step_the_current_fill_through_the_swatches() {
     let (a, _) = two(&mut s);
     let v = ViewInfo::default();
     s.select_tool("shapeBuilder", v).unwrap();
-    let chips = |s: &mut Session| s.overlays(v).iter().filter(|o| matches!(o, vectorcraft_tools::Overlay::Swatch { .. })).count();
+    let chips = |s: &mut Session| s.overlays(v).iter().filter(|o| matches!(o, livipen_tools::Overlay::Swatch { .. })).count();
     assert!(!s.tool_claims_key(ToolKey::Right, v), "Artwork leaves the arrows to nudging");
     let values = json!({"pickColorFrom": "swatches", "cursorSwatchPreview": true});
     s.set_tool_option_cmd(&json!({"tool": "shapeBuilder", "values": values})).unwrap();
     assert!(s.tool_claims_key(ToolKey::Right, v));
     let (first, swatches): (String, Vec<Paint>) = {
-        let list = vectorcraft_tools::builder::color_swatches(&s.doc().unwrap().doc);
+        let list = livipen_tools::builder::color_swatches(&s.doc().unwrap().doc);
         (list[0].name.clone(), list.iter().take(3).map(|sw| sw.paint.clone()).collect())
     };
     assert_eq!(swatches.len(), 3);
@@ -921,7 +921,7 @@ fn shape_builder_arrow_keys_pass_swatches_of_the_same_color() {
     let v = ViewInfo::default();
     s.select_tool("shapeBuilder", v).unwrap();
     s.set_tool_option_cmd(&json!({"tool": "shapeBuilder", "values": {"pickColorFrom": "swatches"}})).unwrap();
-    let names: Vec<String> = vectorcraft_tools::builder::color_swatches(&s.doc().unwrap().doc).iter().map(|sw| sw.name.clone()).collect();
+    let names: Vec<String> = livipen_tools::builder::color_swatches(&s.doc().unwrap().doc).iter().map(|sw| sw.name.clone()).collect();
     let a = names.iter().position(|n| n == "Twin A").unwrap();
     assert_eq!(names[a + 1], "Twin B");
     s.execute("paint.setFill", &json!({"swatch": "Twin A", "ids": []})).unwrap();
@@ -929,7 +929,7 @@ fn shape_builder_arrow_keys_pass_swatches_of_the_same_color() {
     s.tool_key(ToolKey::Right, Mods::default(), v).unwrap();
     assert_eq!(s.paint.fill, twin, "Twin B");
     s.tool_key(ToolKey::Right, Mods::default(), v).unwrap();
-    let after = vectorcraft_tools::builder::color_swatches(&s.doc().unwrap().doc)[(a + 2) % names.len()].paint.clone();
+    let after = livipen_tools::builder::color_swatches(&s.doc().unwrap().doc)[(a + 2) % names.len()].paint.clone();
     assert_eq!(s.paint.fill, after, "the swatch after Twin B");
 }
 
@@ -1103,7 +1103,7 @@ fn shape_builder_click_on_a_stroke_does_not_split_off_all_but_a_speck() {
     let journal = s.journal.len();
     s.pointer(&PointerEvent::new(PointerKind::Move, 50.0, 1.0), v).unwrap();
     assert!(s.overlays(v).is_empty(), "{:?}", s.overlays(v));
-    assert_eq!(s.cursor(vectorcraft_geom::Point::new(50.0, 1.0), Mods::default(), v), vectorcraft_tools::Cursor::ShapeBuilder);
+    assert_eq!(s.cursor(livipen_geom::Point::new(50.0, 1.0), Mods::default(), v), livipen_tools::Cursor::ShapeBuilder);
     s.pointer(&PointerEvent::new(PointerKind::Down, 50.0, 1.0), v).unwrap();
     s.pointer(&PointerEvent::new(PointerKind::Up, 50.0, 1.0), v).unwrap();
     assert_eq!((s.journal.len(), layer_children(&s)), (journal, 1), "the click runs no command");
@@ -1154,7 +1154,7 @@ fn shape_builder_stroke_split_keeps_the_path_direction() {
         let sp = &p.subpaths[0];
         (sp.anchors.first().unwrap().p, sp.anchors.last().unwrap().p)
     };
-    let pt = vectorcraft_geom::Point::new;
+    let pt = livipen_geom::Point::new;
     for reverse in [false, true] {
         let mut s = session();
         let (a, l) = square_and_line(&mut s);
@@ -1259,7 +1259,7 @@ fn shape_builder_stroke_split_with_swatches_paints_the_stroke() {
 /// Gives `id` a red-to-blue linear gradient, fitted to its bounds, as its fill and its stroke, and
 /// returns that fill and stroke fixed where they fit `id` now.
 fn paint_with_gradients(s: &mut Session, id: NodeId) -> (Paint, Paint) {
-    use vectorcraft_color::{Gradient, GradientKind, GradientPaint, GradientStop};
+    use livipen_color::{Gradient, GradientKind, GradientPaint, GradientStop};
     let stops = vec![GradientStop::new(0.0, Color::rgb(1.0, 0.0, 0.0)), GradientStop::new(1.0, Color::rgb(0.0, 0.0, 1.0))];
     let gradient = Paint::Gradient(Box::new(GradientPaint::new(Gradient::new(GradientKind::Linear, stops))));
     s.edit("t", |d, _| {
@@ -1411,9 +1411,9 @@ fn shape_builder_tool_click_on_a_stroke_splits_with_the_option() {
     s.set_tool_option_cmd(&json!({"values": {"clickStrokeSplitsPath": true, "highlightColor": "Light Blue"}})).unwrap();
     s.pointer(&PointerEvent::new(PointerKind::Move, 50.0, -1.0), v).unwrap();
     let ov = s.overlays(v);
-    let [vectorcraft_tools::Overlay::Path { path, color: [0x4f, 0x80, 0xff], .. }] = ov.as_slice() else { panic!("{ov:?}") };
-    assert_eq!(vectorcraft_geom::Shape::bounding_box(path), Rect::new(0.0, 0.0, 100.0, 0.0));
-    assert_eq!(s.cursor(vectorcraft_geom::Point::new(50.0, -1.0), Mods::default(), v), vectorcraft_tools::Cursor::Scissors);
+    let [livipen_tools::Overlay::Path { path, color: [0x4f, 0x80, 0xff], .. }] = ov.as_slice() else { panic!("{ov:?}") };
+    assert_eq!(livipen_geom::Shape::bounding_box(path), Rect::new(0.0, 0.0, 100.0, 0.0));
+    assert_eq!(s.cursor(livipen_geom::Point::new(50.0, -1.0), Mods::default(), v), livipen_tools::Cursor::Scissors);
     s.set_tool_option_cmd(&json!({"values": {"highlightStroke": false}})).unwrap();
     s.pointer(&PointerEvent::new(PointerKind::Move, 50.0, -1.0), v).unwrap();
     assert!(s.overlays(v).is_empty());
@@ -1441,7 +1441,7 @@ fn shape_builder_tool_does_not_offer_to_split_a_lone_line() {
     let journal = s.journal.len();
     s.pointer(&PointerEvent::new(PointerKind::Move, 50.0, 1.0), v).unwrap();
     assert!(s.overlays(v).is_empty(), "{:?}", s.overlays(v));
-    assert_eq!(s.cursor(vectorcraft_geom::Point::new(50.0, 1.0), Mods::default(), v), vectorcraft_tools::Cursor::ShapeBuilder);
+    assert_eq!(s.cursor(livipen_geom::Point::new(50.0, 1.0), Mods::default(), v), livipen_tools::Cursor::ShapeBuilder);
     s.pointer(&PointerEvent::new(PointerKind::Down, 50.0, 1.0), v).unwrap();
     s.pointer(&PointerEvent::new(PointerKind::Up, 50.0, 1.0), v).unwrap();
     assert_eq!((s.journal.len(), layer_children(&s)), (journal, 1), "the click runs no command");
@@ -1464,7 +1464,7 @@ fn shape_builder_tool_does_not_offer_to_split_a_side_too_short_to_cut() {
     let at = (101.0, 0.015);
     s.pointer(&PointerEvent::new(PointerKind::Move, at.0, at.1), v).unwrap();
     assert!(s.overlays(v).is_empty(), "{:?}", s.overlays(v));
-    assert_eq!(s.cursor(vectorcraft_geom::Point::new(at.0, at.1), Mods::default(), v), vectorcraft_tools::Cursor::ShapeBuilder);
+    assert_eq!(s.cursor(livipen_geom::Point::new(at.0, at.1), Mods::default(), v), livipen_tools::Cursor::ShapeBuilder);
     s.pointer(&PointerEvent::new(PointerKind::Down, at.0, at.1), v).unwrap();
     s.pointer(&PointerEvent::new(PointerKind::Up, at.0, at.1), v).unwrap();
     assert_eq!((s.journal.len(), layer_children(&s)), (journal, 1), "the click runs no command");
@@ -1485,8 +1485,8 @@ fn live_paint_make_builds_group_with_hidden_sources() {
     let mut s = session();
     let g = live(&mut s);
     let n = node(&s, g);
-    assert!(vectorcraft_tools::builder::is_live_paint(&n));
-    let src = vectorcraft_tools::builder::sources(&n).unwrap();
+    assert!(livipen_tools::builder::is_live_paint(&n));
+    let src = livipen_tools::builder::sources(&n).unwrap();
     assert!(!src.visible);
     assert_eq!(src.children().unwrap().len(), 2);
     assert_eq!(layer_children(&s), 1);
@@ -1508,7 +1508,7 @@ fn live_paint_fill_assigns_the_face_under_the_point() {
     assert_eq!(face.appearance.fill_paint(), Paint::solid(Color::from_hex("#00ff00").unwrap()));
     // The other faces are untouched.
     let gn = node(&s, g);
-    let green = vectorcraft_tools::builder::faces(&gn).iter().filter(|f| f.appearance.fill_paint() == face.appearance.fill_paint()).count();
+    let green = livipen_tools::builder::faces(&gn).iter().filter(|f| f.appearance.fill_paint() == face.appearance.fill_paint()).count();
     assert_eq!(green, 1);
     // Default paint = current fill; a miss is an error.
     s.paint.fill = Paint::solid(Color::rgb(1.0, 1.0, 0.0));
@@ -1523,7 +1523,7 @@ fn live_paint_fill_on_plain_paths_makes_the_group() {
     let (a, b) = two(&mut s);
     let r = s.execute("livePaint.fill", &json!({"ids": [a.0, b.0], "point": [125, 50], "color": "#123456"})).unwrap();
     let g = NodeId(r["group"].as_u64().unwrap());
-    assert!(vectorcraft_tools::builder::is_live_paint(&node(&s, g)));
+    assert!(livipen_tools::builder::is_live_paint(&node(&s, g)));
     assert_eq!(layer_children(&s), 1);
     // One undo step removes both the make and the fill.
     s.execute("edit.undo", &json!({})).unwrap();
@@ -1596,7 +1596,7 @@ fn live_paint_stroke_edge_skips_hidden_edges() {
     let g = live(&mut s);
     // The vertical edge at x=100 is hidden on its own; the group stays visible.
     let vertical_at = |s: &Session, x: f64| -> Vec<u64> {
-        vectorcraft_tools::builder::edges(&node(s, g))
+        livipen_tools::builder::edges(&node(s, g))
             .iter()
             .filter(|e| e.geometric_bounds().is_some_and(|bb| (bb.x0 - x).abs() < 1e-6 && (bb.x1 - x).abs() < 1e-6))
             .map(|e| e.id.0)
@@ -1617,7 +1617,7 @@ fn live_paint_fill_skips_hidden_faces() {
     let mut s = session();
     let g = live(&mut s);
     // The face from x=50 to x=100 is hidden on its own; the group stays visible.
-    let hidden = vectorcraft_tools::builder::face_at(&node(&s, g), vectorcraft_geom::Point::new(75.0, 50.0)).unwrap().id;
+    let hidden = livipen_tools::builder::face_at(&node(&s, g), livipen_geom::Point::new(75.0, 50.0)).unwrap().id;
     s.execute("object.setProps", &json!({"ids": [hidden.0], "visible": false})).unwrap();
     let green = Paint::solid(Color::from_hex("#00ff00").unwrap());
     let children = node(&s, g).children().unwrap().len();
@@ -1646,7 +1646,7 @@ fn live_paint_release_and_expand() {
     let r = s.execute("livePaint.expand", &json!({})).unwrap();
     assert_eq!(ids(&r), vec![g]);
     let n = node(&s, g);
-    assert!(!vectorcraft_tools::builder::is_live_paint(&n));
+    assert!(!livipen_tools::builder::is_live_paint(&n));
     // Unpainted face and the hidden sources are gone: 2 faces + stroked edges.
     let ch = n.children().unwrap();
     assert!(ch.iter().all(|c| c.visible));
@@ -1676,9 +1676,9 @@ fn live_paint_merge_keeps_paint_and_adds_faces() {
     assert_eq!(NodeId(r["id"].as_u64().unwrap()), g);
     assert!(r["faces"].as_u64().unwrap() > 3);
     let gn = node(&s, g);
-    let f = vectorcraft_tools::builder::face_at(&gn, vectorcraft_geom::Point::new(25.0, 50.0)).unwrap();
+    let f = livipen_tools::builder::face_at(&gn, livipen_geom::Point::new(25.0, 50.0)).unwrap();
     assert_eq!(f.appearance.fill_paint(), Paint::solid(Color::from_hex("#00ff00").unwrap()));
-    let src = vectorcraft_tools::builder::sources(&gn).unwrap();
+    let src = livipen_tools::builder::sources(&gn).unwrap();
     assert_eq!(src.children().unwrap().len(), 3, "the rectangle joined the sources");
     assert_eq!(s.doc().unwrap().doc.parent_of(c), Some(src.id));
     assert_eq!(layer_children(&s), 1);
@@ -1693,7 +1693,7 @@ fn live_paint_refuses_type_and_images_and_changes_nothing() {
     let mut s = session();
     let g = live(&mut s);
     let text = NodeId(s.execute("text.create", &json!({"x": 200, "y": 300, "text": "Hi"})).unwrap()["id"].as_u64().unwrap());
-    let image = add_image(&mut s, &vectorcraft_trace::Raster::from_fn(4, 4, |_, _| [0, 0, 0, 255]), Affine::translate((300.0, 300.0)));
+    let image = add_image(&mut s, &livipen_trace::Raster::from_fn(4, 4, |_, _| [0, 0, 0, 255]), Affine::translate((300.0, 300.0)));
     let path = rect(&mut s, 400.0, 20.0, 40.0, 40.0);
     s.execute("select.set", &json!({"ids": [text.0, path.0]})).unwrap();
     let text_group = NodeId(s.execute("object.group", &json!({})).unwrap()["id"].as_u64().unwrap());
@@ -1724,15 +1724,15 @@ fn live_paint_refuses_type_and_images_and_changes_nothing() {
     let c = rect(&mut s, 0.0, 120.0, 100.0, 20.0);
     let r = s.execute("livePaint.merge", &json!({"ids": [g.0, paths.0, c.0]})).unwrap();
     assert_eq!(NodeId(r["id"].as_u64().unwrap()), g);
-    assert!(vectorcraft_tools::builder::live_paint_takes(&node(&s, g)));
-    assert!(!vectorcraft_tools::builder::live_paint_takes(&node(&s, text_group)));
+    assert!(livipen_tools::builder::live_paint_takes(&node(&s, g)));
+    assert!(!livipen_tools::builder::live_paint_takes(&node(&s, text_group)));
 }
 
 /// Give Live Paint group `g` a lock, hidden state, appearance, knockout, opacity mask and
 /// graphic style link, and return it as it then is.
 fn dress_live_group(s: &mut Session, g: NodeId) -> Node {
-    use vectorcraft_doc::{Knockout, OpacityMask};
-    let mask = Node::path(NodeId(0), vectorcraft_geom::shapes::rectangle(Rect::new(0.0, 0.0, 50.0, 50.0)), Default::default());
+    use livipen_doc::{Knockout, OpacityMask};
+    let mask = Node::path(NodeId(0), livipen_geom::shapes::rectangle(Rect::new(0.0, 0.0, 50.0, 50.0)), Default::default());
     s.edit("t", |d, _| {
         let n = d.node_mut(g).unwrap();
         n.locked = true;
@@ -1771,7 +1771,7 @@ fn live_paint_merge_keeps_the_groups_lock_visibility_mask_and_graphic_style() {
     assert_eq!(NodeId(r["id"].as_u64().unwrap()), g);
     let after = node(&s, g);
     same_group_but_children(&before, &after);
-    assert_eq!(vectorcraft_tools::builder::sources(&after).unwrap().children().unwrap().len(), 3, "the rectangle joined the sources");
+    assert_eq!(livipen_tools::builder::sources(&after).unwrap().children().unwrap().len(), 3, "the rectangle joined the sources");
     // One undo step brings back the group as it was, and the rectangle beside it.
     s.execute("edit.undo", &json!({})).unwrap();
     assert_eq!(node(&s, g), before);
@@ -1782,7 +1782,7 @@ fn live_paint_merge_keeps_the_groups_lock_visibility_mask_and_graphic_style() {
 fn live_paint_make_and_fill_with_a_live_paint_group_selected_add_the_paths_to_it() {
     let green = Paint::solid(Color::from_hex("#00ff00").unwrap());
     let fill_at = |s: &Session, g: NodeId, x: f64, y: f64| {
-        vectorcraft_tools::builder::face_at(&node(s, g), vectorcraft_geom::Point::new(x, y)).map(|f| f.appearance.fill_paint())
+        livipen_tools::builder::face_at(&node(s, g), livipen_geom::Point::new(x, y)).map(|f| f.appearance.fill_paint())
     };
     // Make, and the Live Paint Bucket on a path beside the group, each keep the group, its
     // properties and the paint of its faces.
@@ -1813,7 +1813,7 @@ fn live_square_with_a_gap(s: &mut Session) -> NodeId {
     live_group_only(s)
 }
 
-fn gap_options(s: &Session, g: NodeId) -> vectorcraft_doc::GapOptions {
+fn gap_options(s: &Session, g: NodeId) -> livipen_doc::GapOptions {
     node(s, g).gap_options()
 }
 
@@ -1827,7 +1827,7 @@ fn live_paint_gap_detection_stops_paint_at_a_gap() {
     let mut s = session();
     let g = live_square_with_a_gap(&mut s);
     // Paint leaks through the gap: there is no face to fill.
-    assert!(vectorcraft_tools::builder::faces(&node(&s, g)).is_empty());
+    assert!(livipen_tools::builder::faces(&node(&s, g)).is_empty());
     assert!(s.execute("livePaint.fill", &json!({"group": g.0, "point": [50, 50]})).is_err());
     let info = s.execute("livePaint.info", &json!({"group": g.0})).unwrap();
     assert_eq!(info["gapOptions"], json!({"detect": false, "size": "small", "points": 3.0, "color": "#ff4f4f"}));
@@ -1840,27 +1840,27 @@ fn live_paint_gap_detection_stops_paint_at_a_gap() {
     assert_eq!(gaps_of(&r), [[0.0, 0.0, 0.0, 2.0]]);
     let f = s.execute("livePaint.fill", &json!({"group": g.0, "point": [50, 50], "color": "#00ff00"})).unwrap();
     let face = node(&s, NodeId(f["face"].as_u64().unwrap()));
-    assert!((vectorcraft_pathops::area(face.path_data().unwrap(), FillRule::NonZero).abs() - 10000.0).abs() < 1e-6);
-    assert_eq!(vectorcraft_tools::builder::edges(&node(&s, g)).len(), 1, "the gap is no edge");
+    assert!((livipen_pathops::area(face.path_data().unwrap(), FillRule::NonZero).abs() - 10000.0).abs() < 1e-6);
+    assert_eq!(livipen_tools::builder::edges(&node(&s, g)).len(), 1, "the gap is no edge");
     // A color change keeps the face and its paint.
     s.execute("livePaint.gapOptions", &json!({"id": g.0, "color": "Green"})).unwrap();
     let opts = gap_options(&s, g);
-    assert_eq!((opts.detect, opts.size, opts.color), (true, vectorcraft_doc::GapSize::Small, [0x4f, 0xff, 0x4f]));
+    assert_eq!((opts.detect, opts.size, opts.color), (true, livipen_doc::GapSize::Small, [0x4f, 0xff, 0x4f]));
     let gn = node(&s, g);
-    let kept = vectorcraft_tools::builder::face_at(&gn, vectorcraft_geom::Point::new(50.0, 50.0)).unwrap();
+    let kept = livipen_tools::builder::face_at(&gn, livipen_geom::Point::new(50.0, 50.0)).unwrap();
     assert_eq!(kept.appearance.fill_paint(), Paint::solid(Color::from_hex("#00ff00").unwrap()));
     // A custom size narrower than the gap lets paint leak again, and so does Gap Detection off.
     let r = s.execute("livePaint.gapOptions", &json!({"size": 1.5})).unwrap();
     assert_eq!((&r["faces"], gaps_of(&r).len()), (&json!(0), 0));
     s.execute("livePaint.gapOptions", &json!({"size": 12})).unwrap();
-    assert_eq!(vectorcraft_tools::builder::faces(&node(&s, g)).len(), 1);
+    assert_eq!(livipen_tools::builder::faces(&node(&s, g)).len(), 1);
     let r = s.execute("livePaint.gapOptions", &json!({"detect": false})).unwrap();
     assert_eq!((&r["faces"], gaps_of(&r).len()), (&json!(0), 1));
     // Bad values change nothing.
     for bad in [json!({"size": 0}), json!({"size": 73}), json!({"size": "huge"}), json!({"detect": "yes"}), json!({"color": "#12"})] {
         assert!(s.execute("livePaint.gapOptions", &bad).is_err(), "{bad}");
     }
-    assert_eq!(gap_options(&s, g).size, vectorcraft_doc::GapSize::Custom(12.0));
+    assert_eq!(gap_options(&s, g).size, livipen_doc::GapSize::Custom(12.0));
     // Plain paths are no Live Paint group.
     let r = rect(&mut s, 200.0, 0.0, 10.0, 10.0);
     assert!(s.execute("livePaint.gapOptions", &json!({"id": r.0, "detect": true})).is_err());
@@ -1887,7 +1887,7 @@ fn medium_and_large_gaps_stop_paint_at_wider_gaps() {
         let info = s.execute("livePaint.info", &json!({"group": g.0})).unwrap();
         assert_eq!(info["gapOptions"], json!({"detect": true, "size": "large", "points": 12.0, "color": "#ff4f4f"}));
         s.execute("livePaint.gapOptions", &json!({"size": "Medium"})).unwrap();
-        assert_eq!(gap_options(&s, g).size, vectorcraft_doc::GapSize::Medium);
+        assert_eq!(gap_options(&s, g).size, livipen_doc::GapSize::Medium);
     }
 }
 
@@ -1900,11 +1900,11 @@ fn gap_options_keep_the_paint_of_split_faces_and_of_unpainted_faces() {
     let l = line(&mut s, (50.0, 2.0), (50.0, 100.0));
     s.execute("select.set", &json!({"ids": [r.0, l.0]})).unwrap();
     let g = live_group_only(&mut s);
-    assert_eq!(vectorcraft_tools::builder::faces(&node(&s, g)).len(), 1);
+    assert_eq!(livipen_tools::builder::faces(&node(&s, g)).len(), 1);
     s.execute("livePaint.fill", &json!({"group": g.0, "point": [25, 50], "color": "#00ff00"})).unwrap();
     let fill_at = |s: &Session, x: f64| {
         let gn = node(s, g);
-        vectorcraft_tools::builder::face_at(&gn, vectorcraft_geom::Point::new(x, 50.0)).map(|f| f.appearance.fill_paint())
+        livipen_tools::builder::face_at(&gn, livipen_geom::Point::new(x, 50.0)).map(|f| f.appearance.fill_paint())
     };
     let green = Paint::solid(Color::from_hex("#00ff00").unwrap());
     // Closing the gap splits the face in two, and both halves keep its paint.
@@ -1916,7 +1916,7 @@ fn gap_options_keep_the_paint_of_split_faces_and_of_unpainted_faces() {
     s.execute("livePaint.fill", &json!({"group": g.0, "point": [75, 50], "none": true})).unwrap();
     s.execute("livePaint.gapOptions", &json!({"color": "Blue"})).unwrap();
     assert_eq!((fill_at(&s, 25.0), fill_at(&s, 75.0)), (Some(green.clone()), Some(Paint::None)));
-    let left = vectorcraft_tools::builder::face_at(&node(&s, g), vectorcraft_geom::Point::new(25.0, 50.0)).unwrap().id;
+    let left = livipen_tools::builder::face_at(&node(&s, g), livipen_geom::Point::new(25.0, 50.0)).unwrap().id;
     s.edit("t", |d, _| {
         d.node_mut(left).unwrap().opacity = 0.5;
         Ok(())
@@ -1924,14 +1924,14 @@ fn gap_options_keep_the_paint_of_split_faces_and_of_unpainted_faces() {
     .unwrap();
     s.execute("livePaint.gapOptions", &json!({"size": 12})).unwrap();
     let gn = node(&s, g);
-    let f = vectorcraft_tools::builder::face_at(&gn, vectorcraft_geom::Point::new(25.0, 50.0)).unwrap();
+    let f = livipen_tools::builder::face_at(&gn, livipen_geom::Point::new(25.0, 50.0)).unwrap();
     assert_eq!((f.opacity, f.appearance.fill_paint()), (0.5, green));
     assert_eq!(fill_at(&s, 75.0), Some(Paint::None));
 }
 
 #[test]
 fn a_gradient_face_split_by_a_closed_gap_keeps_one_gradient_across_both_halves() {
-    use vectorcraft_color::{Gradient, GradientKind, GradientPaint, GradientStop};
+    use livipen_color::{Gradient, GradientKind, GradientPaint, GradientStop};
     let mut s = session();
     let r = rect(&mut s, 0.0, 0.0, 100.0, 100.0);
     let stops = vec![GradientStop::new(0.0, Color::rgb(1.0, 0.0, 0.0)), GradientStop::new(1.0, Color::rgb(0.0, 0.0, 1.0))];
@@ -1946,7 +1946,7 @@ fn a_gradient_face_split_by_a_closed_gap_keeps_one_gradient_across_both_halves()
     let g = live_group_only(&mut s);
     s.execute("livePaint.gapOptions", &json!({"detect": true})).unwrap();
     let gn = node(&s, g);
-    let geoms: Vec<_> = vectorcraft_tools::builder::faces(&gn)
+    let geoms: Vec<_> = livipen_tools::builder::faces(&gn)
         .iter()
         .map(|f| match f.appearance.fill_paint() {
             Paint::Gradient(gp) => gp.geom,
@@ -1965,7 +1965,7 @@ fn close_gaps_with_paths_adds_an_unpainted_path_across_each_gap() {
     assert_eq!((&r["faces"], &r["closed"], gaps_of(&r).len()), (&json!(1), &json!(1), 0), "{r}");
     assert!(!gap_options(&s, g).detect, "Gap Detection stays off: the path closes the gap");
     let gn = node(&s, g);
-    let src = vectorcraft_tools::builder::sources(&gn).unwrap();
+    let src = livipen_tools::builder::sources(&gn).unwrap();
     let added = src.children().unwrap().last().unwrap();
     assert!(added.appearance.fill_paint().is_none() && added.appearance.stroke_paint().is_none(), "unpainted");
     let bb = added.geometric_bounds().unwrap();
@@ -1980,26 +1980,26 @@ fn gap_options_survive_save_copy_and_undo() {
     let mut s = session();
     let g = live_square_with_a_gap(&mut s);
     s.execute("livePaint.gapOptions", &json!({"detect": true, "size": 4.5, "color": "#123456"})).unwrap();
-    let want = vectorcraft_doc::GapOptions { detect: true, size: vectorcraft_doc::GapSize::Custom(4.5), color: [0x12, 0x34, 0x56] };
+    let want = livipen_doc::GapOptions { detect: true, size: livipen_doc::GapSize::Custom(4.5), color: [0x12, 0x34, 0x56] };
     assert_eq!(gap_options(&s, g), want);
     let doc = s.doc().unwrap().doc.clone();
-    let back = vectorcraft_format::load(&vectorcraft_format::save(&doc, false)).unwrap();
+    let back = livipen_format::load(&livipen_format::save(&doc, false)).unwrap();
     assert_eq!(back.node(g).unwrap().gap_options(), want);
     s.execute("edit.copy", &json!({})).unwrap();
     s.execute("edit.paste", &json!({})).unwrap();
     let pasted = s.doc().unwrap().selection.objects[0];
     assert_ne!(pasted, g);
     assert_eq!(gap_options(&s, pasted), want);
-    assert_eq!(vectorcraft_tools::builder::faces(&node(&s, pasted)).len(), 1);
+    assert_eq!(livipen_tools::builder::faces(&node(&s, pasted)).len(), 1);
     s.execute("edit.undo", &json!({})).unwrap();
     s.execute("edit.undo", &json!({})).unwrap();
-    assert_eq!(gap_options(&s, g), vectorcraft_doc::GapOptions::default());
-    assert!(vectorcraft_tools::builder::faces(&node(&s, g)).is_empty());
+    assert_eq!(gap_options(&s, g), livipen_doc::GapOptions::default());
+    assert!(livipen_tools::builder::faces(&node(&s, g)).is_empty());
 }
 
 #[test]
 fn merged_live_paint_groups_keep_the_bottom_groups_gap_options() {
-    use vectorcraft_doc::{GapOptions, GapSize};
+    use livipen_doc::{GapOptions, GapSize};
     // Two groups side by side, the left one at the bottom, merged with each Gap Detection setting.
     let merged = |bottom: Value, top: Value| {
         let mut s = session();
@@ -2042,7 +2042,7 @@ fn live_paint_bucket_tool_fills_face() {
     assert!(!s.overlays(v).is_empty(), "red face highlight");
     s.pointer(&PointerEvent::new(PointerKind::Down, 125.0, 50.0), v).unwrap();
     let gn = node(&s, g);
-    let f = vectorcraft_tools::builder::face_at(&gn, vectorcraft_geom::Point::new(125.0, 50.0)).unwrap();
+    let f = livipen_tools::builder::face_at(&gn, livipen_geom::Point::new(125.0, 50.0)).unwrap();
     assert_eq!(f.appearance.fill_paint(), s.paint.fill);
     // Live Paint Selection selects the face.
     s.select_tool("livePaintSelection", v).unwrap();
@@ -2070,13 +2070,13 @@ fn live_paint_bucket_fills_an_area_enclosed_by_lines() {
     s.pointer(&PointerEvent::new(PointerKind::Down, 50.0, 70.0), v).unwrap();
     let g = s.doc().unwrap().selection.objects[0];
     let gn = node(&s, g);
-    assert!(vectorcraft_tools::builder::is_live_paint(&gn));
-    assert_eq!(vectorcraft_tools::builder::faces(&gn).len(), 1);
-    let f = vectorcraft_tools::builder::face_at(&gn, vectorcraft_geom::Point::new(50.0, 70.0)).unwrap();
+    assert!(livipen_tools::builder::is_live_paint(&gn));
+    assert_eq!(livipen_tools::builder::faces(&gn).len(), 1);
+    let f = livipen_tools::builder::face_at(&gn, livipen_geom::Point::new(50.0, 70.0)).unwrap();
     assert_eq!(f.appearance.fill_paint(), s.paint.fill);
-    assert!((vectorcraft_pathops::area(f.path_data().unwrap(), FillRule::NonZero).abs() - 900.0).abs() < 1e-6);
+    assert!((livipen_pathops::area(f.path_data().unwrap(), FillRule::NonZero).abs() - 900.0).abs() < 1e-6);
     // The lines are edges, cut where they cross, and keep their stroke.
-    let edges = vectorcraft_tools::builder::edges(&gn);
+    let edges = livipen_tools::builder::edges(&gn);
     assert_eq!(edges.len(), 9);
     assert!(edges.iter().all(|e| !e.appearance.stroke_paint().is_none()));
     // Outside the triangle there's nothing to fill.
@@ -2095,7 +2095,7 @@ fn a_line_across_a_live_paint_shape_splits_its_face() {
     let g = NodeId(made["id"].as_u64().unwrap());
     s.execute("livePaint.fill", &json!({"group": g.0, "point": [80, 25], "color": "#0000ff"})).unwrap();
     let gn = node(&s, g);
-    let face = |x: f64| vectorcraft_tools::builder::face_at(&gn, vectorcraft_geom::Point::new(x, 25.0)).unwrap().appearance.fill_paint();
+    let face = |x: f64| livipen_tools::builder::face_at(&gn, livipen_geom::Point::new(x, 25.0)).unwrap().appearance.fill_paint();
     assert_eq!(face(10.0), Paint::solid(Color::rgb(1.0, 0.0, 0.0)), "the left half keeps the rectangle's fill");
     assert_eq!(face(80.0), Paint::solid(Color::from_hex("#0000ff").unwrap()));
 }
@@ -2117,7 +2117,7 @@ fn shape_builder_uses_the_filled_faces_of_a_live_paint_group() {
     let mut s = session();
     let g = live(&mut s);
     s.execute("livePaint.fill", &json!({"group": g.0, "point": [125, 50], "none": true})).unwrap();
-    let edges = vectorcraft_tools::builder::edges(&node(&s, g)).len();
+    let edges = livipen_tools::builder::edges(&node(&s, g)).len();
     let c = rect(&mut s, 160.0, 20.0, 100.0, 20.0);
     set_fill(&mut s, c, Color::rgb(0.0, 1.0, 0.0));
     s.execute("select.set", &json!({"ids": [g.0, c.0]})).unwrap();
@@ -2153,7 +2153,7 @@ fn shape_builder_takes_a_closed_live_paint_edge_as_a_line() {
     s.execute("select.set", &json!({"ids": [a.0]})).unwrap();
     let g = NodeId(s.execute("livePaint.make", &json!({})).unwrap()["id"].as_u64().unwrap());
     let group = node(&s, g);
-    let edges = vectorcraft_tools::builder::edges(&group);
+    let edges = livipen_tools::builder::edges(&group);
     assert_eq!(edges.len(), 1);
     assert!(outline(edges[0]).0.subpaths.iter().any(|sp| sp.closed), "the edge closes on itself");
     s.execute("select.set", &json!({"ids": [g.0]})).unwrap();
@@ -2203,14 +2203,14 @@ fn shape_builder_keeps_the_edges_of_an_unfilled_live_paint_group() {
 
 /// A 100×100 image with a black disc (r = 30 px), placed at (50, 50) scaled ×2.
 fn image_doc(s: &mut Session) -> NodeId {
-    let r = vectorcraft_trace::Raster::from_fn(100, 100, |x, y| {
+    let r = livipen_trace::Raster::from_fn(100, 100, |x, y| {
         let (dx, dy) = (x as f64 + 0.5 - 50.0, y as f64 + 0.5 - 50.0);
         if dx * dx + dy * dy <= 900.0 { [0, 0, 0, 255] } else { [255, 255, 255, 255] }
     });
     add_image(s, &r, Affine::translate((50.0, 50.0)) * Affine::scale(2.0))
 }
 
-fn add_image(s: &mut Session, r: &vectorcraft_trace::Raster, xf: Affine) -> NodeId {
+fn add_image(s: &mut Session, r: &livipen_trace::Raster, xf: Affine) -> NodeId {
     let png = r.encode_png();
     let (w, h) = (r.width, r.height);
     s.edit("img", |d, sel| {
@@ -2247,11 +2247,8 @@ fn traced_paths(n: &Node) -> Vec<Arc<Node>> {
 fn a_large_image_traces_with_a_warning() {
     // The public documentation: images over 1500 px on a side are traced, only more slowly.
     let mut s = session();
-    let art = vectorcraft_trace::Raster::from_fn(
-        1600,
-        40,
-        |x, y| if (100..1500).contains(&x) && (10..30).contains(&y) { [0, 0, 0, 255] } else { [255; 4] },
-    );
+    let art =
+        livipen_trace::Raster::from_fn(1600, 40, |x, y| if (100..1500).contains(&x) && (10..30).contains(&y) { [0, 0, 0, 255] } else { [255; 4] });
     add_image(&mut s, &art, Affine::IDENTITY);
     let r = s.execute("imageTrace.make", &json!({"params": {"ignoreWhite": true}})).unwrap();
     assert_eq!(r["paths"], 1);
@@ -2266,7 +2263,7 @@ fn a_large_image_traces_with_a_warning() {
     image_doc(&mut s);
     let r = s.execute("imageTrace.make", &json!({})).unwrap();
     assert_eq!(r["warnings"], json!([]));
-    let edge = vectorcraft_trace::Raster::from_fn(1500, 8, |x, _| if x < 700 { [0, 0, 0, 255] } else { [255; 4] });
+    let edge = livipen_trace::Raster::from_fn(1500, 8, |x, _| if x < 700 { [0, 0, 0, 255] } else { [255; 4] });
     add_image(&mut s, &edge, Affine::IDENTITY);
     assert_eq!(s.execute("imageTrace.make", &json!({})).unwrap()["warnings"], json!([]));
 }
@@ -2276,7 +2273,7 @@ fn flat_logo_says_when_it_traces_an_image_averaged_down() {
     // Flat Logo works at most 1024 px on a side: a 1025 px image is averaged down to 513 px.
     let params = json!({"params": {"mode": "logo", "logoColors": ["#000000", "#F0F0DC"]}});
     let warnings = |n: u32| {
-        let art = vectorcraft_trace::Raster::from_fn(n, n, |x, y| {
+        let art = livipen_trace::Raster::from_fn(n, n, |x, y| {
             if !(50..n - 50).contains(&x) || !(50..n - 50).contains(&y) {
                 [0, 0, 0, 0]
             } else if (i64::from(x) - i64::from(y) / 8).rem_euclid(40) < 2 {
@@ -2316,7 +2313,7 @@ fn image_trace_make_places_paths_over_the_image() {
     assert_eq!(paths.len(), 1);
     let (p, rule) = outline(&paths[0]);
     let want = std::f64::consts::PI * 60.0 * 60.0; // r = 30 px × 2
-    let got = vectorcraft_pathops::area(&p, rule);
+    let got = livipen_pathops::area(&p, rule);
     assert!((got - want).abs() / want < 0.03, "{got} vs {want}");
     let bb = p.bounds().unwrap();
     assert!((bb.center().x - 150.0).abs() < 1.5 && (bb.center().y - 150.0).abs() < 1.5, "{bb:?}");
@@ -2334,7 +2331,7 @@ fn image_trace_shapes_makes_live_shapes() {
     let paths = traced_paths(&n);
     assert_eq!(paths.len(), 1);
     let NodeKind::Path { path, live: Some(live), .. } = &paths[0].kind else { panic!("not a live shape: {:?}", paths[0].kind) };
-    let vectorcraft_doc::LiveShape::Ellipse { w, h, .. } = **live else { panic!("{live:?}") };
+    let livipen_doc::LiveShape::Ellipse { w, h, .. } = **live else { panic!("{live:?}") };
     // A circle of r = 30 px, drawn twice the size.
     assert!(w == h && (w - 60.0).abs() < 0.75, "{w} × {h}");
     let bb = path.bounds().unwrap();
@@ -2354,7 +2351,7 @@ fn image_trace_shapes_makes_live_shapes() {
 /// and releases as any other.
 #[test]
 fn image_trace_auto_grouping_groups_what_is_inside() {
-    let art = vectorcraft_trace::Raster::from_fn(120, 80, |x, y| {
+    let art = livipen_trace::Raster::from_fn(120, 80, |x, y| {
         let d = (x as f64 + 0.5 - 40.0).hypot(y as f64 + 0.5 - 40.0);
         if d <= 6.0 || (90..110).contains(&x) && (30..50).contains(&y) {
             [200, 0, 0, 255]
@@ -2414,7 +2411,7 @@ fn image_trace_auto_grouping_groups_what_is_inside() {
 /// where the image lies; without the option it is bands of flat colour, as saved documents have it.
 #[test]
 fn image_trace_gradients_fills_with_a_gradient() {
-    let art = vectorcraft_trace::Raster::from_fn(100, 60, |x, _| {
+    let art = livipen_trace::Raster::from_fn(100, 60, |x, _| {
         let t = (f64::from(x) + 0.5) / 100.0;
         [(20.0 + 200.0 * t) as u8, 40, (220.0 - 180.0 * t) as u8, 255]
     });
@@ -2427,7 +2424,7 @@ fn image_trace_gradients_fills_with_a_gradient() {
     let paths = make(true);
     assert_eq!(paths.len(), 1);
     let Paint::Gradient(g) = paths[0].appearance.fill_paint() else { panic!("{:?}", paths[0].appearance.fill_paint()) };
-    assert_eq!(g.gradient.kind, vectorcraft_color::GradientKind::Linear);
+    assert_eq!(g.gradient.kind, livipen_color::GradientKind::Linear);
     assert_eq!(g.gradient.stops.len(), 2);
     // Level, from the image's left edge (x = 50) to its right one (x = 250), at any height.
     let geom = g.geom.as_ref().unwrap();
@@ -2520,7 +2517,7 @@ fn image_trace_release_and_expand() {
 #[test]
 fn image_trace_make_and_expand_and_color_presets() {
     let mut s = session();
-    let r = vectorcraft_trace::Raster::from_fn(60, 60, |x, y| match (x < 30, y < 30) {
+    let r = livipen_trace::Raster::from_fn(60, 60, |x, y| match (x < 30, y < 30) {
         (true, true) => [230, 20, 20, 255],
         (false, true) => [20, 200, 30, 255],
         (true, false) => [20, 30, 220, 255],
@@ -2540,7 +2537,7 @@ fn image_trace_make_and_expand_and_color_presets() {
 #[test]
 fn image_trace_palettes_and_swatch_libraries() {
     let mut s = session();
-    let quads = vectorcraft_trace::Raster::from_fn(60, 60, |x, y| match (x < 30, y < 30) {
+    let quads = livipen_trace::Raster::from_fn(60, 60, |x, y| match (x < 30, y < 30) {
         (true, true) => [230, 20, 20, 255],
         (false, true) => [20, 200, 30, 255],
         (true, false) => [20, 30, 220, 255],
@@ -2584,8 +2581,7 @@ fn image_trace_palettes_and_swatch_libraries() {
 fn image_trace_create_strokes_makes_stroked_centre_lines() {
     let mut s = session();
     // A 3 px wide horizontal line from x = 10 to 90 at y = 50, placed at 2× from (100, 100).
-    let r =
-        vectorcraft_trace::Raster::from_fn(100, 100, |x, y| if (10..90).contains(&x) && (49..52).contains(&y) { [0, 0, 0, 255] } else { [255; 4] });
+    let r = livipen_trace::Raster::from_fn(100, 100, |x, y| if (10..90).contains(&x) && (49..52).contains(&y) { [0, 0, 0, 255] } else { [255; 4] });
     add_image(&mut s, &r, Affine::translate((100.0, 100.0)) * Affine::scale(2.0));
     let res = s.execute("imageTrace.make", &json!({"params": {"ignoreWhite": true, "strokes": true, "strokeWidth": 5}})).unwrap();
     assert_eq!(res["paths"], 1);
@@ -2630,7 +2626,7 @@ fn image_trace_presets_query_and_errors() {
 
 /// A soft-edged red disc (r = 30 px at (50.3, 49.6)) on transparency, placed at (50, 50) scaled ×2.
 fn soft_logo_doc(s: &mut Session) -> NodeId {
-    let r = vectorcraft_trace::Raster::from_fn(100, 100, |x, y| {
+    let r = livipen_trace::Raster::from_fn(100, 100, |x, y| {
         let d = (x as f64 + 0.5 - 50.3).hypot(y as f64 + 0.5 - 49.6);
         let cover = (0.5 + (30.0 - d) * 0.7).clamp(0.0, 1.0);
         [200, 40, 60, (cover * 255.0).round() as u8]
@@ -2652,7 +2648,7 @@ fn image_trace_flat_logo_preset_makes_a_true_circle() {
     let paths = traced_paths(&n);
     let (p, rule) = outline(&paths[0]);
     let want = std::f64::consts::PI * 60.0 * 60.0;
-    let got = vectorcraft_pathops::area(&p, rule);
+    let got = livipen_pathops::area(&p, rule);
     assert!((got - want).abs() / want < 0.01, "area {got} vs {want}");
     let bb = p.bounds().unwrap();
     // The disc is at (50.3, 49.6) in a x2 image placed at (50, 50): centre (150.6, 149.2).
@@ -2662,7 +2658,7 @@ fn image_trace_flat_logo_preset_makes_a_true_circle() {
 #[test]
 fn image_trace_flat_logo_refuses_a_gradient_and_a_bad_palette() {
     let mut s = session();
-    let grad = vectorcraft_trace::Raster::from_fn(64, 32, |x, y| [(x * 4) as u8, 255 - (x * 4) as u8, (y * 6) as u8, 255]);
+    let grad = livipen_trace::Raster::from_fn(64, 32, |x, y| [(x * 4) as u8, 255 - (x * 4) as u8, (y * 6) as u8, 255]);
     add_image(&mut s, &grad, Affine::IDENTITY);
     let e = s.execute("imageTrace.make", &json!({"preset": "Flat Logo"})).unwrap_err().to_string();
     assert!(e.contains("flat-colour") && e.contains("Color mode"), "{e}");
@@ -2688,7 +2684,7 @@ fn image_trace_object_remembers_its_settings() {
     let r = s.execute("imageTrace.make", &json!({"id": g.0, "preset": "6 Colors", "params": {"colors": 9}})).unwrap();
     let g = NodeId(r["id"].as_u64().unwrap());
     let d = s.doc().unwrap().doc.clone();
-    let back = vectorcraft_format::load(&vectorcraft_format::save(&d, false)).unwrap();
+    let back = livipen_format::load(&livipen_format::save(&d, false)).unwrap();
     let t = back.node(g).unwrap().extras().trace.clone().unwrap();
     assert_eq!((t["preset"].as_str(), t["params"]["colors"].as_u64()), (Some("Custom"), Some(9)));
     // Expanded traces are plain groups.
@@ -2702,7 +2698,7 @@ fn image_trace_object_remembers_its_settings() {
 /// Black and White with Ignore White, the blue drops out and one disc (r = 60 pt at (150, 150))
 /// remains.
 fn disc_on_blue(s: &mut Session) -> NodeId {
-    let r = vectorcraft_trace::Raster::from_fn(100, 100, |x, y| {
+    let r = livipen_trace::Raster::from_fn(100, 100, |x, y| {
         let (dx, dy) = (x as f64 + 0.5 - 50.0, y as f64 + 0.5 - 50.0);
         if dx * dx + dy * dy <= 900.0 { [0, 0, 0, 255] } else { [170, 210, 255, 255] }
     });
@@ -2713,9 +2709,9 @@ fn disc_on_blue(s: &mut Session) -> NodeId {
 }
 
 /// The document rendered as the canvas draws it (`trace_views`) or as exports do.
-fn render_doc(s: &Session, trace_views: bool) -> vectorcraft_render::Rendered {
-    let opts = vectorcraft_render::RenderOptions { background: Some([255, 255, 255, 255]), trace_views, ..Default::default() };
-    vectorcraft_render::Renderer::new().render(&s.doc().unwrap().doc, 300, 300, Affine::IDENTITY, &opts)
+fn render_doc(s: &Session, trace_views: bool) -> livipen_render::Rendered {
+    let opts = livipen_render::RenderOptions { background: Some([255, 255, 255, 255]), trace_views, ..Default::default() };
+    livipen_render::Renderer::new().render(&s.doc().unwrap().doc, 300, 300, Affine::IDENTITY, &opts)
 }
 
 #[test]
@@ -2725,17 +2721,17 @@ fn image_trace_view_is_stored_kept_and_validated() {
     assert_eq!(node(&s, g).extras().trace.clone().unwrap()["view"], "tracingResult");
     let r = s.execute("imageTrace.setView", &json!({"view": "outlinesWithSourceImage"})).unwrap();
     assert_eq!((ids(&r), r["view"].as_str()), (vec![g], Some("outlinesWithSourceImage")));
-    assert_eq!(node(&s, g).trace_view(), vectorcraft_doc::TraceView::OutlinesWithSource);
+    assert_eq!(node(&s, g).trace_view(), livipen_doc::TraceView::OutlinesWithSource);
     // Setting the view it has already adds no undo step.
     let steps = s.doc().unwrap().history.undo.len();
     s.execute("imageTrace.setView", &json!({"id": g.0, "view": "outlinesWithSourceImage"})).unwrap();
     assert_eq!(s.doc().unwrap().history.undo.len(), steps);
     // Tracing again keeps it, unless another one is asked for; it survives save and open.
     let g = NodeId(s.execute("imageTrace.make", &json!({"id": g.0, "params": {"ignoreWhite": true, "noise": 30}})).unwrap()["id"].as_u64().unwrap());
-    assert_eq!(node(&s, g).trace_view(), vectorcraft_doc::TraceView::OutlinesWithSource);
+    assert_eq!(node(&s, g).trace_view(), livipen_doc::TraceView::OutlinesWithSource);
     let g = NodeId(s.execute("imageTrace.make", &json!({"id": g.0, "view": "SourceImage"})).unwrap()["id"].as_u64().unwrap());
-    let back = vectorcraft_format::load(&vectorcraft_format::save(&s.doc().unwrap().doc, false)).unwrap();
-    assert_eq!(back.node(g).unwrap().trace_view(), vectorcraft_doc::TraceView::Source);
+    let back = livipen_format::load(&livipen_format::save(&s.doc().unwrap().doc, false)).unwrap();
+    assert_eq!(back.node(g).unwrap().trace_view(), livipen_doc::TraceView::Source);
     // Bad views and other objects are refused.
     assert!(s.execute("imageTrace.setView", &json!({"view": "sepia"})).is_err());
     assert!(s.execute("imageTrace.setView", &json!({})).is_err());
@@ -2752,18 +2748,18 @@ fn image_trace_views_draw_on_screen_only_and_expand_to_the_result() {
     let white = |p: [u8; 4]| p[0] > 245 && p[1] > 245 && p[2] > 245;
     let blue = |p: [u8; 4]| p[0] < 200 && p[2] > 245;
     let (centre, beside) = ((150, 150), (70, 70));
-    let at = |img: &vectorcraft_render::Rendered, (x, y): (u32, u32)| img.pixel(x, y);
+    let at = |img: &livipen_render::Rendered, (x, y): (u32, u32)| img.pixel(x, y);
     // The outline is a 1 px line where the disc's right side is (x = 210, anti-aliased).
-    let outlined = |img: &vectorcraft_render::Rendered| (205..=215).any(|x| img.pixel(x, 150)[0] < 128);
+    let outlined = |img: &livipen_render::Rendered| (205..=215).any(|x| img.pixel(x, 150)[0] < 128);
     let mut expanded = None;
-    for view in vectorcraft_doc::TraceView::ALL {
+    for view in livipen_doc::TraceView::ALL {
         s.execute("imageTrace.setView", &json!({"id": g.0, "view": view.id()})).unwrap();
         let screen = render_doc(&s, true);
         let (c, b) = (at(&screen, centre), at(&screen, beside));
         assert_eq!(dark(c), view.shows_result() || view.shows_source(), "{view:?}: the disc's middle {c:?}");
         assert_eq!(blue(b), view.shows_source(), "{view:?}: the image's background {b:?}");
         assert!(view.shows_source() || white(b), "{view:?}: nothing beside the disc {b:?}");
-        if view == vectorcraft_doc::TraceView::Outlines {
+        if view == livipen_doc::TraceView::Outlines {
             assert!(outlined(&screen), "{view:?}: the disc's outline");
         }
         // Exports draw the tracing result whatever the view.
@@ -2823,8 +2819,8 @@ fn rosette_rings_merge_cleanly(turns: &[(u32, &[f64])]) {
     let merged = merged.unwrap();
     for id in s.doc().unwrap().selection.objects.clone().into_iter().filter(|id| *id != merged) {
         let (p, r) = outline(&node(&s, id));
-        let over = vectorcraft_pathops::boolean(&p, r, &ring, rule, vectorcraft_pathops::BoolOp::Intersect);
-        let a = vectorcraft_pathops::area(&over, FillRule::NonZero);
+        let over = livipen_pathops::boolean(&p, r, &ring, rule, livipen_pathops::BoolOp::Intersect);
+        let a = livipen_pathops::area(&over, FillRule::NonZero);
         assert!(a < 1.0, "{id:?} overlaps the merged shape by {a} pt²");
     }
     // No outline is a sliver or carries a spur (2 × area / length: its mean width).
@@ -2832,16 +2828,16 @@ fn rosette_rings_merge_cleanly(turns: &[(u32, &[f64])]) {
         let (p, r) = outline(&node(&s, id));
         for sp in &p.subpaths {
             let one = PathData::new(vec![sp.clone()]);
-            let width = 2.0 * vectorcraft_pathops::area(&one, r) / one.length();
+            let width = 2.0 * livipen_pathops::area(&one, r) / one.length();
             assert!(width > 1.0, "{id:?} has an outline {width:.3} pt wide on average, {:.1} pt long", one.length());
         }
     }
     // The ring is one outline around the centre (the regions the drags missed aside): the
     // petals' tips are no outlines of their own beside it, apart by a hairline.
-    let big = ring.subpaths.iter().filter(|sp| vectorcraft_pathops::area(&PathData::new(vec![(*sp).clone()]), rule) > 100.0).count();
-    assert_eq!(big, 2, "{:?}", ring.subpaths.iter().map(|sp| vectorcraft_pathops::area(&PathData::new(vec![sp.clone()]), rule)).collect::<Vec<_>>());
+    let big = ring.subpaths.iter().filter(|sp| livipen_pathops::area(&PathData::new(vec![(*sp).clone()]), rule) > 100.0).count();
+    assert_eq!(big, 2, "{:?}", ring.subpaths.iter().map(|sp| livipen_pathops::area(&PathData::new(vec![sp.clone()]), rule)).collect::<Vec<_>>());
     // An inner edge would be a second outline over the merged area: normalising would drop it.
-    let clean = vectorcraft_pathops::normalize(&ring, rule);
+    let clean = livipen_pathops::normalize(&ring, rule);
     assert!((ring.length() - clean.length()).abs() < 1.0, "{} pt of outline, {} without inner edges", ring.length(), clean.length());
 }
 

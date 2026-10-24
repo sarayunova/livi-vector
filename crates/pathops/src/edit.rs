@@ -4,7 +4,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use kurbo::{CubicBez, ParamCurveArclen, Point, Rect, Vec2};
-use vectorcraft_geom::{Anchor, AnchorKind, PathData, SubPath};
+use livipen_geom::{Anchor, AnchorKind, PathData, SubPath};
 
 use crate::boolean::{Seg, segs_to_subpath};
 use crate::fit::{end_tangent, fit_cubics, fit_single, fit_single_from, is_straight, sample, start_tangent};

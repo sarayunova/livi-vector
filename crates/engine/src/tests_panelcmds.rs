@@ -1,8 +1,8 @@
 //! Panel-support commands (`cmd/{panelcmds,gradient,appearance,stroke,swatch,style}.rs`).
 
+use livipen_color::{Color, GradientKind, Paint};
+use livipen_doc::{AppearanceItem, NodeKind};
 use serde_json::json;
-use vectorcraft_color::{Color, GradientKind, Paint};
-use vectorcraft_doc::{AppearanceItem, NodeKind};
 
 use super::*;
 
@@ -17,7 +17,7 @@ fn rect(s: &mut Session) -> NodeId {
     NodeId(r["id"].as_u64().unwrap())
 }
 
-fn node(s: &Session, id: NodeId) -> vectorcraft_doc::Node {
+fn node(s: &Session, id: NodeId) -> livipen_doc::Node {
     s.doc().unwrap().doc.node(id).unwrap().clone()
 }
 
@@ -169,12 +169,12 @@ fn artboard_color_round_trips_through_the_native_format() {
     let mut s = session();
     s.execute("artboard.new", &json!({})).unwrap();
     s.execute("artboard.setProps", &json!({"index": 1, "color": {"c": 10, "m": 20, "y": 30, "k": 40}})).unwrap();
-    let bytes = vectorcraft_format::save(&s.doc().unwrap().doc, false);
+    let bytes = livipen_format::save(&s.doc().unwrap().doc, false);
     let saved: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
     let keys = |i: usize| saved["document"]["artboards"][i].as_object().unwrap().keys().cloned().collect::<Vec<_>>();
     assert_eq!(keys(0), ["id", "name", "rect", "show_center_mark", "show_cross_hairs"]);
     assert!(keys(1).contains(&"color".to_string()), "{:?}", keys(1));
-    let back = vectorcraft_format::load(&bytes).unwrap();
+    let back = livipen_format::load(&bytes).unwrap();
     assert_eq!(back.artboards[0].color, None);
     assert_eq!(back.artboards[1].color, Some(Color::cmyk(0.1, 0.2, 0.3, 0.4)));
     assert_eq!(back.artboards, s.doc().unwrap().doc.artboards);
@@ -357,7 +357,7 @@ fn duplicate_artboards_copies_every_selected_artboard_in_one_step() {
 /// doesn't move on its own.
 #[test]
 fn artboard_tool_arrow_keys_move_the_selected_artboards_with_their_art() {
-    use vectorcraft_tools::{Mods, ToolKey};
+    use livipen_tools::{Mods, ToolKey};
     let mut s = session();
     let [a, b, c] = two_selected_artboards(&mut s);
     s.execute("prefs.set", &json!({"key": "keyboardIncrement", "value": 4})).unwrap();
@@ -499,7 +499,7 @@ fn copied_artboards_take_a_free_id_and_keep_their_own_guides() {
         ("edit.paste", json!({})),
     ] {
         let mut s = Session::new();
-        let mut d = vectorcraft_doc::Document::new(800.0, 600.0);
+        let mut d = livipen_doc::Document::new(800.0, 600.0);
         d.artboards[0].id = u32::MAX;
         s.add_document(d, None);
         s.execute("guide.add", &json!({"vertical": true, "pos": 100, "artboard": 0})).unwrap();
@@ -595,7 +595,7 @@ fn a_locked_artboard_protects_the_art_on_it() {
 /// keeps the members selected.
 #[test]
 fn new_art_on_a_locked_artboard_stays_editable_until_the_selection_leaves_it() {
-    use vectorcraft_tools::{PointerEvent, PointerKind};
+    use livipen_tools::{PointerEvent, PointerKind};
     let mut s = session();
     let a = rect(&mut s);
     s.execute("artboard.new", &json!({"x": 1000, "y": 0, "width": 400, "height": 400})).unwrap();
@@ -813,7 +813,7 @@ fn a_list_of_artboards_takes_each_entrys_lock() {
 fn artboard_lock_round_trips_through_the_native_format() {
     let mut s = session();
     s.execute("artboard.new", &json!({})).unwrap();
-    let save = |s: &Session| vectorcraft_format::save(&s.doc().unwrap().doc, false);
+    let save = |s: &Session| livipen_format::save(&s.doc().unwrap().doc, false);
     let before = save(&s);
     s.execute("artboard.setProps", &json!({"index": 1, "locked": true})).unwrap();
     let bytes = save(&s);
@@ -821,7 +821,7 @@ fn artboard_lock_round_trips_through_the_native_format() {
     let keys = saved["document"]["artboards"][0].as_object().unwrap().keys().cloned().collect::<Vec<_>>();
     assert_eq!(keys, ["id", "name", "rect", "show_center_mark", "show_cross_hairs"]);
     assert_eq!(saved["document"]["artboards"][1]["locked"], true);
-    let back = vectorcraft_format::load(&bytes).unwrap();
+    let back = livipen_format::load(&bytes).unwrap();
     assert!(back.artboards[1].locked && !back.artboards[0].locked);
     assert_eq!(back.artboards, s.doc().unwrap().doc.artboards);
     s.execute("artboard.setProps", &json!({"index": 1, "locked": false})).unwrap();
@@ -893,7 +893,7 @@ fn artboard_display_marks_are_set_and_cleared_in_one_undo_step() {
 fn artboard_display_marks_round_trip_through_the_native_format() {
     let mut s = session();
     s.execute("artboard.new", &json!({})).unwrap();
-    let save = |s: &Session| vectorcraft_format::save(&s.doc().unwrap().doc, false);
+    let save = |s: &Session| livipen_format::save(&s.doc().unwrap().doc, false);
     let before = save(&s);
     s.execute("artboard.setProps", &json!({"artboards": [{"index": 0, "showCenterMark": true}, {"index": 1, "showCrossHairs": true}]})).unwrap();
     let bytes = save(&s);
@@ -901,7 +901,7 @@ fn artboard_display_marks_round_trip_through_the_native_format() {
     let ab = |i: usize| saved["document"]["artboards"][i].clone();
     assert_eq!((ab(0)["show_center_mark"].clone(), ab(0)["show_cross_hairs"].clone()), (json!(true), json!(false)));
     assert_eq!((ab(1)["show_center_mark"].clone(), ab(1)["show_cross_hairs"].clone()), (json!(false), json!(true)));
-    let back = vectorcraft_format::load(&bytes).unwrap();
+    let back = livipen_format::load(&bytes).unwrap();
     assert_eq!(back.artboards, s.doc().unwrap().doc.artboards);
     s.execute("artboard.setProps", &json!({"artboards": [{"index": 0, "showCenterMark": false}, {"index": 1, "showCrossHairs": false}]})).unwrap();
     assert_eq!(save(&s), before, "off again, the file is as it was");
@@ -912,7 +912,7 @@ fn artboard_display_marks_round_trip_through_the_native_format() {
         a.remove("show_center_mark");
         a.remove("show_cross_hairs");
     }
-    let back = vectorcraft_format::load(&serde_json::to_vec(&old).unwrap()).unwrap();
+    let back = livipen_format::load(&serde_json::to_vec(&old).unwrap()).unwrap();
     assert!(back.artboards.iter().all(|a| !a.show_center_mark && !a.show_cross_hairs));
 }
 
@@ -932,7 +932,7 @@ fn artboard_display_marks_stay_out_of_exports() {
     .unwrap();
     let on = doc(&s);
     assert_ne!(on.artboards, off.artboards);
-    assert_eq!(vectorcraft_svg::export(&on, &Default::default()), vectorcraft_svg::export(&off, &Default::default()));
+    assert_eq!(livipen_svg::export(&on, &Default::default()), livipen_svg::export(&off, &Default::default()));
     assert_eq!(crate::export_pdf(&on, &Default::default()).unwrap(), crate::export_pdf(&off, &Default::default()).unwrap());
 }
 
@@ -1020,7 +1020,7 @@ fn artboard_video_display_options_are_set_in_one_undo_step() {
 fn artboard_video_display_options_round_trip_through_the_native_format() {
     let mut s = session();
     s.execute("artboard.new", &json!({})).unwrap();
-    let save = |s: &Session| vectorcraft_format::save(&s.doc().unwrap().doc, false);
+    let save = |s: &Session| livipen_format::save(&s.doc().unwrap().doc, false);
     let before = save(&s);
     s.execute(
         "artboard.setProps",
@@ -1034,7 +1034,7 @@ fn artboard_video_display_options_round_trip_through_the_native_format() {
     assert!(ab(0).get("video_ruler_pixel_aspect_ratio").is_none(), "square pixels aren't written: {}", ab(0));
     assert_eq!(ab(1)["video_ruler_pixel_aspect_ratio"], json!(0.9));
     assert!(ab(1).get("show_video_safe_areas").is_none(), "hidden safe areas aren't written: {}", ab(1));
-    let back = vectorcraft_format::load(&bytes).unwrap();
+    let back = livipen_format::load(&bytes).unwrap();
     assert_eq!(back.artboards, s.doc().unwrap().doc.artboards);
     assert_eq!((back.artboards[0].show_video_safe_areas, back.artboards[1].video_ruler_pixel_aspect_ratio), (true, 0.9));
     s.execute("artboard.setProps", &json!({"artboards": [{"index": 0, "showVideoSafeAreas": false}, {"index": 1, "videoRulerPixelAspectRatio": 1}]}))
@@ -1047,12 +1047,12 @@ fn artboard_video_display_options_round_trip_through_the_native_format() {
         a.remove("show_video_safe_areas");
         a.remove("video_ruler_pixel_aspect_ratio");
     }
-    let back = vectorcraft_format::load(&serde_json::to_vec(&old).unwrap()).unwrap();
+    let back = livipen_format::load(&serde_json::to_vec(&old).unwrap()).unwrap();
     assert!(back.artboards.iter().all(|a| !a.show_video_safe_areas && a.video_ruler_pixel_aspect_ratio == 1.0));
     for (written, opens) in [(json!(0), 0.1), (json!(-3), 0.1), (json!(1e9), 10.0), (json!(2.5), 2.5)] {
         let mut file: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         file["document"]["artboards"][1]["video_ruler_pixel_aspect_ratio"] = written.clone();
-        let back = vectorcraft_format::load(&serde_json::to_vec(&file).unwrap()).unwrap();
+        let back = livipen_format::load(&serde_json::to_vec(&file).unwrap()).unwrap();
         assert_eq!(back.artboards[1].video_ruler_pixel_aspect_ratio, opens, "{written}");
     }
 }
@@ -1116,15 +1116,15 @@ fn text_set_format() {
     assert_eq!(t.first_style().kerning, None);
     assert!(s.execute("text.setFormat", &json!({"ids": [id.0]})).is_err());
     // Paragraph composer: Every-line by default, undoable.
-    assert_eq!(t.para.composer, vectorcraft_doc::Composer::EveryLine);
+    assert_eq!(t.para.composer, livipen_doc::Composer::EveryLine);
     s.execute("text.setFormat", &json!({"ids": [id.0], "composer": "singleLine"})).unwrap();
     let NodeKind::Text(t) = node(&s, id).kind else { panic!() };
-    assert_eq!(t.para.composer, vectorcraft_doc::Composer::SingleLine);
+    assert_eq!(t.para.composer, livipen_doc::Composer::SingleLine);
     assert!(s.execute("text.setFormat", &json!({"ids": [id.0], "composer": "best"})).is_err());
     assert!(s.execute("text.setFormat", &json!({"ids": [id.0], "composer": 1})).is_err());
     s.execute("edit.undo", &json!({})).unwrap();
     let NodeKind::Text(t) = node(&s, id).kind else { panic!() };
-    assert_eq!(t.para.composer, vectorcraft_doc::Composer::EveryLine);
+    assert_eq!(t.para.composer, livipen_doc::Composer::EveryLine);
 }
 
 #[test]
@@ -1138,9 +1138,9 @@ fn stroke_advanced_scale_swap_flip() {
     let n = node(&s, id);
     let st = n.appearance.stroke().unwrap();
     assert_eq!(st.start_arrow, None);
-    assert_eq!(st.end_arrow, Some(vectorcraft_doc::Arrowhead::Triangle));
+    assert_eq!(st.end_arrow, Some(livipen_doc::Arrowhead::Triangle));
     assert_eq!(st.arrow_scale, (200.0, 50.0));
-    assert_eq!(st.profile.as_ref().unwrap().points, vectorcraft_doc::WidthProfile::taper_start().points);
+    assert_eq!(st.profile.as_ref().unwrap().points, livipen_doc::WidthProfile::taper_start().points);
     assert!(s.execute("stroke.setAdvanced", &json!({})).is_err());
     assert!(s.execute("stroke.setAdvanced", &json!({"flipProfile": "sideways"})).is_err());
 }

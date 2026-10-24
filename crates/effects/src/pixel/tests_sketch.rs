@@ -1,8 +1,8 @@
 //! Sketch › Bas Relief, Charcoal, Conté Crayon, Photocopy and Stamp.
 
+use livipen_doc::Effect;
+use livipen_geom::{Affine, Point, Rect};
 use serde_json::json;
-use vectorcraft_doc::Effect;
-use vectorcraft_geom::{Affine, Point, Rect};
 
 use super::*;
 use crate::{RasterFx, raster_effects};

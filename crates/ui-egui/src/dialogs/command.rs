@@ -6,7 +6,7 @@ use std::sync::LazyLock;
 use serde_json::Value;
 
 use super::{DialogSpec, form};
-use crate::VectorcraftApp;
+use crate::LiviPenApp;
 use crate::state::Dialog;
 
 pub(super) const SPEC: DialogSpec = DialogSpec {
@@ -79,7 +79,7 @@ const VERTICAL_ALIGN: form::Choices = &[("Top", "top"), ("Center", "center"), ("
 
 /// Graph Type › Type: the nine graph kinds, in the Graph tool group's order.
 static GRAPH_KINDS: LazyLock<Vec<(&'static str, &'static str)>> =
-    LazyLock::new(|| vectorcraft_doc::GraphKind::ALL.iter().map(|k| (k.label(), k.id())).collect());
+    LazyLock::new(|| livipen_doc::GraphKind::ALL.iter().map(|k| (k.label(), k.id())).collect());
 
 /// Graph Type › Value Axis (series picked on both axes show none, and OK leaves each where it is).
 const GRAPH_VALUE_AXIS: form::Choices = &[("On Left Side", "left"), ("On Right Side", "right"), ("On Both Sides", "both")];
@@ -93,7 +93,7 @@ const PIE_SORT: form::Choices = &[("All", "all"), ("First", "first"), ("None", "
 const GRAPH_TICK_LENGTH: form::Choices = &[("None", "none"), ("Short", "short"), ("Full Width", "full")];
 
 /// Closes before running, so a dialog the command opens stays open.
-fn confirm(app: &mut VectorcraftApp, d: &Dialog) -> Result<Value, String> {
+fn confirm(app: &mut LiviPenApp, d: &Dialog) -> Result<Value, String> {
     let cmd = d.str("__command");
     let mut params = form::params(d);
     if let (Some(o), Some(Value::Object(fixed))) = (params.as_object_mut(), d.fields.get("__params")) {
@@ -101,10 +101,8 @@ fn confirm(app: &mut VectorcraftApp, d: &Dialog) -> Result<Value, String> {
     }
     app.ui.dialog = None;
     // A tool's click-to-size shape (Flare) goes on the active perspective plane while the grid shows.
-    let at = |x: &str, y: &str| Some(vectorcraft_geom::Point::new(params.get(x)?.as_f64()?, params.get(y)?.as_f64()?));
-    if let Some((c, p)) =
-        at("cx", "cy").or_else(|| at("x", "y")).and_then(|pt| vectorcraft_engine::perspective_click(&app.session, &cmd, &params, pt))
-    {
+    let at = |x: &str, y: &str| Some(livipen_geom::Point::new(params.get(x)?.as_f64()?, params.get(y)?.as_f64()?));
+    if let Some((c, p)) = at("cx", "cy").or_else(|| at("x", "y")).and_then(|pt| livipen_engine::perspective_click(&app.session, &cmd, &params, pt)) {
         return app.run(&c, p);
     }
     app.run(&cmd, params)
@@ -112,15 +110,15 @@ fn confirm(app: &mut VectorcraftApp, d: &Dialog) -> Result<Value, String> {
 
 #[cfg(test)]
 mod tests {
+    use livipen_doc::{NodeKind, VerticalAlign};
+    use livipen_engine::Session;
     use serde_json::json;
-    use vectorcraft_doc::{NodeKind, VerticalAlign};
-    use vectorcraft_engine::Session;
 
     use super::*;
 
     #[test]
     fn area_type_options_choices_match_the_params_doc() {
-        let doc = vectorcraft_engine::find_command("text.areaOptions").unwrap().params;
+        let doc = livipen_engine::find_command("text.areaOptions").unwrap().params;
         for key in ["firstBaseline", "verticalAlign"] {
             let values: Vec<&str> = choices("text.areaOptions", key).unwrap().iter().map(|(_, v)| *v).collect();
             assert!(doc.contains(&format!("{key}?: {}", values.join("|"))), "{key}: {values:?}");
@@ -131,7 +129,7 @@ mod tests {
 
     #[test]
     fn area_type_options_dialog_sets_the_vertical_alignment() {
-        let mut app = VectorcraftApp::new(Session::new(), Default::default());
+        let mut app = LiviPenApp::new(Session::new(), Default::default());
         app.run("file.new", json!({"width": 400, "height": 400})).unwrap();
         let id = app.run("text.create", json!({"x": 20, "y": 20, "text": "Hello", "area": {"width": 200, "height": 200}})).unwrap()["id"]
             .as_u64()
@@ -145,7 +143,7 @@ mod tests {
         out.textures_delta.clear();
         app.ui.dialog.as_mut().unwrap().fields.insert("verticalAlign".into(), json!("center"));
         crate::dialogs::confirm(&mut app).unwrap();
-        let NodeKind::Text(t) = &app.session.doc().unwrap().doc.node(vectorcraft_doc::NodeId(id)).unwrap().kind else { panic!("text") };
+        let NodeKind::Text(t) = &app.session.doc().unwrap().doc.node(livipen_doc::NodeId(id)).unwrap().kind else { panic!("text") };
         assert_eq!(t.area.vertical_align, VerticalAlign::Center);
     }
 
@@ -153,10 +151,10 @@ mod tests {
     /// value axis on the side picked.
     #[test]
     fn graph_type_value_axis_is_a_dropdown_of_its_sides() {
-        let doc = vectorcraft_engine::find_command("graph.setType").unwrap().params;
+        let doc = livipen_engine::find_command("graph.setType").unwrap().params;
         let values: Vec<&str> = choices("graph.setType", "valueAxis").unwrap().iter().map(|(_, v)| *v).collect();
         assert!(doc.contains(&format!("valueAxis?: {}", values.join("|"))), "{values:?}");
-        let mut app = VectorcraftApp::new(Session::new(), Default::default());
+        let mut app = LiviPenApp::new(Session::new(), Default::default());
         app.run("file.new", json!({"width": 400, "height": 400})).unwrap();
         app.run("graph.create", json!({"type": "column", "x": 0, "y": 0, "width": 200, "height": 150})).unwrap();
         crate::menus::graph_dialog(&mut app, "graph.setType").unwrap();
@@ -170,9 +168,9 @@ mod tests {
     /// type and keeps its data.
     #[test]
     fn graph_type_is_a_dropdown_of_the_graph_kinds() {
-        let kinds: Vec<(&str, &str)> = vectorcraft_doc::GraphKind::ALL.iter().map(|k| (k.label(), k.id())).collect();
+        let kinds: Vec<(&str, &str)> = livipen_doc::GraphKind::ALL.iter().map(|k| (k.label(), k.id())).collect();
         assert_eq!(choices("graph.setType", "type").unwrap().to_vec(), kinds);
-        let mut app = VectorcraftApp::new(Session::new(), Default::default());
+        let mut app = LiviPenApp::new(Session::new(), Default::default());
         app.run("file.new", json!({"width": 400, "height": 400})).unwrap();
         app.run("graph.create", json!({"type": "column", "x": 0, "y": 0, "width": 200, "height": 150, "csv": ",a,b\nQ1,1,2\nQ2,3,4"})).unwrap();
         let data = app.session.execute("graph.setData", &json!({})).unwrap();

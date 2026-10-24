@@ -4,9 +4,9 @@
 use std::sync::Arc;
 
 use kurbo::{Point, Rect, Shape};
-use vectorcraft_doc::color::{Color, Paint};
-use vectorcraft_doc::{Appearance, CharStyle, Node, NodeId, TextObject};
-use vectorcraft_geom::PathData;
+use livipen_doc::color::{Color, Paint};
+use livipen_doc::{Appearance, CharStyle, Node, NodeId, TextObject};
+use livipen_geom::PathData;
 
 use super::test_fonts::{SVG_CHAR, source_sans_gid, svg_font};
 

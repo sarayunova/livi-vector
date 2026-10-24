@@ -10,12 +10,12 @@
 
 use std::sync::{Arc, Mutex};
 
+use livipen_doc::hit::hit_test;
+use livipen_doc::{CharStyle, NodeId, NodeKind, TextObject};
+use livipen_geom::bez::unit;
+use livipen_geom::{Affine, Point, Vec2};
+use livipen_text::{FontDb, PositionedGlyph, TextLayout, edit};
 use serde_json::{Value, json};
-use vectorcraft_doc::hit::hit_test;
-use vectorcraft_doc::{CharStyle, NodeId, NodeKind, TextObject};
-use vectorcraft_geom::bez::unit;
-use vectorcraft_geom::{Affine, Point, Vec2};
-use vectorcraft_text::{FontDb, PositionedGlyph, TextLayout, edit};
 
 use crate::distort::perspective::in_quad;
 use crate::xform::BLUE;
@@ -197,7 +197,7 @@ impl TouchTypeTool {
         {
             return l.clone();
         }
-        let l = Arc::new(vectorcraft_text::layout(FontDb::global(), t));
+        let l = Arc::new(livipen_text::layout(FontDb::global(), t));
         *c = Some(((fonts, t.clone()), l.clone()));
         l
     }
@@ -215,7 +215,7 @@ impl TouchTypeTool {
     /// The character of a type object under `p` (document space): the one whose box holds it, else
     /// the nearest one in the object clicked.
     fn char_at(&self, cx: &ToolContext, p: Point) -> Option<(NodeId, usize)> {
-        let h = hit_test(cx.doc, p, vectorcraft_doc::hit::HitOptions { type_path_only: false, ..cx.hit_options() })?;
+        let h = hit_test(cx.doc, p, livipen_doc::hit::HitOptions { type_path_only: false, ..cx.hit_options() })?;
         let t = text_of(cx, h.leaf)?;
         let lay = self.layout(t);
         let local = t.xf.inverse() * p;
@@ -462,7 +462,7 @@ impl Tool for TouchTypeTool {
 
 #[cfg(test)]
 mod tests {
-    use vectorcraft_doc::{Document, Node, Selection};
+    use livipen_doc::{Document, Node, Selection};
 
     use super::*;
     use crate::testutil::{cx, paint};
@@ -515,7 +515,7 @@ mod tests {
         assert!(t.overlays(&cx).is_empty(), "no character yet");
         // Somewhere in the second character, the "y".
         let t_object = text_of(&cx, id).unwrap().clone();
-        let lay = vectorcraft_text::layout(FontDb::global(), &t_object);
+        let lay = livipen_text::layout(FontDb::global(), &t_object);
         let y = lay.glyphs.iter().find(|g| g.byte == 1).unwrap();
         let at = t_object.xf * (y.origin + Vec2::new(y.advance / 2.0, -10.0));
         let acts = drag(&mut t, &cx, at, at);
@@ -550,7 +550,7 @@ mod tests {
     fn the_first_character_of_a_list_item_has_its_own_box_and_drags() {
         let (mut d, id, s) = doc_with_type();
         if let Some(NodeKind::Text(t)) = d.node_mut(id).map(|n| &mut n.kind) {
-            t.para.list = Some(vectorcraft_doc::text::ParaList::bulleted(vectorcraft_doc::text::Bullet::Dot));
+            t.para.list = Some(livipen_doc::text::ParaList::bulleted(livipen_doc::text::Bullet::Dot));
             t.para.left_indent = 18.0;
             t.para.first_line_indent = -18.0;
         }
@@ -558,7 +558,7 @@ mod tests {
         let cx = cx(&d, &s, &p);
         let mut t = TouchTypeTool::default();
         let t_object = text_of(&cx, id).unwrap().clone();
-        let lay = vectorcraft_text::layout(FontDb::global(), &t_object);
+        let lay = livipen_text::layout(FontDb::global(), &t_object);
         let first = lay.glyphs.iter().find(|g| g.byte == 0 && g.len > 0).unwrap();
         let at = t_object.xf * (first.origin + Vec2::new(first.advance / 2.0, -10.0));
         drag(&mut t, &cx, at, at);
@@ -581,7 +581,7 @@ mod tests {
         let p = paint();
         let cx = cx(&d, &s, &p);
         let mut t = TouchTypeTool::default();
-        let lay = vectorcraft_text::layout(FontDb::global(), text_of(&cx, id).unwrap());
+        let lay = livipen_text::layout(FontDb::global(), text_of(&cx, id).unwrap());
         let y = lay.glyphs.iter().find(|g| g.byte == 1).unwrap();
         let at = Point::new(100.0, 200.0) + (y.origin.to_vec2() + Vec2::new(y.advance / 2.0, -10.0));
         // 10 pt right and 4 pt up: one preview, one undo step.
@@ -610,7 +610,7 @@ mod tests {
         let p = paint();
         let cx = cx(&d, &s, &p);
         let mut t = TouchTypeTool::default();
-        let lay = vectorcraft_text::layout(FontDb::global(), text_of(&cx, id).unwrap());
+        let lay = livipen_text::layout(FontDb::global(), text_of(&cx, id).unwrap());
         let y = lay.glyphs.iter().find(|g| g.byte == 1).unwrap();
         let at = Point::new(100.0, 200.0) + (y.origin.to_vec2() + Vec2::new(y.advance / 2.0, -10.0));
         drag(&mut t, &cx, at, at);
@@ -647,7 +647,7 @@ mod tests {
         let p = paint();
         let cx = cx(&d, &s, &p);
         let mut t = TouchTypeTool::default();
-        let lay = vectorcraft_text::layout(FontDb::global(), text_of(&cx, id).unwrap());
+        let lay = livipen_text::layout(FontDb::global(), text_of(&cx, id).unwrap());
         let y = lay.glyphs.iter().find(|g| g.byte == 1).unwrap();
         let at = Point::new(100.0, 200.0) + (y.origin.to_vec2() + Vec2::new(y.advance / 2.0, -10.0));
         t.pointer(&cx, &PointerEvent::new(PointerKind::Down, at.x, at.y));
@@ -701,7 +701,7 @@ mod tests {
         s.add(id);
         let p = paint();
         let cx = cx(&d, &s, &p);
-        let lay = vectorcraft_text::layout(FontDb::global(), &text);
+        let lay = livipen_text::layout(FontDb::global(), &text);
         let esses: Vec<_> = lay.glyphs.iter().filter(|g| g.byte == 1).collect();
         assert_eq!(esses.len(), 2);
         // A click on the second S selects the ß, and its box reaches from the first S to the end of the second.
@@ -730,7 +730,7 @@ mod tests {
         let q = quad(&t, &cx);
         let (across, down) = (q[1] - q[0], q[3] - q[0]);
         assert!(across.dot(down).abs() < 1e-9, "a rectangle: {q:?}");
-        let lay = vectorcraft_text::layout(FontDb::global(), &text);
+        let lay = livipen_text::layout(FontDb::global(), &text);
         for g in lay.glyphs.iter().filter(|g| g.byte == 1) {
             for c in glyph_quad(g).unwrap() {
                 let v = text.xf * c - q[0];
@@ -744,7 +744,7 @@ mod tests {
     #[test]
     fn a_skewed_glyph_keeps_its_own_box() {
         let text = TextObject::point(Point::new(100.0, 200.0), "Type", CharStyle { size: 40.0, ..Default::default() });
-        let mut lay = vectorcraft_text::layout(FontDb::global(), &text);
+        let mut lay = livipen_text::layout(FontDb::global(), &text);
         lay.glyphs[1].xf *= Affine::skew(0.5, 0.0);
         let b = char_box(&text, &lay, 1).unwrap();
         let own = glyph_quad(&lay.glyphs[1]).unwrap();
@@ -757,7 +757,7 @@ mod tests {
         let (d, id, s) = doc_with_type();
         let p = paint();
         let cx = cx(&d, &s, &p);
-        let lay = vectorcraft_text::layout(FontDb::global(), text_of(&cx, id).unwrap());
+        let lay = livipen_text::layout(FontDb::global(), text_of(&cx, id).unwrap());
         let at = Point::new(100.0, 200.0) + Vec2::new(lay.glyphs[0].advance / 2.0, -10.0);
         let mut t = crate::create(ID);
         assert_eq!(t.id(), ID);

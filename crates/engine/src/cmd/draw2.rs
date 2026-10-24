@@ -5,13 +5,13 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use kurbo::{CubicBez, ParamCurve, ParamCurveNearest};
+use livipen_color::{Color, Paint};
+use livipen_doc::{Appearance, Document, Node, NodeId, NodeKind, PressureProfile, Selection};
+use livipen_geom::hit::fill_contains;
+use livipen_geom::{Anchor, AnchorKind, BezPath, FillRule, PathData, Point, Rect, SubPath, Vec2};
+use livipen_pathops as po;
+use livipen_pathops::{BoolOp, Cap, Join, SimplifyOptions};
 use serde_json::{Value, json};
-use vectorcraft_color::{Color, Paint};
-use vectorcraft_doc::{Appearance, Document, Node, NodeId, NodeKind, PressureProfile, Selection};
-use vectorcraft_geom::hit::fill_contains;
-use vectorcraft_geom::{Anchor, AnchorKind, BezPath, FillRule, PathData, Point, Rect, SubPath, Vec2};
-use vectorcraft_pathops as po;
-use vectorcraft_pathops::{BoolOp, Cap, Join, SimplifyOptions};
 
 use super::create::{add_look, insert_look};
 use super::newart::NewArt;
@@ -567,7 +567,7 @@ fn fit_freehand(pts: &[Point], tol: f64, closed: bool) -> SubPath {
             (kept[i], corner)
         })
         .collect();
-    let sp = vectorcraft_tools::draw2::catmull_rom(&marked, closed);
+    let sp = livipen_tools::draw2::catmull_rom(&marked, closed);
     if sp.anchors.len() < 3 {
         return sp;
     }
@@ -785,7 +785,7 @@ fn curvature(s: &mut Session, p: &Value) -> Result<Value> {
     if pts.is_empty() {
         return Err(bad(C, "need at least one point"));
     }
-    let sp = vectorcraft_tools::draw2::curvature_spline(&pts, switch_or(p, "closed", false, C)?);
+    let sp = livipen_tools::draw2::curvature_spline(&pts, switch_or(p, "closed", false, C)?);
     if let Some(id) = id_param(p, "id") {
         s.edit("Curvature", |d, sel| {
             *path_mut(d, id)? = PathData::single(sp);
@@ -811,7 +811,7 @@ enum CurvatureOp {
 }
 
 fn curvature_edit(s: &mut Session, p: &Value) -> Result<Value> {
-    use vectorcraft_tools::draw2::{EndCurve, curvature_close, curvature_extend, curvature_insert, curvature_move};
+    use livipen_tools::draw2::{EndCurve, curvature_close, curvature_extend, curvature_insert, curvature_move};
     const C: &str = "path.curvatureEdit";
     let id = id_param(p, "id").ok_or_else(|| bad(C, "missing id"))?;
     let si = usize_opt(p, "subpath", C)?.unwrap_or(0);
@@ -1007,7 +1007,7 @@ fn convert_anchor(s: &mut Session, p: &Value) -> Result<Value> {
             }
             // Without a handle position the anchor curves as the Curvature tool curves a point; one
             // with no direction to take stays as it is.
-            vectorcraft_tools::draw2::curvature_smooth(sp, ai);
+            livipen_tools::draw2::curvature_smooth(sp, ai);
             return Ok(());
         }
         let a = sp.anchors.get_mut(ai).ok_or_else(|| EngineError::Other("no such anchor".into()))?;

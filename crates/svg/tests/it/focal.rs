@@ -1,9 +1,9 @@
 //! Radial gradients' focal points as `fx`/`fy`, out and back in.
 
-use vectorcraft_color::{Gradient, GradientGeom, GradientKind, GradientPaint, Paint};
-use vectorcraft_doc::{Appearance, Document, Node};
-use vectorcraft_geom::{Point, Rect, shapes};
-use vectorcraft_svg::{ExportOptions, export, import};
+use livipen_color::{Gradient, GradientGeom, GradientKind, GradientPaint, Paint};
+use livipen_doc::{Appearance, Document, Node};
+use livipen_geom::{Point, Rect, shapes};
+use livipen_svg::{ExportOptions, export, import};
 
 /// One square filled with a radial on `start`→`end` at `aspect`, its focal point at `focal`.
 fn doc(start: Point, end: Point, aspect: f64, focal: Point) -> Document {

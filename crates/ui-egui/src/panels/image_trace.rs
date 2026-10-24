@@ -9,12 +9,12 @@
 //! settings (<https://web.archive.org/web/20250831090623/https://helpx.adobe.com/illustrator/using/image-trace.html>).
 
 use egui::Ui;
+use livipen_doc::{Node, NodeId, NodeKind, TraceView};
+use livipen_engine::cmd::swatchlib::DOCUMENT_SWATCHES;
 use serde_json::{Value, json};
-use vectorcraft_doc::{Node, NodeId, NodeKind, TraceView};
-use vectorcraft_engine::cmd::swatchlib::DOCUMENT_SWATCHES;
 
 use super::{first_selected, library_panel, pstate, set_pstate, swatches};
-use crate::VectorcraftApp;
+use crate::LiviPenApp;
 use crate::widgets::{self, menu_item};
 
 const MODES: [(&str, &str); 4] = [("blackAndWhite", "Black and White"), ("grayscale", "Grayscale"), ("color", "Color"), ("logo", "Flat Logo")];
@@ -44,7 +44,7 @@ fn palette_label(id: &str) -> &'static str {
 
 /// The name of Document Library's library `key` (the document's swatches or a swatch library); a
 /// library that is gone shows its key.
-fn library_label(app: &VectorcraftApp, key: &str) -> String {
+fn library_label(app: &LiviPenApp, key: &str) -> String {
     match swatches::limit_name(app, key) {
         Some(_) if key == DOCUMENT_SWATCHES => tl!(swatches::DOCUMENT_SWATCHES).to_string(),
         Some(name) => library_panel::library_name(key, &name).to_string(),
@@ -54,7 +54,7 @@ fn library_label(app: &VectorcraftApp, key: &str) -> String {
 
 /// Document Library's choices: the document's swatches, then the colour libraries (`current`
 /// checked) → the key chosen.
-fn library_list(app: &VectorcraftApp, ui: &mut Ui, current: &str) -> Option<String> {
+fn library_list(app: &LiviPenApp, ui: &mut Ui, current: &str) -> Option<String> {
     let document = menu_item(ui, swatches::DOCUMENT_SWATCHES, true, current == DOCUMENT_SWATCHES).then(|| DOCUMENT_SWATCHES.to_string());
     ui.separator();
     library_panel::library_items(ui, &swatches::colour_libraries(app), &|id| id == current).or(document)
@@ -77,7 +77,7 @@ struct TraceUi {
 }
 
 /// Each preset: its name, its parameters, and those of its enhanced version (null if it has none).
-fn presets(app: &mut VectorcraftApp) -> Vec<(String, Value, Value)> {
+fn presets(app: &mut LiviPenApp) -> Vec<(String, Value, Value)> {
     let v = app.session.execute("imageTrace.presets", &json!({})).unwrap_or_default();
     v["presets"]
         .as_array()
@@ -93,18 +93,18 @@ pub(crate) fn is_trace(n: &Node) -> bool {
 }
 
 /// The active document and the first selected object.
-fn target_key(app: &VectorcraftApp) -> Option<(u64, NodeId)> {
+fn target_key(app: &LiviPenApp) -> Option<(u64, NodeId)> {
     Some((app.session.active()?.uid, first_selected(app)?.id))
 }
 
 /// What the selection is: an Image Trace object (with its stored settings), a plain image, or neither.
-fn target(app: &VectorcraftApp) -> (bool, bool, Option<Value>) {
+fn target(app: &LiviPenApp) -> (bool, bool, Option<Value>) {
     let Some(n) = first_selected(app) else { return (false, false, None) };
     (is_trace(&n), matches!(n.kind, NodeKind::Image(_)), n.extras().trace.as_deref().cloned())
 }
 
 /// The one selected Image Trace object's preset ("Custom" once its settings were changed) and view.
-pub(crate) fn selected_trace(app: &VectorcraftApp) -> Option<(String, TraceView)> {
+pub(crate) fn selected_trace(app: &LiviPenApp) -> Option<(String, TraceView)> {
     let st = app.session.active()?;
     let [id] = st.selection.objects[..] else { return None };
     let n = st.doc.node(id).filter(|n| is_trace(n))?;
@@ -129,7 +129,7 @@ fn view_dropdown(ui: &mut Ui, current: TraceView, width: f32) -> Option<TraceVie
 }
 
 /// Show the selected Image Trace objects with `view` (no new trace).
-fn set_view(app: &mut VectorcraftApp, view: TraceView) {
+fn set_view(app: &mut LiviPenApp, view: TraceView) {
     if let Err(e) = app.run("imageTrace.setView", json!({ "view": view.id() })) {
         app.ui.status = e;
     }
@@ -140,7 +140,7 @@ fn set_view(app: &mut VectorcraftApp, view: TraceView) {
 /// View calls it; per the public documentation of the panel, that control is pressed and held to
 /// view the source image
 /// (<https://web.archive.org/web/20250831090623/https://helpx.adobe.com/illustrator/using/image-trace.html>).
-fn hold_source(app: &mut VectorcraftApp, ctx: &egui::Context, down: bool) {
+fn hold_source(app: &mut LiviPenApp, ctx: &egui::Context, down: bool) {
     let ids = app
         .session
         .active()
@@ -155,7 +155,7 @@ fn hold_source(app: &mut VectorcraftApp, ctx: &egui::Context, down: bool) {
 }
 
 /// The selected Image Trace object's View row (Control bar, Properties).
-pub(crate) fn view_row(app: &mut VectorcraftApp, ui: &mut Ui, current: TraceView, width: f32) {
+pub(crate) fn view_row(app: &mut LiviPenApp, ui: &mut Ui, current: TraceView, width: f32) {
     widgets::dim_label(ui, tl!("View:"));
     // No wider than what the label leaves of the row (#1358).
     if let Some(v) = view_dropdown(ui, current, width.min(ui.available_width())) {
@@ -164,14 +164,14 @@ pub(crate) fn view_row(app: &mut VectorcraftApp, ui: &mut Ui, current: TraceView
 }
 
 /// Trace the selected image, or trace the selected Image Trace object again, with built-in `preset`.
-fn trace_with(app: &mut VectorcraftApp, preset: &str) {
+fn trace_with(app: &mut LiviPenApp, preset: &str) {
     // A failure is reported in the status bar. The panel stays as it was: the Image Trace
     // button (Properties, Control bar) opens it.
     let _ = app.run("imageTrace.make", json!({ "preset": preset }));
 }
 
 /// Reveal the editable tracing controls, including fidelity, in the panel's current location.
-pub(crate) fn open_settings(app: &mut VectorcraftApp) {
+pub(crate) fn open_settings(app: &mut LiviPenApp) {
     // Icon panels toggle when activated, so an already open flyout must stay open.
     if app.ui.open_panel.as_deref() != Some("imageTrace")
         && let Err(e) = app.run("window.panel.activate", json!({ "panel": "imageTrace" }))
@@ -190,7 +190,7 @@ fn preset_label(name: &str) -> &str {
     crate::i18n::tr_ctx(crate::i18n::current(), "imageTrace", name)
 }
 
-fn preset_list(app: &mut VectorcraftApp, ui: &mut Ui, current: &str) -> Option<String> {
+fn preset_list(app: &mut LiviPenApp, ui: &mut Ui, current: &str) -> Option<String> {
     let mut chosen = None;
     for (name, ..) in presets(app) {
         if ui.add(egui::Button::selectable(name == current, preset_label(&name))).clicked() {
@@ -205,7 +205,7 @@ pub(crate) const TRACE_BUTTON_W: f32 = 104.0;
 
 /// The Image Trace button for a selected image (Control bar, Properties): a click traces it with
 /// the Default preset, its arrow lists the presets to trace it with.
-pub(crate) fn trace_button(app: &mut VectorcraftApp, ui: &mut Ui, width: f32) {
+pub(crate) fn trace_button(app: &mut LiviPenApp, ui: &mut Ui, width: f32) {
     let (main, arrow) = widgets::split_button_named(ui, tl!("Image Trace"), tl!("Tracing Presets"), width);
     if main.on_hover_text(tl!("Trace the image with the Default preset")).clicked() {
         trace_with(app, "Default");
@@ -217,7 +217,7 @@ pub(crate) fn trace_button(app: &mut VectorcraftApp, ui: &mut Ui, width: f32) {
 
 /// The selected Image Trace object's preset (Control bar, Properties): choosing another traces it
 /// again with that preset.
-pub(crate) fn preset_dropdown(app: &mut VectorcraftApp, ui: &mut Ui, current: &str, width: f32) {
+pub(crate) fn preset_dropdown(app: &mut LiviPenApp, ui: &mut Ui, current: &str, width: f32) {
     if let Some(p) = widgets::combo(ui, "trace-preset", tl!(current), width, false, |ui| preset_list(app, ui, current)) {
         trace_with(app, &p);
     }
@@ -225,7 +225,7 @@ pub(crate) fn preset_dropdown(app: &mut VectorcraftApp, ui: &mut Ui, current: &s
 
 /// The Control bar for one selected Image Trace object: its preset, view, the Image Trace panel
 /// and Expand. Whether it is one.
-pub fn control_bar(app: &mut VectorcraftApp, ui: &mut Ui) -> bool {
+pub fn control_bar(app: &mut LiviPenApp, ui: &mut Ui) -> bool {
     let Some((preset, view)) = selected_trace(app) else { return false };
     widgets::dim_label(ui, tl!("Preset:"));
     preset_dropdown(app, ui, &preset, 150.0);
@@ -240,7 +240,7 @@ pub fn control_bar(app: &mut VectorcraftApp, ui: &mut Ui) -> bool {
     true
 }
 
-fn trace(app: &mut VectorcraftApp, st: &mut TraceUi) {
+fn trace(app: &mut LiviPenApp, st: &mut TraceUi) {
     let preset = if st.preset == "Custom" { "Default" } else { st.preset.as_str() };
     match app.run("imageTrace.make", json!({ "preset": preset, "params": st.params, "view": st.view.id() })) {
         Ok(r) => {
@@ -273,7 +273,7 @@ fn slider(ui: &mut Ui, label: &str, v: &mut f64, range: std::ops::RangeInclusive
     out
 }
 
-pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
+pub fn show(app: &mut LiviPenApp, ui: &mut Ui) {
     let all = presets(app);
     let mut st: TraceUi = pstate(ui.ctx(), "image-trace");
     if st.params.is_null() {
@@ -518,7 +518,7 @@ pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
     set_pstate(ui.ctx(), "image-trace", st);
 }
 
-pub fn menu(app: &mut VectorcraftApp, ui: &mut Ui) {
+pub fn menu(app: &mut LiviPenApp, ui: &mut Ui) {
     let (is_trace, _, _) = target(app);
     if menu_item(ui, tl!("Release"), is_trace, false) {
         app.run("imageTrace.release", json!({})).ok();
@@ -538,7 +538,7 @@ mod tests {
     use egui::{Event, PointerButton, Pos2, Rect, vec2};
 
     /// One headless frame of the panel (and its menu) with `events`: the texts drawn, with where.
-    fn frame(app: &mut VectorcraftApp, ctx: &egui::Context, events: Vec<Event>) -> Vec<(String, Rect)> {
+    fn frame(app: &mut LiviPenApp, ctx: &egui::Context, events: Vec<Event>) -> Vec<(String, Rect)> {
         let screen = Rect::from_min_size(Pos2::ZERO, vec2(280.0, 700.0));
         let mut out = ctx.run_ui(egui::RawInput { screen_rect: Some(screen), events, ..Default::default() }, |ui| show(app, ui));
         out.textures_delta.clear();
@@ -546,7 +546,7 @@ mod tests {
     }
 
     /// Click the panel's `label` (the first one drawn).
-    fn click(app: &mut VectorcraftApp, ctx: &egui::Context, label: &str) {
+    fn click(app: &mut LiviPenApp, ctx: &egui::Context, label: &str) {
         let texts = frame(app, ctx, vec![]);
         let at = texts.iter().find(|(t, _)| t == label).map(|(_, r)| r.center()).unwrap_or_else(|| panic!("no `{label}` in {texts:?}"));
         let press = |pressed| Event::PointerButton { pos: at, button: PointerButton::Primary, pressed, modifiers: Default::default() };
@@ -554,23 +554,23 @@ mod tests {
         frame(app, ctx, vec![press(false)]);
     }
 
-    fn traced_app() -> VectorcraftApp {
+    fn traced_app() -> LiviPenApp {
         traced_app_with_ink(0)
     }
 
     /// A quick trace, then the Image Trace button.
-    fn trace_and_open(app: &mut VectorcraftApp, preset: &str) {
+    fn trace_and_open(app: &mut LiviPenApp, preset: &str) {
         trace_with(app, preset);
         open_settings(app);
     }
 
-    fn traced_app_with_ink(ink: u8) -> VectorcraftApp {
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+    fn traced_app_with_ink(ink: u8) -> LiviPenApp {
+        let mut app = LiviPenApp::new(livipen_engine::Session::new(), Default::default());
         app.session.execute("file.new", &json!({"width": 100, "height": 100})).unwrap();
         let img = image::RgbaImage::from_fn(20, 20, |x, _| image::Rgba(if x < 10 { [ink, ink, ink, 255] } else { [255, 255, 255, 255] }));
         let mut png = vec![];
         img.write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).unwrap();
-        let data = vectorcraft_format::base64_encode(&png);
+        let data = livipen_format::base64_encode(&png);
         app.run("file.place", json!({"name": "half.png", "dataBase64": data, "link": false})).unwrap();
         app.run("imageTrace.make", json!({"preset": "Default"})).unwrap();
         app
@@ -578,12 +578,12 @@ mod tests {
 
     #[test]
     fn a_large_image_traces_and_the_status_bar_says_it_is_slower() {
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let mut app = LiviPenApp::new(livipen_engine::Session::new(), Default::default());
         app.session.execute("file.new", &json!({"width": 100, "height": 100})).unwrap();
         let img = image::RgbaImage::from_fn(1601, 12, |x, _| image::Rgba(if x < 800 { [0, 0, 0, 255] } else { [255, 255, 255, 255] }));
         let mut png = vec![];
         img.write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).unwrap();
-        let data = vectorcraft_format::base64_encode(&png);
+        let data = livipen_format::base64_encode(&png);
         app.run("file.place", json!({"name": "wide.png", "dataBase64": data, "link": false})).unwrap();
         trace_with(&mut app, "Default");
         assert!(target(&app).2.is_some(), "the image is traced");
@@ -592,12 +592,12 @@ mod tests {
 
     #[test]
     fn a_large_image_traced_as_a_flat_logo_shows_the_size_it_was_traced_at() {
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let mut app = LiviPenApp::new(livipen_engine::Session::new(), Default::default());
         app.session.execute("file.new", &json!({"width": 100, "height": 100})).unwrap();
         let img = image::RgbaImage::from_fn(1602, 1602, |x, _| image::Rgba(if x < 800 { [0, 0, 0, 255] } else { [255, 255, 255, 255] }));
         let mut png = vec![];
         img.write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).unwrap();
-        let data = vectorcraft_format::base64_encode(&png);
+        let data = livipen_format::base64_encode(&png);
         app.run("file.place", json!({"name": "logo.png", "dataBase64": data, "link": false})).unwrap();
         trace_with(&mut app, "Flat Logo");
         assert!(target(&app).2.is_some(), "the image is traced: {}", app.ui.status);
@@ -628,10 +628,10 @@ mod tests {
         assert_eq!(app.ui.open_panel.as_deref(), Some("imageTrace"));
         assert_eq!(app.session.active().unwrap().history.undo.len(), steps);
         // Optional local visual QA; no reference images or generated captures are committed.
-        if let Some(path) = std::env::var_os("VECTORCRAFT_TRACE_CAPTURE") {
+        if let Some(path) = std::env::var_os("LIVIPEN_TRACE_CAPTURE") {
             let mut ready = false;
             let mut harness = egui_kittest::Harness::builder().with_size(vec2(340.0, 820.0)).wgpu().build_ui_state(
-                move |ui, app: &mut VectorcraftApp| {
+                move |ui, app: &mut LiviPenApp| {
                     if !ready {
                         egui_extras::install_image_loaders(ui.ctx());
                         crate::theme::install_fonts(ui.ctx());
@@ -738,8 +738,8 @@ mod tests {
         let mut app = traced_app();
         let ctx = egui::Context::default();
         crate::theme::install_fonts(&ctx);
-        let strokes = |app: &VectorcraftApp| target(app).2.map(|t| t["params"]["strokes"].clone());
-        let undo = |app: &VectorcraftApp| app.session.active().unwrap().history.undo.len();
+        let strokes = |app: &LiviPenApp| target(app).2.map(|t| t["params"]["strokes"].clone());
+        let undo = |app: &LiviPenApp| app.session.active().unwrap().history.undo.len();
         let steps = undo(&app);
         click(&mut app, &ctx, "Preview");
         click(&mut app, &ctx, "Preview");
@@ -775,7 +775,7 @@ mod tests {
         let ctx = egui::Context::default();
         crate::theme::install_fonts(&ctx);
         let a = first_selected(&app).unwrap().id;
-        let undo = |app: &VectorcraftApp| app.session.active().unwrap().history.undo.len();
+        let undo = |app: &LiviPenApp| app.session.active().unwrap().history.undo.len();
         click(&mut app, &ctx, "Preview");
         click(&mut app, &ctx, "Strokes");
         assert_eq!(target(&app).2.unwrap()["params"]["strokes"], json!(false), "the change waits");
@@ -817,7 +817,7 @@ mod tests {
         let ctx = egui::Context::default();
         crate::theme::install_fonts(&ctx);
         click(&mut app, &ctx, "Preview");
-        let menu_frame = |app: &mut VectorcraftApp, events: Vec<Event>| {
+        let menu_frame = |app: &mut LiviPenApp, events: Vec<Event>| {
             let mut out = ctx.run_ui(egui::RawInput { events, ..Default::default() }, |ui| menu(app, ui));
             out.textures_delta.clear();
             crate::tests_removeanchors::shapes_text(&out.shapes.iter().map(|c| c.shape.clone()).collect::<Vec<_>>())
@@ -888,8 +888,8 @@ mod tests {
         crate::theme::install_fonts(&ctx);
         frame(&mut app, &ctx, vec![]);
         let id = first_selected(&app).unwrap().id;
-        let undo = |app: &VectorcraftApp| app.session.active().unwrap().history.undo.len();
-        let revision = |app: &VectorcraftApp| app.session.active().unwrap().revision;
+        let undo = |app: &LiviPenApp| app.session.active().unwrap().history.undo.len();
+        let revision = |app: &LiviPenApp| app.session.active().unwrap().revision;
         let (steps, rev) = (undo(&app), revision(&app));
         let at = ctx.data(|d| d.get_temp::<Rect>(egui::Id::new("trace-hold-source"))).unwrap().center();
         let press = |pressed| Event::PointerButton { pos: at, button: PointerButton::Primary, pressed, modifiers: Default::default() };
@@ -943,7 +943,7 @@ mod tests {
         let ctx = egui::Context::default();
         crate::theme::install_fonts(&ctx);
         // Where the panel's content ends after a few frames.
-        let right = |app: &mut VectorcraftApp| {
+        let right = |app: &mut LiviPenApp| {
             let mut right = 0.0;
             for _ in 0..3 {
                 let screen = Rect::from_min_size(Pos2::ZERO, vec2(280.0, 700.0));
@@ -1003,7 +1003,7 @@ mod tests {
         let ctx = egui::Context::default();
         crate::theme::install_fonts(&ctx);
         let has = |texts: &[(String, Rect)], s: &str| texts.iter().any(|(t, _)| t == s);
-        let palette = |app: &VectorcraftApp| target(app).2.map(|t| t["params"]["palette"].clone());
+        let palette = |app: &LiviPenApp| target(app).2.map(|t| t["params"]["palette"].clone());
         assert!(!has(&frame(&mut app, &ctx, vec![]), "Palette:"), "Black and White has no palette");
         app.run("imageTrace.make", json!({"preset": "6 Colors"})).unwrap();
         let texts = frame(&mut app, &ctx, vec![]);
@@ -1027,7 +1027,7 @@ mod tests {
         let mut app = traced_app();
         let ctx = egui::Context::default();
         crate::theme::install_fonts(&ctx);
-        let create = |app: &VectorcraftApp| target(app).2.map(|t| (t["params"]["fills"].clone(), t["params"]["strokes"].clone()));
+        let create = |app: &LiviPenApp| target(app).2.map(|t| (t["params"]["fills"].clone(), t["params"]["strokes"].clone()));
         let texts = frame(&mut app, &ctx, vec![]);
         for s in ["Create:", "Fills", "Strokes", "Stroke", "10"] {
             assert!(texts.iter().any(|(t, _)| t == s), "{s}: {texts:?}");
@@ -1045,7 +1045,7 @@ mod tests {
 
     #[test]
     fn panel_and_menu_draw_headless() {
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let mut app = LiviPenApp::new(livipen_engine::Session::new(), Default::default());
         app.session.execute("file.new", &json!({"width": 100, "height": 100})).unwrap();
         app.session.execute("shape.rectangle", &json!({"x": 0, "y": 0, "width": 10, "height": 10})).unwrap();
         for _ in 0..2 {

@@ -1,7 +1,7 @@
 //! Looking for the files of linked images and placed documents in a folder the user picks, and its
 //! subfolders (`links.findFiles`, searched on separate threads: [`super::findfiles`]). A file with
 //! a linked file's name, in any letter case, is ranked by what the link saved
-//! ([`vectorcraft_doc::LinkInfo`]): the same file (its size and hash), the same size (when the link
+//! ([`livipen_doc::LinkInfo`]): the same file (its size and hash), the same size (when the link
 //! saved no hash, or the file is larger than 1 GB and isn't hashed), or the name only.
 
 use std::collections::HashMap;
@@ -9,8 +9,8 @@ use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
+use livipen_doc::NodeKind;
 use serde_json::{Value, json};
-use vectorcraft_doc::NodeKind;
 
 use super::findfiles::{self, Limits, Visitor};
 use super::*;
@@ -101,7 +101,7 @@ impl Visitor for LinkFiles {
                         // Only the size looked at is read: a file growing meanwhile no longer
                         // matches, rather than being hashed to its new end.
                         let file = std::fs::File::open(path).ok()?;
-                        let (hash, read) = vectorcraft_doc::links::hash_reader_within(file, size).ok()?;
+                        let (hash, read) = livipen_doc::links::hash_reader_within(file, size).ok()?;
                         (read == size).then_some(hash)
                     })
                     .as_ref()

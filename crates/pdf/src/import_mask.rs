@@ -8,10 +8,10 @@
 use std::sync::Arc;
 
 use kurbo::{Rect, Shape};
-use vectorcraft_color::blend::MASK_LUM;
-use vectorcraft_color::{BlendMode, Color, Paint};
-use vectorcraft_doc::node::whiten;
-use vectorcraft_doc::{AppearanceItem, Node, NodeKind, OpacityMask};
+use livipen_color::blend::MASK_LUM;
+use livipen_color::{BlendMode, Color, Paint};
+use livipen_doc::node::whiten;
+use livipen_doc::{AppearanceItem, Node, NodeKind, OpacityMask};
 
 /// What a soft mask does to what it masks.
 #[derive(Clone, Debug, PartialEq)]

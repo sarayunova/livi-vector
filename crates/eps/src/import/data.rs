@@ -6,10 +6,10 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use hayro_ccitt::{DecodeSettings, Decoder, DecoderContext, EncodingMode};
-use vectorcraft_color::{Color, Paint};
-use vectorcraft_doc::cmyk::{Inks, jpeg_components};
-use vectorcraft_doc::{ImageBlob, ImageObject, Node, NodeId, NodeKind, OpacityMask};
-use vectorcraft_geom::Affine;
+use livipen_color::{Color, Paint};
+use livipen_doc::cmyk::{Inks, jpeg_components};
+use livipen_doc::{ImageBlob, ImageObject, Node, NodeId, NodeKind, OpacityMask};
+use livipen_geom::Affine;
 
 use super::graphics::{Space, process};
 use super::interp::{Interp, matrix_of};

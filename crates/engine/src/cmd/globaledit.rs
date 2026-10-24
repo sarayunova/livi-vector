@@ -38,17 +38,17 @@
 //!   or removed at once), takes the model's whole list of fills and strokes.
 //!
 //! Members that are hidden or locked at the time are left as they are. An edit that would take any
-//! member past the canvas (beyond [`vectorcraft_doc::MAX_COORD`]) is refused whole, as one that
+//! member past the canvas (beyond [`livipen_doc::MAX_COORD`]) is refused whole, as one that
 //! takes the selection there is. Whenever the document is put back (Undo, Redo, a cancelled drag
 //! or scrub, an edit that failed), the members it lacks (or no longer supports) leave the Global
 //! Edit, and it ends when fewer than two are left ([`follow_history`]), so that an object made
 //! later under a freed id is never edited. Rotated copies, groups (the help page "Edit groups with
 //! similar objects") and excluding a member with a Shift-click are not covered.
 
+use livipen_doc::{Appearance, AppearanceItem, Document, FillLayer, Node, NodeId, NodeKind, Scaling, Shared, StrokeLayer};
+use livipen_geom::{Affine, BezPath, PathData, Point, Rect, Shape};
 use serde::Serialize;
 use serde_json::{Value, json};
-use vectorcraft_doc::{Appearance, AppearanceItem, Document, FillLayer, Node, NodeId, NodeKind, Scaling, Shared, StrokeLayer};
-use vectorcraft_geom::{Affine, BezPath, PathData, Point, Rect, Shape};
 
 use super::wand::{fill_of, stroke_of};
 use super::*;
@@ -111,7 +111,7 @@ impl Options {
             None | Some(Value::Null) => {}
             Some(Value::String(s)) if s.trim().is_empty() || s.trim().eq_ignore_ascii_case("all") => o.artboards = None,
             Some(Value::String(s)) => {
-                vectorcraft_doc::range::parse_range(s, d.artboards.len()).map_err(|e| bad(cmd, e))?;
+                livipen_doc::range::parse_range(s, d.artboards.len()).map_err(|e| bad(cmd, e))?;
                 o.artboards = Some(s.trim().to_string());
             }
             Some(v) => return Err(bad(cmd, format!("`artboards`: all or a range such as 1, 3-5, not {v}"))),
@@ -165,7 +165,7 @@ impl Form {
                 points.extend(sp.anchors.iter().flat_map(|a| [a.p, a.h_in, a.h_out]));
             }
         };
-        let rule = |r: vectorcraft_geom::FillRule| u64::from(r == vectorcraft_geom::FillRule::EvenOdd);
+        let rule = |r: livipen_geom::FillRule| u64::from(r == livipen_geom::FillRule::EvenOdd);
         match &n.kind {
             NodeKind::Path { path, rule: r, clipping: false, guide: false, .. } => {
                 tag.extend([0, rule(*r)]);
@@ -233,14 +233,14 @@ fn matches(s: &Session, o: &Options) -> Result<Vec<(NodeId, Affine)>> {
     let boards: Option<Vec<Rect>> = match &o.artboards {
         None => None,
         Some(r) => Some(
-            vectorcraft_doc::range::parse_range(r, d.artboards.len())
+            livipen_doc::range::parse_range(r, d.artboards.len())
                 .map_err(|e| bad(C, e))?
                 .into_iter()
                 .filter_map(|i| d.artboards.get(i).map(|a| a.rect))
                 .collect(),
         ),
     };
-    let on = |r: Rect, b: Rect| b.intersect(r).area() > 0.0 || vectorcraft_doc::artboard_holds(r, b.center());
+    let on = |r: Rect, b: Rect| b.intersect(r).area() > 0.0 || livipen_doc::artboard_holds(r, b.center());
     let in_scope = |n: &Node| {
         let Some(b) = n.geometric_bounds_with(&symbols) else { return false };
         if !d.artboards.iter().any(|a| on(a.rect, b)) {

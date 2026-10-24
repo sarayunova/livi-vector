@@ -1,12 +1,12 @@
-//! `.vectorcraft` v4: large data after the JSON (images, the PDF, profiles), small files still plain
+//! `.livipen` v4: large data after the JSON (images, the PDF, profiles), small files still plain
 //! JSON, older versions inline, damaged offsets refused.
 
 use std::sync::Arc;
 
+use livipen_doc::{Document, ImageBlob, ImageObject, Node, NodeKind};
+use livipen_format::{BLOB_MAGIC, FormatError, INLINE_MAX, SaveOptions, load, load_file, pdf_content, save_with};
+use livipen_geom::Affine;
 use serde_json::Value;
-use vectorcraft_doc::{Document, ImageBlob, ImageObject, Node, NodeKind};
-use vectorcraft_format::{BLOB_MAGIC, FormatError, INLINE_MAX, SaveOptions, load, load_file, pdf_content, save_with};
-use vectorcraft_geom::Affine;
 
 /// A document showing image `key` of `len` bytes.
 fn doc_with_image(key: &str, len: usize) -> Document {
@@ -52,7 +52,7 @@ fn small_files_stay_plain_json_and_older_versions_inline() {
     let v3 = save_with(&big, &SaveOptions { version: 3, ..SaveOptions::default() }).unwrap();
     assert!(!has_tail(&v3), "version 3 keeps everything in the JSON");
     let v: Value = serde_json::from_slice(&v3).unwrap();
-    assert_eq!((v["format"].as_str(), v["version"].as_u64()), (Some("vectorcraft"), Some(3)));
+    assert_eq!((v["format"].as_str(), v["version"].as_u64()), (Some("livipen"), Some(3)));
     assert_eq!(load(&v3).unwrap().images["big"].bytes, big.images["big"].bytes);
 }
 
@@ -61,12 +61,12 @@ fn small_files_stay_plain_json_and_older_versions_inline() {
 #[test]
 fn json_part_is_the_json_without_the_data_after_it() {
     let big = save_with(&doc_with_image("big", INLINE_MAX + 10), &SaveOptions::default()).unwrap();
-    let json = vectorcraft_format::json_part(&big);
+    let json = livipen_format::json_part(&big);
     assert!(json.len() < big.len() - INLINE_MAX && !has_tail(json));
     let v: Value = serde_json::from_slice(json).unwrap();
     assert!(v["images"]["big"].get("blob").is_some() && v["images"]["big"].get("data").is_none(), "{}", v["images"]);
     let small = save_with(&doc_with_image("small", 100), &SaveOptions::default()).unwrap();
-    assert_eq!(vectorcraft_format::json_part(&small), &small[..]);
+    assert_eq!(livipen_format::json_part(&small), &small[..]);
 }
 
 #[test]

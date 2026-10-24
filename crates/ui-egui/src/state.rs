@@ -1,8 +1,8 @@
 //! Serializable UI state (read and driven by the control channel).
 
+use livipen_geom::Point;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use vectorcraft_geom::Point;
 
 use crate::theme::Brightness;
 
@@ -31,7 +31,7 @@ impl Default for View {
 
 impl View {
     /// The view a document opens at: the one it was saved with, else fitted on first display.
-    pub fn of(st: &vectorcraft_engine::DocState) -> Self {
+    pub fn of(st: &livipen_engine::DocState) -> Self {
         match &st.view {
             Some(v) if v.zoom.is_finite() && v.zoom > 0.0 && v.center.x.is_finite() && v.center.y.is_finite() => Self {
                 zoom: v.zoom.clamp(0.0313, 640.0),
@@ -294,7 +294,7 @@ impl Dialog {
     pub fn f64(&self, k: &str, d: f64) -> f64 {
         match self.fields.get(k) {
             Some(Value::Number(n)) => n.as_f64().unwrap_or(d),
-            Some(Value::String(s)) => vectorcraft_doc::Unit::Points.parse(s).unwrap_or(d),
+            Some(Value::String(s)) => livipen_doc::Unit::Points.parse(s).unwrap_or(d),
             _ => d,
         }
     }
@@ -346,7 +346,7 @@ pub struct UiState {
     /// document's `uid`: the context menu's Unlock submenu lists them while the menu is open. Not
     /// saved.
     #[serde(skip)]
-    pub context_locked: Option<(u64, Vec<vectorcraft_doc::NodeId>)>,
+    pub context_locked: Option<(u64, Vec<livipen_doc::NodeId>)>,
     /// Last tool shown in each toolbar slot (keyed by the slot's first tool id).
     #[serde(default)]
     pub slot_tool: std::collections::BTreeMap<String, String>,
@@ -465,7 +465,7 @@ pub struct UiState {
     pub engine_prefs: Value,
     /// Color Guide panel: variation kind, steps and amount (Color Guide Options).
     #[serde(default)]
-    pub color_guide: vectorcraft_color::harmony::GuideOptions,
+    pub color_guide: livipen_color::harmony::GuideOptions,
     /// The library panels' settings (Window → Swatch Libraries, Graphic Style Libraries): of each
     /// library opened, and of the persistent ones, which reopen at startup, also once closed
     /// ([`crate::panels::library_panel`], `ui.libraryPanel`).
@@ -550,9 +550,9 @@ pub struct UiState {
     #[serde(skip)]
     pub home: Option<(Option<u64>, usize)>,
     /// The Image Trace objects the canvas draws with the Source Image view while the Image Trace
-    /// panel's eye button is held down ([`vectorcraft_render::RenderOptions::trace_source`]).
+    /// panel's eye button is held down ([`livipen_render::RenderOptions::trace_source`]).
     #[serde(skip)]
-    pub trace_hold_source: Option<std::sync::Arc<Vec<vectorcraft_doc::NodeId>>>,
+    pub trace_hold_source: Option<std::sync::Arc<Vec<livipen_doc::NodeId>>>,
     /// Layers panel › Panel Options… (row size, thumbnails, Show Layers Only, Locate Selected Objects).
     #[serde(default)]
     pub layers_panel: crate::panels::layers::PanelOptions,
@@ -789,13 +789,13 @@ impl UiState {
         self.status.clear();
         self.about = false;
         self.open_panel = None;
-        if self.group_tool.len() != vectorcraft_tools::TOOL_GROUPS.len() {
+        if self.group_tool.len() != livipen_tools::TOOL_GROUPS.len() {
             self.group_tool = UiState::default().group_tool;
         }
         // One strip per group, of known tools (a hand-edited preferences file).
         let mut seen = std::collections::BTreeSet::new();
         self.floating_flyouts.retain_mut(|f| {
-            f.tools.retain(|id| vectorcraft_tools::tool_info(id).is_some());
+            f.tools.retain(|id| livipen_tools::tool_info(id).is_some());
             f.tools.first().is_some_and(|k| seen.insert(k.clone()))
         });
         FloatingPanels::sanitize(&mut self.floating_panels, &mut self.toolbar_pos);
@@ -864,7 +864,7 @@ impl Default for UiState {
             told: vec![],
             answering_control: false,
             flyout: None,
-            group_tool: vectorcraft_tools::TOOL_GROUPS.iter().map(|g| g[0].id.to_string()).collect(),
+            group_tool: livipen_tools::TOOL_GROUPS.iter().map(|g| g[0].id.to_string()).collect(),
             status: String::new(),
             palette_open: false,
             palette_query: String::new(),

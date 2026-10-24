@@ -1,10 +1,10 @@
 //! Raster effects stay where they are, and look the same, at every zoom and pan (#755).
 
+use livipen_color::{BlendMode, Color, Paint};
+use livipen_doc::text::{CharStyle, TextObject};
+use livipen_doc::{Appearance, Effect, Node, NodeKind};
+use livipen_geom::{Point, shapes};
 use serde_json::json;
-use vectorcraft_color::{BlendMode, Color, Paint};
-use vectorcraft_doc::text::{CharStyle, TextObject};
-use vectorcraft_doc::{Appearance, Effect, Node, NodeKind};
-use vectorcraft_geom::{Point, shapes};
 
 use super::*;
 

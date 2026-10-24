@@ -4,15 +4,15 @@
 
 use std::time::{Duration, Instant};
 
+use livipen_engine::Session;
+use livipen_plugins::{registry, wat as tpl};
 use serde_json::json;
-use vectorcraft_engine::Session;
-use vectorcraft_plugins::{registry, wat as tpl};
 
-use crate::{VectorcraftApp, dialogs, plugin_runs, theme};
+use crate::{LiviPenApp, dialogs, plugin_runs, theme};
 
 /// An app with a new 200 × 200 pt document.
-fn app() -> VectorcraftApp {
-    let mut app = VectorcraftApp::new(Session::new(), Default::default());
+fn app() -> LiviPenApp {
+    let mut app = LiviPenApp::new(Session::new(), Default::default());
     app.run("file.new", json!({"width": 200, "height": 200})).unwrap();
     app
 }
@@ -26,13 +26,13 @@ fn heavy(id: &str, steps: u64, params: &str) -> Vec<u8> {
 }
 
 /// Installs [`heavy`] filter `id` as the user would once they agreed.
-fn install(app: &mut VectorcraftApp, id: &str, steps: u64, params: &str) {
-    let data = vectorcraft_format::base64_encode(&heavy(id, steps, params));
+fn install(app: &mut LiviPenApp, id: &str, steps: u64, params: &str) {
+    let data = livipen_format::base64_encode(&heavy(id, steps, params));
     app.run("plugin.install", json!({"dataBase64": data, "allowHeavy": true})).unwrap();
 }
 
 /// Applies the runs' results as the frames would, until none is left (at most 30 s).
-fn wait(app: &mut VectorcraftApp) {
+fn wait(app: &mut LiviPenApp) {
     let t0 = Instant::now();
     while !app.plugin_runs.running.is_empty() && t0.elapsed() < Duration::from_secs(30) {
         plugin_runs::poll(app);
@@ -42,7 +42,7 @@ fn wait(app: &mut VectorcraftApp) {
 }
 
 /// One headless frame of the dialog layer.
-fn frame(app: &mut VectorcraftApp) {
+fn frame(app: &mut LiviPenApp) {
     let ctx = egui::Context::default();
     theme::install_fonts(&ctx);
     let mut out = ctx.run_ui(Default::default(), |ui| dialogs::show(app, ui.ctx()));
@@ -50,7 +50,7 @@ fn frame(app: &mut VectorcraftApp) {
 }
 
 /// Draws the progress window at `time` seconds → the texts it drew.
-fn progress(app: &mut VectorcraftApp, ctx: &egui::Context, time: f64) -> String {
+fn progress(app: &mut LiviPenApp, ctx: &egui::Context, time: f64) -> String {
     let mut out = ctx.run_ui(egui::RawInput { time: Some(time), ..Default::default() }, |ui| plugin_runs::show(app, ui.ctx()));
     out.textures_delta.clear();
     let mut texts = String::new();
@@ -70,7 +70,7 @@ fn installing_a_heavy_filter_asks_first() {
     let mut app = app();
     let id = "test.ui.heavy.install";
     let bytes = heavy(id, 1, "{}");
-    let r = app.run("ui.installPlugin", json!({"dataBase64": vectorcraft_format::base64_encode(&bytes), "name": "route.wasm"})).unwrap();
+    let r = app.run("ui.installPlugin", json!({"dataBase64": livipen_format::base64_encode(&bytes), "name": "route.wasm"})).unwrap();
     assert_eq!(r["pending"], dialogs::confirm::KIND);
     let d = app.ui.dialog.as_ref().unwrap();
     assert_eq!(d.str("message"), format!("Install “Test {id}”, which asks for a heavy budget?"));
@@ -149,7 +149,7 @@ fn cancel_stops_a_heavy_filter_shown_in_its_progress_window() {
     assert!(!progress(&mut app, &ctx, 2.0).contains(&heading), "a cancelled run isn't shown");
     wait(&mut app);
     assert_eq!(app.session.doc().unwrap().doc, doc);
-    assert_eq!(app.ui.status, vectorcraft_engine::EngineError::Cancelled.to_string());
+    assert_eq!(app.ui.status, livipen_engine::EngineError::Cancelled.to_string());
 }
 
 /// Continue in Background closes the progress window while the run goes on; Cancel still stops it.
@@ -170,7 +170,7 @@ fn continue_in_background_hides_the_progress_window() {
     assert!(app.plugin_runs.running.first().is_some_and(|r| r.hidden), "still running");
     assert_eq!(app.run("plugin.cancelRuns", json!({})).unwrap(), json!({"cancelled": 1}));
     wait(&mut app);
-    assert_eq!(app.ui.status, vectorcraft_engine::EngineError::Cancelled.to_string());
+    assert_eq!(app.ui.status, livipen_engine::EngineError::Cancelled.to_string());
 }
 
 /// `CRAFT_UI_HEAVY_FILTER_WASM=<folder>` writes a heavy test filter to install in the app

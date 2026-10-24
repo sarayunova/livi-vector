@@ -1,6 +1,6 @@
-# vectorcraft-pathops
+# livipen-pathops
 
-Path operations for VectorCraft: booleans, the Pathfinder panel, Shape Builder regions, Live Paint planar maps, offset path, outline stroke, simplify and the other Object → Path commands. Everything takes and returns `vectorcraft_geom::PathData`.
+Path operations for Livi Pen: booleans, the Pathfinder panel, Shape Builder regions, Live Paint planar maps, offset path, outline stroke, simplify and the other Object → Path commands. Everything takes and returns `livipen_geom::PathData`.
 
 ## Booleans (curve-preserving)
 

@@ -1,10 +1,10 @@
 //! Compound appearance and fill-rule edits from a directly selected member (#1197).
 
+use livipen_doc::{NodeId, NodeKind};
+use livipen_engine::Session;
+use livipen_geom::{Affine, FillRule, PathData};
+use livipen_render::{RenderOptions, Renderer};
 use serde_json::{Value, json};
-use vectorcraft_doc::{NodeId, NodeKind};
-use vectorcraft_engine::Session;
-use vectorcraft_geom::{Affine, FillRule, PathData};
-use vectorcraft_render::{RenderOptions, Renderer};
 
 fn run(s: &mut Session, command: &str, params: Value) -> Value {
     s.execute(command, &params).unwrap()

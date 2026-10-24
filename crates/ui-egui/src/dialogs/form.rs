@@ -1,9 +1,9 @@
 //! Field widgets shared by the dialogs: labelled text fields, checkboxes, the generic field grid
 //! and the typed parameter editor of the command and effect dialogs.
 
+use livipen_doc::Unit;
+use livipen_plugins::{Manifest, Param, ParamSpec};
 use serde_json::{Value, json};
-use vectorcraft_doc::Unit;
-use vectorcraft_plugins::{Manifest, Param, ParamSpec};
 
 use crate::state::Dialog;
 use crate::theme::Tokens;
@@ -252,7 +252,7 @@ pub(super) fn grid_then(ui: &mut egui::Ui, d: &mut Dialog, unit: Unit, more: imp
                 }
                 ui.end_row();
             } else if let Some(ends) = skew_ends(&d.kind, &k) {
-                let max = vectorcraft_geom::shapes::GRID_SKEW_MAX;
+                let max = livipen_geom::shapes::GRID_SKEW_MAX;
                 row_label(ui, tl!("Skew:"));
                 ui.vertical(|ui| {
                     ui.horizontal(|ui| slider_field_named(ui, d, &k, tl!("Skew:"), -max..=max, "%", &|_| rail));
@@ -399,9 +399,9 @@ fn typed_number(x: f64) -> Value {
 /// ([`Manifest::sections`]); a parameter whose `visibleWhen` the values don't meet is left out
 /// ([`Manifest::visible`]). Returns true when a value changed. Labels, choices, groups and help are
 /// the plug-in's text, shown as they are. A plug-in may declare more parameters
-/// ([`MAX_PARAMS`](vectorcraft_plugins::manifest::MAX_PARAMS)) than the window has room for, and
+/// ([`MAX_PARAMS`](livipen_plugins::manifest::MAX_PARAMS)) than the window has room for, and
 /// the rows then scroll ([`super::modal::scrolled_rows`]).
-pub(super) fn schema_fields(app: &mut crate::VectorcraftApp, ui: &mut egui::Ui, d: &mut Dialog, m: &Manifest) -> bool {
+pub(super) fn schema_fields(app: &mut crate::LiviPenApp, ui: &mut egui::Ui, d: &mut Dialog, m: &Manifest) -> bool {
     let (changed, help) = schema_rows(ui, d, m);
     if let Some(url) = help {
         app.open_url(&url);
@@ -543,7 +543,7 @@ pub(crate) fn number_list_text(cur: &Value) -> String {
 pub(crate) fn read_number_list(text: &str, spec: &ParamSpec) -> Option<Value> {
     let ParamSpec::NumberList { min, max, min_items, max_items, .. } = spec else { return None };
     let parts = text.split([',', ';', ' ']).filter(|p| !p.trim().is_empty());
-    let list: Vec<f64> = parts.map(|p| vectorcraft_doc::parse_number(p).filter(|x| x.is_finite())).collect::<Option<_>>()?;
+    let list: Vec<f64> = parts.map(|p| livipen_doc::parse_number(p).filter(|x| x.is_finite())).collect::<Option<_>>()?;
     (*min_items..=*max_items).contains(&list.len()).then(|| json!(list.into_iter().map(|x| x.clamp(*min, *max)).collect::<Vec<f64>>()))
 }
 
@@ -728,20 +728,13 @@ pub(super) const PREVIEWED: &str = "__previewed";
 /// The Preview checkbox of a dialog that previews `cmd` on the canvas: while it is on, `params` run
 /// again on the interaction's snapshot whenever they differ from the last preview (whether a widget
 /// or `ui.dialog.set` changed them); turning it off rolls back.
-pub(super) fn preview(app: &mut crate::VectorcraftApp, ui: &mut egui::Ui, d: &mut Dialog, label: &str, cmd: &str, params: Value) {
+pub(super) fn preview(app: &mut crate::LiviPenApp, ui: &mut egui::Ui, d: &mut Dialog, label: &str, cmd: &str, params: Value) {
     let _ = preview_result(app, ui, d, label, cmd, params);
 }
 
 /// As [`preview`], returning the command's result only when a new preview succeeds.
 /// A dialog can retain a small summary (such as point counts) in its private fields.
-pub(super) fn preview_result(
-    app: &mut crate::VectorcraftApp,
-    ui: &mut egui::Ui,
-    d: &mut Dialog,
-    label: &str,
-    cmd: &str,
-    params: Value,
-) -> Option<Value> {
+pub(super) fn preview_result(app: &mut crate::LiviPenApp, ui: &mut egui::Ui, d: &mut Dialog, label: &str, cmd: &str, params: Value) -> Option<Value> {
     const LAST: &str = PREVIEWED;
     ui.add_space(8.0);
     let mut on = d.bool("preview");
@@ -761,7 +754,7 @@ pub(super) fn preview_result(
 /// The preview of [`preview_result`] without its checkbox: `params` run again on the interaction's
 /// snapshot when they differ from the last preview. Returns the command's result only when a new
 /// preview succeeds.
-pub(super) fn preview_now(app: &mut crate::VectorcraftApp, d: &mut Dialog, label: &str, cmd: &str, params: Value) -> Option<Value> {
+pub(super) fn preview_now(app: &mut crate::LiviPenApp, d: &mut Dialog, label: &str, cmd: &str, params: Value) -> Option<Value> {
     let mut result = None;
     if d.fields.get(PREVIEWED) != Some(&params) || !app.session.in_interaction() {
         let _ = app.session.begin_interaction(label);
@@ -777,7 +770,7 @@ pub(super) fn preview_now(app: &mut crate::VectorcraftApp, d: &mut Dialog, label
 /// OK of a dialog using [`preview`]: keep the previewed `cmd` as one undo step (or run it when no
 /// preview runs) and close; the command's warning shows in the status bar either way. On an error
 /// the dialog stays open.
-pub(super) fn commit_preview(app: &mut crate::VectorcraftApp, cmd: &str, params: Value) -> Result<Value, String> {
+pub(super) fn commit_preview(app: &mut crate::LiviPenApp, cmd: &str, params: Value) -> Result<Value, String> {
     let r = if app.session.in_interaction() {
         match app.session.preview(cmd, &params) {
             Ok(v) => {
@@ -814,7 +807,7 @@ pub(super) fn bleed_values(d: &Dialog) -> [f64; 4] {
 /// Bleed fields (Document Setup, New Document): Top, Bottom, Left and Right shown in `unit`, each
 /// `width` wide with a caption above, and a link toggle (`bleedLinked`, on by default) that keeps
 /// them equal. Values are clamped to 0–72 pt.
-pub(super) fn bleed(ui: &mut egui::Ui, d: &mut Dialog, unit: vectorcraft_doc::Unit, width: f32) {
+pub(super) fn bleed(ui: &mut egui::Ui, d: &mut Dialog, unit: livipen_doc::Unit, width: f32) {
     let t = Tokens::get(ui.ctx());
     let mut b = bleed_values(d);
     let linked = d.fields.get("bleedLinked").and_then(Value::as_bool).unwrap_or(true);
@@ -825,7 +818,7 @@ pub(super) fn bleed(ui: &mut egui::Ui, d: &mut Dialog, unit: vectorcraft_doc::Un
             ui.vertical(|ui| {
                 ui.label(egui::RichText::new(tl!(side)).size(11.0).color(t.text_dim));
                 if let Some(v) = crate::widgets::num_field(ui, ("bleed", i), Some(b[i]), unit, width) {
-                    changed = Some((i, v.clamp(0.0, vectorcraft_doc::setup::MAX_BLEED)));
+                    changed = Some((i, v.clamp(0.0, livipen_doc::setup::MAX_BLEED)));
                 }
             });
         }

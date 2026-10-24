@@ -1,26 +1,26 @@
-//! `vectorcraft --control <port> --automation-read-root <dir> --automation-write-root <dir>` (#832):
+//! `livipen --control <port> --automation-read-root <dir> --automation-write-root <dir>` (#832):
 //! control requests read and write only inside the roots; the person at the keyboard is not
 //! confined.
 
 use std::path::{Path, PathBuf};
 
+use livipen_engine::Session;
+use livipen_engine::file_access::AutomationRoots;
 use serde_json::{Value, json};
-use vectorcraft_engine::Session;
-use vectorcraft_engine::file_access::AutomationRoots;
 
 use crate::background::SharedWriteFn;
 use crate::control::ControlRequest;
-use crate::{Services, VectorcraftApp};
+use crate::{LiviPenApp, Services};
 
 /// A folder holding `in` (the read root, with `a.svg`), `out` (the write root) and `outside`
 /// (with `b.svg`), and an app with the desktop's file services confined to `in` and `out`.
-fn confined(tag: &str) -> (VectorcraftApp, std::sync::mpsc::Sender<ControlRequest>, PathBuf) {
+fn confined(tag: &str) -> (LiviPenApp, std::sync::mpsc::Sender<ControlRequest>, PathBuf) {
     confined_with(tag, None)
 }
 
 /// [`confined`], with `write_shared` as the thread-safe writer that Background Save and Background
 /// Export use.
-fn confined_with(tag: &str, write_shared: Option<SharedWriteFn>) -> (VectorcraftApp, std::sync::mpsc::Sender<ControlRequest>, PathBuf) {
+fn confined_with(tag: &str, write_shared: Option<SharedWriteFn>) -> (LiviPenApp, std::sync::mpsc::Sender<ControlRequest>, PathBuf) {
     let base = std::env::temp_dir().join(format!("vc-ui-roots-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&base);
     for d in ["in", "out", "outside"] {
@@ -31,13 +31,13 @@ fn confined_with(tag: &str, write_shared: Option<SharedWriteFn>) -> (Vectorcraft
     std::fs::write(base.join("outside/b.svg"), svg).unwrap();
     let services = Services {
         read: Some(Box::new(|p: &str| std::fs::read(p).map_err(|e| e.to_string()))),
-        write: Some(Box::new(|p: &str, b: &[u8]| vectorcraft_format::write_atomic(Path::new(p), b).map_err(|e| e.to_string()))),
+        write: Some(Box::new(|p: &str, b: &[u8]| livipen_format::write_atomic(Path::new(p), b).map_err(|e| e.to_string()))),
         write_shared,
         ..Default::default()
     };
     let roots = AutomationRoots::new(&[&base.join("in")], &[&base.join("out")]).unwrap();
     let (tx, rx) = std::sync::mpsc::channel();
-    let app = VectorcraftApp::new(Session::new(), services).with_control(rx).with_automation_roots(roots);
+    let app = LiviPenApp::new(Session::new(), services).with_control(rx).with_automation_roots(roots);
     (app, tx, base)
 }
 
@@ -46,7 +46,7 @@ fn s(p: PathBuf) -> String {
 }
 
 /// One request through the control channel, as the app's frame drains it.
-fn request(app: &mut VectorcraftApp, tx: &std::sync::mpsc::Sender<ControlRequest>, method: &str, params: Value) -> Value {
+fn request(app: &mut LiviPenApp, tx: &std::sync::mpsc::Sender<ControlRequest>, method: &str, params: Value) -> Value {
     let (req, reply) = ControlRequest::new(method, params);
     tx.send(req).unwrap();
     app.drain_control(&egui::Context::default());
@@ -68,7 +68,7 @@ fn control_requests_stay_inside_the_roots() {
     assert!(base.join("out/a.png").is_file());
     for (method, params) in [
         ("app.export", json!({"path": s(base.join("outside/a.png")), "format": "png"})),
-        ("app.save", json!({"path": s(base.join("outside/a.vectorcraft"))})),
+        ("app.save", json!({"path": s(base.join("outside/a.livipen"))})),
         ("ui.render", json!({"path": s(base.join("outside/r.png"))})),
         // Refused at once, not when the frame comes.
         ("ui.screenshot", json!({"path": s(base.join("outside/w.png"))})),
@@ -92,7 +92,7 @@ fn control_saves_take_the_native_save_options() {
     let (mut app, tx, base) = confined("saveopts");
     app.run("file.new", json!({"width": 100, "height": 50})).unwrap();
     app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 20, "height": 20})).unwrap();
-    let saved = |app: &mut VectorcraftApp, name: &str, mut params: Value| {
+    let saved = |app: &mut LiviPenApp, name: &str, mut params: Value| {
         let path = base.join("out").join(name);
         params["path"] = json!(s(path.clone()));
         let r = request(app, &tx, "app.save", params);
@@ -100,10 +100,10 @@ fn control_saves_take_the_native_save_options() {
         assert!(r["result"].get("pending").is_none() && app.ui.dialog.is_none(), "no dialog opens: {r}");
         std::fs::read(path).unwrap()
     };
-    assert_eq!(saved(&mut app, "gz.vectorcraft", json!({"compress": true}))[..2], [0x1f, 0x8b]);
-    let v3: Value = serde_json::from_slice(&saved(&mut app, "v3.vectorcraft", json!({"version": 3}))).unwrap();
+    assert_eq!(saved(&mut app, "gz.livipen", json!({"compress": true}))[..2], [0x1f, 0x8b]);
+    let v3: Value = serde_json::from_slice(&saved(&mut app, "v3.livipen", json!({"version": 3}))).unwrap();
     assert_eq!(v3["version"], 3);
-    assert!(vectorcraft_format::preview(&saved(&mut app, "p.vectorcraft", json!({"preview": true}))).is_some());
+    assert!(livipen_format::preview(&saved(&mut app, "p.livipen", json!({"preview": true}))).is_some());
     let _ = std::fs::remove_dir_all(base);
 }
 
@@ -112,10 +112,10 @@ fn control_saves_take_the_native_save_options() {
 /// before they reply. Without `wait` the refusal reaches only the status bar.
 #[test]
 fn control_saves_with_wait_reply_with_the_write_roots_refusal() {
-    let shared: SharedWriteFn = std::sync::Arc::new(|p: &str, b: &[u8]| vectorcraft_format::write_atomic(Path::new(p), b).map_err(|e| e.to_string()));
+    let shared: SharedWriteFn = std::sync::Arc::new(|p: &str, b: &[u8]| livipen_format::write_atomic(Path::new(p), b).map_err(|e| e.to_string()));
     let (mut app, tx, base) = confined_with("wait", Some(shared));
     app.run("file.new", json!({"width": 100, "height": 50})).unwrap();
-    for (method, name) in [("app.save", "a.vectorcraft"), ("app.export", "a.svg")] {
+    for (method, name) in [("app.save", "a.livipen"), ("app.export", "a.svg")] {
         let r = request(&mut app, &tx, method, json!({"path": s(base.join("outside").join(name)), "wait": true}));
         assert!(r["error"].as_str().is_some_and(|e| e.contains("outside the write root")), "{method}: {r}");
         let path = base.join("out").join(name);
@@ -123,7 +123,7 @@ fn control_saves_with_wait_reply_with_the_write_roots_refusal() {
         assert_eq!(r["ok"], true, "{method}: {r}");
         assert!(r["result"].get("background").is_none() && path.is_file(), "{method}: written before the reply: {r}");
     }
-    let r = request(&mut app, &tx, "app.save", json!({"path": s(base.join("outside/b.vectorcraft"))}));
+    let r = request(&mut app, &tx, "app.save", json!({"path": s(base.join("outside/b.livipen"))}));
     assert_eq!(r["result"]["background"], true, "{r}");
     crate::background::wait_all(&mut app);
     assert!(app.ui.status.contains("outside the write root"), "{}", app.ui.status);
@@ -169,7 +169,7 @@ fn control_render_matches_a_png_export_on_white() {
     std::fs::write(base.join("in/edges.svg"), svg).unwrap();
     let r = request(&mut app, &tx, "app.open", json!({"path": s(base.join("in/edges.svg"))}));
     assert_eq!(r["ok"], true, "{r}");
-    let pixels = |v: &Value| image::load_from_memory(&vectorcraft_format::base64_decode(v.as_str().unwrap()).unwrap()).unwrap().to_rgba8();
+    let pixels = |v: &Value| image::load_from_memory(&livipen_format::base64_decode(v.as_str().unwrap()).unwrap()).unwrap().to_rgba8();
     let r = request(&mut app, &tx, "app.export", json!({"format": "png", "background": "white"}));
     let export = pixels(&r["result"]["dataBase64"]);
     let r = request(&mut app, &tx, "ui.render", json!({}));
@@ -213,7 +213,7 @@ fn automation_cannot_hand_files_or_urls_to_other_apps() {
         ..Default::default()
     };
     let (tx, rx) = std::sync::mpsc::channel();
-    let mut app = VectorcraftApp::new(Session::new(), services).with_control(rx);
+    let mut app = LiviPenApp::new(Session::new(), services).with_control(rx);
     app.run("file.new", json!({"width": 100, "height": 100})).unwrap();
     let image = app.run("file.place", json!({"path": s(png.clone())})).unwrap()["ids"][0].as_u64().unwrap();
     app.run("shape.rectangle", json!({"x": 0, "y": 0, "width": 50, "height": 50})).unwrap();

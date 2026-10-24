@@ -1,11 +1,11 @@
 //! Dashes fitted to corners export as the canvas's filled outlines (a dash array can't fit them);
 //! exact dashes stay a `stroke-dasharray`. Checked by rendering the exported SVG with resvg.
 
-use vectorcraft_color::{Color, Paint};
-use vectorcraft_doc::{Appearance, AppearanceItem, Dash, Document, Node, StrokeLayer};
-use vectorcraft_geom::{Rect, shapes};
-use vectorcraft_svg::{ExportOptions, export};
-use vectorcraft_testkit::raster::{Image, assert_similar, render_artboard};
+use livipen_color::{Color, Paint};
+use livipen_doc::{Appearance, AppearanceItem, Dash, Document, Node, StrokeLayer};
+use livipen_geom::{Rect, shapes};
+use livipen_svg::{ExportOptions, export};
+use livipen_testkit::raster::{Image, assert_similar, render_artboard};
 
 fn rect_doc(align_corners: bool) -> Document {
     let mut d = Document::new(140.0, 90.0);

@@ -9,9 +9,9 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
+use livipen_doc::{Artboard, Document, LAYER_COLORS, LayerColor, Node, NodeId, NodeKind, Scaling};
+use livipen_geom::{Affine, Rect};
 use serde_json::{Value, json};
-use vectorcraft_doc::{Artboard, Document, LAYER_COLORS, LayerColor, Node, NodeId, NodeKind, Scaling};
-use vectorcraft_geom::{Affine, Rect};
 
 use super::*;
 use crate::EngineError;
@@ -296,7 +296,7 @@ pub(super) fn layer_color_param(v: &Value) -> std::result::Result<LayerColor, St
             if let Some(i) = LAYER_COLORS.iter().position(|(name, _)| name.eq_ignore_ascii_case(s.trim())) {
                 return Ok(LayerColor::Preset(i as u8));
             }
-            let c = vectorcraft_color::Color::from_hex(s).ok_or_else(|| format!("`{s}` is not a colour (#rrggbb or a preset name)"))?;
+            let c = livipen_color::Color::from_hex(s).ok_or_else(|| format!("`{s}` is not a colour (#rrggbb or a preset name)"))?;
             let [r, g, b, _] = c.to_rgba8(1.0);
             Ok(LayerColor::Custom([r, g, b]))
         }
@@ -306,7 +306,7 @@ pub(super) fn layer_color_param(v: &Value) -> std::result::Result<LayerColor, St
 
 /// Layer Options in `p` applied to layer or row `n` (validated first by [`check_options`]).
 /// `xml_id`: Preferences › Units › Identify Objects By › XML ID — `name` is an XML id and is
-/// stored as the object name ([`vectorcraft_doc::xml_id`]).
+/// stored as the object name ([`livipen_doc::xml_id`]).
 fn apply_options(n: &mut Node, p: &Value, xml_id: bool) {
     if let Some(v) = str_param(p, "name") {
         if v.trim().is_empty() {
@@ -315,7 +315,7 @@ fn apply_options(n: &mut Node, p: &Value, xml_id: bool) {
                 n.name = None;
             }
         } else {
-            let name = if xml_id { vectorcraft_doc::xml_id::to_object_name(v) } else { v.to_string() };
+            let name = if xml_id { livipen_doc::xml_id::to_object_name(v) } else { v.to_string() };
             n.name = Some(name.chars().take(512).collect());
         }
     }
@@ -383,7 +383,7 @@ fn check_options(cmd: &str, p: &Value, xml_id: bool) -> Result<()> {
     }
     if xml_id
         && let Some(name) = str_param(p, "name").filter(|n| !n.trim().is_empty())
-        && !vectorcraft_doc::xml_id::is_valid(name)
+        && !livipen_doc::xml_id::is_valid(name)
     {
         return Err(bad(cmd, "Identify Objects By is XML ID: the name must be a valid XML ID (start with a letter, underscore or colon; no spaces)"));
     }
@@ -809,7 +809,7 @@ fn rect_from(p: &Value, default: Rect) -> Rect {
 
 /// An artboard command's `color` param, its background color: None when absent, `Some(None)` for
 /// null (no color), else `Some(Some(color))`.
-fn artboard_color(p: &Value, cmd: &str) -> Result<Option<Option<vectorcraft_color::Color>>> {
+fn artboard_color(p: &Value, cmd: &str) -> Result<Option<Option<livipen_color::Color>>> {
     match p.get("color") {
         None => Ok(None),
         Some(Value::Null) => Ok(Some(None)),
@@ -818,13 +818,13 @@ fn artboard_color(p: &Value, cmd: &str) -> Result<Option<Option<vectorcraft_colo
 }
 
 /// An artboard command's `videoRulerPixelAspectRatio` param: None when absent, else a number within
-/// [`vectorcraft_doc::VIDEO_PIXEL_ASPECT_RANGE`].
+/// [`livipen_doc::VIDEO_PIXEL_ASPECT_RANGE`].
 fn video_pixel_aspect(p: &Value, cmd: &str) -> Result<Option<f64>> {
     match p.get("videoRulerPixelAspectRatio") {
         None => Ok(None),
         Some(v) => v
             .as_f64()
-            .filter(|r| vectorcraft_doc::VIDEO_PIXEL_ASPECT_RANGE.contains(r))
+            .filter(|r| livipen_doc::VIDEO_PIXEL_ASPECT_RANGE.contains(r))
             .map(Some)
             .ok_or_else(|| bad(cmd, "videoRulerPixelAspectRatio must be a number from 0.1 to 10")),
     }
@@ -886,13 +886,13 @@ struct ArtboardEdit<'a> {
     index: usize,
     now: Rect,
     name: Option<&'a str>,
-    color: Option<Option<vectorcraft_color::Color>>,
+    color: Option<Option<livipen_color::Color>>,
     lock: Option<bool>,
     center_mark: Option<bool>,
     cross_hairs: Option<bool>,
     safe_areas: Option<bool>,
     pixel_aspect: Option<f64>,
-    delta: vectorcraft_geom::Vec2,
+    delta: livipen_geom::Vec2,
     resized: bool,
     fit: Option<Affine>,
     transform: Option<Affine>,
@@ -948,7 +948,7 @@ fn artboard_set(s: &mut Session, p: &Value) -> Result<Value> {
         // Position fields honor Move Artwork independently of Scale Artwork. A resize still
         // leaves the art alone unless scaling was requested. Fit-to-art callers keep the default.
         let delta = now.origin() - was.origin();
-        let moving = !resized && bool_or(p, "moveArt", false) && delta != vectorcraft_geom::Vec2::ZERO;
+        let moving = !resized && bool_or(p, "moveArt", false) && delta != livipen_geom::Vec2::ZERO;
         let transform = fit.or_else(|| moving.then(|| Affine::translate(delta)));
         let art = if transform.is_some() { d.art_moving_with(index, all).into_iter().filter(|id| taken.insert(*id)).collect() } else { vec![] };
         edits.push(ArtboardEdit {
@@ -1039,7 +1039,7 @@ fn rect_map(from: Rect, to: Rect) -> Option<Affine> {
 }
 
 /// Each artboard of `index` or `indices` (default: the first) fits the art on it that exports
-/// draw ([`vectorcraft_render::encode::art_bounds_on`]): hidden objects and layers, guides and
+/// draw ([`livipen_render::encode::art_bounds_on`]): hidden objects and layers, guides and
 /// template layers don't count. An artboard with no art on it, or a locked one, stays as it is,
 /// and the command fails when every one it names is locked or none has art. The fits are one undo
 /// step named Artboard Options.
@@ -1054,7 +1054,7 @@ fn artboard_fit_art(s: &mut Session, p: &Value) -> Result<Value> {
     let mut fits = vec![];
     for i in unlocked {
         let was = d.artboards.get(i).map(|a| a.rect).ok_or_else(|| EngineError::Other("no such artboard".into()))?;
-        if let Some(b) = vectorcraft_render::encode::art_bounds_on(d, was) {
+        if let Some(b) = livipen_render::encode::art_bounds_on(d, was) {
             // At least 1 pt a side, as `rect_from` makes Artboard Options' sizes.
             fits.push((i, was, Rect::new(b.x0, b.y0, b.x0 + b.width().max(1.0), b.y0 + b.height().max(1.0))));
         }

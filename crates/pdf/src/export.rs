@@ -1,4 +1,4 @@
-//! Document → PDF (krilla). Mirrors the tree walk of `vectorcraft-render`.
+//! Document → PDF (krilla). Mirrors the tree walk of `livipen-render`.
 
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
@@ -17,12 +17,12 @@ use krilla::paint::{Fill, LinearGradient, RadialGradient, SpreadMethod, Stop, St
 use krilla::surface::Surface;
 use krilla::text::{Glyph, GlyphId, KrillaGlyph};
 use kurbo::{PathEl, Shape, Vec2};
-use vectorcraft_color::{BlendMode, Color, GradientKind, Paint};
-use vectorcraft_doc::{AppearanceItem, Document, LineCap, LineJoin, Node, NodeKind, StrokeAlign, StrokeLayer, SymbolBoxes, TextObject};
-use vectorcraft_effects::stroke::{self, WrittenShape};
-use vectorcraft_geom::{Affine, BezPath, FillRule, Rect};
-use vectorcraft_text::TextLayout;
-use vectorcraft_text::embed::Embedding;
+use livipen_color::{BlendMode, Color, GradientKind, Paint};
+use livipen_doc::{AppearanceItem, Document, LineCap, LineJoin, Node, NodeKind, StrokeAlign, StrokeLayer, SymbolBoxes, TextObject};
+use livipen_effects::stroke::{self, WrittenShape};
+use livipen_geom::{Affine, BezPath, FillRule, Rect};
+use livipen_text::TextLayout;
+use livipen_text::embed::Embedding;
 
 use crate::forms::Mark;
 use crate::lab_spot::{find, rfind};
@@ -69,21 +69,21 @@ pub(crate) fn leaving_out_undecodable<T>(doc: &Document, mut write: impl FnMut(&
 fn export_with_report_inner(doc: &Document, opts: &PdfOptions, left_out: &mut HashSet<String>) -> Result<ExportReport, PdfError> {
     let set = &opts.settings;
     set.check()?;
-    vectorcraft_doc::cancel::check().map_err(|_| PdfError::Cancelled)?;
+    livipen_doc::cancel::check().map_err(|_| PdfError::Cancelled)?;
     // Live geometry effects export as their result; raster effects are reported below.
-    let baked = vectorcraft_effects::bake_document(doc);
+    let baked = livipen_effects::bake_document(doc);
     // Baking stops early when cancelled, leaving a half-baked copy that must not be written.
-    vectorcraft_doc::cancel::check().map_err(|_| PdfError::Cancelled)?;
+    livipen_doc::cancel::check().map_err(|_| PdfError::Cancelled)?;
     let doc = baked.as_ref().unwrap_or(doc);
     let pages = pages(doc, opts)?;
 
     let title = crate::pdfx::title(set.standard, opts.title.clone().unwrap_or_else(|| doc.title.clone()));
     // The time of writing (none on the web) dates the editing data and the page information.
-    let now = vectorcraft_doc::metadata::output_time();
+    let now = livipen_doc::metadata::output_time();
     let created_at = opts.created.or(now);
     crate::pdfx::require_date(set.standard, created_at)?;
     let display_doc_title = opts.display_doc_title || opts.title.as_deref().is_some_and(|title| !title.trim().is_empty());
-    let mut w = Writer::new(doc, set, &title, created_at, doc.color_mode == vectorcraft_doc::ColorMode::Cmyk)?;
+    let mut w = Writer::new(doc, set, &title, created_at, doc.color_mode == livipen_doc::ColorMode::Cmyk)?;
     // Preserve Editing: the native document as an embedded file (`check` refused PDF/A with it).
     let mut warnings = set.warnings();
     let native = opts.native.as_deref().filter(|_| set.preserve_editing);
@@ -112,8 +112,8 @@ fn export_with_report_inner(doc: &Document, opts: &PdfOptions, left_out: &mut Ha
     let total = pages.len() as u64;
     for (written, (i, boxes)) in pages.into_iter().enumerate() {
         // The page count and the page being written, for a client that asked for progress.
-        vectorcraft_doc::cancel::check().map_err(|_| PdfError::Cancelled)?;
-        vectorcraft_doc::cancel::progress(written as u64 + 1, total, &format!("Writing page {} of {total}", written + 1));
+        livipen_doc::cancel::check().map_err(|_| PdfError::Cancelled)?;
+        livipen_doc::cancel::progress(written as u64 + 1, total, &format!("Writing page {} of {total}", written + 1));
         let (m, r) = (boxes.media, boxes.bleed);
         let info = if marks.page_info { crate::marks::page_info(doc, &title, i, now) } else { String::new() };
         let art = crate::marks::art(doc, &marks, &boxes, bleed, &info);
@@ -139,7 +139,7 @@ fn export_with_report_inner(doc: &Document, opts: &PdfOptions, left_out: &mut Ha
         };
         w.page(&mut ex, &sheet).map_err(|_| PdfError::BadArtboard(i))?;
     }
-    vectorcraft_doc::cancel::check().map_err(|_| PdfError::Cancelled)?;
+    livipen_doc::cancel::check().map_err(|_| PdfError::Cancelled)?;
     let (layers, overprinted, invisible) = (ex.layers, ex.overprinted, ex.invisible);
     w.absorb(ex);
     let (bytes, more) = w.finish(left_out, display_doc_title)?;
@@ -237,7 +237,7 @@ pub(crate) struct Writer {
     /// `cmyk_blending`).
     cmyk: bool,
     /// Spot colours written with a Lab alternate, gathered from the exporters ([`Self::absorb`]).
-    lab_spots: Vec<(String, vectorcraft_color::cms::Lab)>,
+    lab_spots: Vec<(String, livipen_color::cms::Lab)>,
     warnings: Vec<String>,
     /// RGB content of a CMYK document, gathered from the exporters ([`Self::absorb`]).
     rgb_in_cmyk: RgbInCmyk,
@@ -313,8 +313,8 @@ impl Writer {
         let info = &doc.metadata;
         let given = |s: &str| Some(s.trim()).filter(|s| !s.is_empty()).map(str::to_string);
         let metadata = Metadata {
-            creator: "VectorCraft".into(),
-            producer: "VectorCraft".into(),
+            creator: "Livi Pen".into(),
+            producer: "Livi Pen".into(),
             title: Some(title.to_owned()),
             authors: given(&info.author).into_iter().collect(),
             description: given(&info.description),
@@ -554,7 +554,7 @@ fn number(digits: &[u8]) -> Option<u32> {
 
 /// Unix seconds (UTC) → krilla date.
 fn date_time(t: i64) -> krilla::metadata::DateTime {
-    let [year, month, day, hour, minute, second] = vectorcraft_doc::metadata::civil(t);
+    let [year, month, day, hour, minute, second] = livipen_doc::metadata::civil(t);
     krilla::metadata::DateTime::new(year as u16)
         .month(month as u8)
         .day(day as u8)
@@ -575,11 +575,11 @@ pub(crate) struct Exporter<'a> {
     warnings: Vec<String>,
     images: HashMap<String, Option<Image>>,
     /// The brush library, parsed when the first brushed stroke is written.
-    brushes: Option<Vec<vectorcraft_brush::Brush>>,
+    brushes: Option<Vec<livipen_brush::Brush>>,
     /// Whether the group being written is a knockout group (what its neutral children inherit).
     knockout: bool,
     /// Spot colours written with a Lab alternate ([`crate::lab_spot`]): colorant name, Lab values.
-    lab_spots: Vec<(String, vectorcraft_color::cms::Lab)>,
+    lab_spots: Vec<(String, livipen_color::cms::Lab)>,
     /// Images may ask viewers to smooth them (not in PDF/A).
     interpolate: bool,
     /// Images may have 16 bits a sample (PDF 1.5 and later); in earlier files they are written at
@@ -590,7 +590,7 @@ pub(crate) struct Exporter<'a> {
     /// Layers whose Print option is off are written too.
     pub non_printing: bool,
     /// How colours are separated into CMYK (the colour settings' intent unless print sets one).
-    pub intent: vectorcraft_color::cms::Intent,
+    pub intent: livipen_color::cms::Intent,
     /// Whether a layer shows transparency (found out on the first page that asks).
     transparent: Option<bool>,
     /// How colours are written (the Output settings; print writes them as they are).
@@ -627,7 +627,7 @@ pub(crate) struct Exporter<'a> {
     /// ([`leaving_out_undecodable`]).
     pub left_out: HashSet<String>,
     /// Objects the symbol instances written held, together
-    /// ([`vectorcraft_doc::MAX_SYMBOL_NODES`]).
+    /// ([`livipen_doc::MAX_SYMBOL_NODES`]).
     symbol_nodes: u64,
 }
 
@@ -638,7 +638,7 @@ const MAX_INLINE_DEPTH: u32 = 4;
 const MAX_PATTERN_DEPTH: u32 = 4;
 
 /// The warning for an image left out because it can't be decoded: the note raster exports give
-/// (`vectorcraft-engine`'s `rasterfx::undecoded_warning`).
+/// (`livipen-engine`'s `rasterfx::undecoded_warning`).
 const UNDECODED: &str = "an image couldn't be decoded and is missing from the picture";
 
 impl<'a> Exporter<'a> {
@@ -658,7 +658,7 @@ impl<'a> Exporter<'a> {
             sixteen_bit: !matches!(set.compatibility, Compatibility::Pdf13 | Compatibility::Pdf14),
             compression: &set.compression,
             non_printing: false,
-            intent: vectorcraft_color::cms::active().settings().intent,
+            intent: livipen_color::cms::active().settings().intent,
             transparent: None,
             out: Arc::default(),
             convert: true,
@@ -793,7 +793,7 @@ fn color(c: &Color) -> krilla::color::Color {
     match *c {
         Color::Rgb { r, g, b } => rgb::Color::new(q(r), q(g), q(b)).into(),
         Color::Cmyk { c, m, y, k } => cmyk::Color::new(q(c), q(m), q(y), q(k)).into(),
-        // VectorCraft grey is ink coverage (0 = white); PDF DeviceGray is lightness.
+        // Livi Pen grey is ink coverage (0 = white); PDF DeviceGray is lightness.
         Color::Gray { k } => luma::Color::new(q(1.0 - k)).into(),
         Color::Lab { .. } => {
             let [r, g, b] = c.to_rgb();
@@ -836,7 +836,7 @@ impl Exporter<'_> {
     /// conversion, RGB and Lab colours of CMYK documents are separated into CMYK through the
     /// document's colour spaces, so the file carries press values.
     fn col(&mut self, c: &Color) -> krilla::color::Color {
-        let cmyk_doc = self.doc.color_mode == vectorcraft_doc::ColorMode::Cmyk;
+        let cmyk_doc = self.doc.color_mode == livipen_doc::ColorMode::Cmyk;
         if let (true, true, Color::Rgb { r, g, b }) = (cmyk_doc, self.convert, c) {
             self.rgb_in_cmyk.colours.insert([r.to_bits(), g.to_bits(), b.to_bits()]);
         }
@@ -858,7 +858,7 @@ impl Exporter<'_> {
         if let Color::Lab { l, a, b } = color
             && !self.lab_spots.iter().any(|(n, _)| n == name)
         {
-            self.lab_spots.push((name.to_string(), vectorcraft_color::cms::Lab::new(l, a, b)));
+            self.lab_spots.push((name.to_string(), livipen_color::cms::Lab::new(l, a, b)));
         }
         let full = self.out.cmyk(&color, self.intent);
         let alt = krilla::color::RegularColor::Cmyk(cmyk::Color::new(q(full[0]), q(full[1]), q(full[2]), q(full[3])));
@@ -868,7 +868,7 @@ impl Exporter<'_> {
     /// A solid paint, in the Separation colour space at its tint when it's linked to a spot swatch
     /// or to Registration (`/All`: every plate).
     fn solid(&mut self, c: &Color, link: Option<&str>, tint: f32) -> krilla::color::Color {
-        if link == Some(vectorcraft_color::swatch::REGISTRATION) {
+        if link == Some(livipen_color::swatch::REGISTRATION) {
             let alt = krilla::color::RegularColor::Cmyk(cmyk::Color::new(255, 255, 255, 255));
             return SepColor::new(q(tint), SeparationSpace::new(SeparationColorant::AllColorants, alt)).into();
         }
@@ -882,7 +882,7 @@ impl Exporter<'_> {
     /// it) as tints of that ink — a Separation shading — with midpoints as explicit stops (the
     /// tint and opacity there are halfway). `None` for other gradients; one that mixes a spot ink
     /// with other colours is written in process colours (the PDF writer has no DeviceN).
-    fn spot_stops(&mut self, g: &vectorcraft_color::Gradient) -> Option<Vec<(f32, krilla::color::Color, f32)>> {
+    fn spot_stops(&mut self, g: &livipen_color::Gradient) -> Option<Vec<(f32, krilla::color::Color, f32)>> {
         let ink = g.stops.iter().find_map(|s| s.swatch.as_deref().filter(|n| self.doc.swatch(n).is_some_and(|w| w.spot)))?;
         let paper = |c: &Color| c.to_rgba8(1.0)[..3] == [255; 3];
         let tints: Option<Vec<f32>> = g
@@ -914,10 +914,10 @@ impl Exporter<'_> {
     }
 
     /// Warn when `effects` (an object's, a fill's or a stroke's) has a visible raster effect: the
-    /// app renders them to images before export (`vectorcraft_engine::export_pdf`), so the ones
+    /// app renders them to images before export (`livipen_engine::export_pdf`), so the ones
     /// still here (on `what`) can't be written.
-    fn warn_raster(&mut self, effects: &[vectorcraft_doc::Effect], what: impl FnOnce() -> String) {
-        if effects.iter().any(|e| e.visible && vectorcraft_effects::is_raster(&e.id)) {
+    fn warn_raster(&mut self, effects: &[livipen_doc::Effect], what: impl FnOnce() -> String) {
+        if effects.iter().any(|e| e.visible && livipen_effects::is_raster(&e.id)) {
             self.warn(format!("raster effects (shadows, glows, blur, feather) on {} are left out of the PDF", what()));
         }
     }
@@ -952,10 +952,10 @@ impl Exporter<'_> {
                         // models (midpoints sample in RGB) go through RGB, or stay CMYK in a CMYK
                         // document, where `col` separates the rest.
                         let mixed = stops.windows(2).any(|w| w[0].1.model() != w[1].1.model());
-                        let cmyk_doc = self.doc.color_mode == vectorcraft_doc::ColorMode::Cmyk;
+                        let cmyk_doc = self.doc.color_mode == livipen_doc::ColorMode::Cmyk;
                         let one = |c: Color| match c {
                             Color::Cmyk { .. } if cmyk_doc => c,
-                            _ if mixed => c.in_model(vectorcraft_color::cms::Model::Rgb),
+                            _ if mixed => c.in_model(livipen_color::cms::Model::Rgb),
                             _ => c,
                         };
                         stops.into_iter().map(|(o, c, a)| (o, self.col(&one(c)), a)).collect()
@@ -1046,7 +1046,7 @@ impl Exporter<'_> {
 
     /// Opacity mask → luminosity soft mask. Outside the art the backdrop is black (clip) or white;
     /// invert is a white Difference rect on top (luminance is linear, so luma(1 − c) = 1 − luma(c)).
-    fn soft_mask(&mut self, s: &mut Surface, m: &vectorcraft_doc::OpacityMask, page: Rect) -> krilla::mask::Mask {
+    fn soft_mask(&mut self, s: &mut Surface, m: &livipen_doc::OpacityMask, page: Rect) -> krilla::mask::Mask {
         let mut sb = s.stream_builder();
         let mut ms = sb.surface();
         // An opaque backdrop when it matters: white outside the art (no clip), or black for the
@@ -1192,7 +1192,7 @@ impl Exporter<'_> {
                 // The region every output clips to; nothing to clip by hides the clipped art. The
                 // clipping path's fill paints behind the clipped art and its stroke over it, unclipped.
                 if let Some((clip, rest)) = children.split_first()
-                    && let Some((p, r)) = vectorcraft_effects::clip_outline(clip).and_then(|(bp, r)| to_path(s, &bp).map(|p| (p, r)))
+                    && let Some((p, r)) = livipen_effects::clip_outline(clip).and_then(|(bp, r)| to_path(s, &bp).map(|p| (p, r)))
                 {
                     let paint = clip.clip_paint();
                     s.push_clip_path(&p, &rule(r));
@@ -1227,7 +1227,7 @@ impl Exporter<'_> {
                 // instances multiply.
                 let sym = self.doc.symbols.iter().find(|x| &x.name == symbol);
                 let total = sym.map_or(0, |sym| self.symbol_nodes.saturating_add(sym.art.count() as u64));
-                if let Some(sym) = sym.filter(|_| total <= vectorcraft_doc::MAX_SYMBOL_NODES) {
+                if let Some(sym) = sym.filter(|_| total <= livipen_doc::MAX_SYMBOL_NODES) {
                     self.symbol_nodes = total;
                     let mut art = (*sym.art).clone();
                     art.transform(*xf, false);
@@ -1241,7 +1241,7 @@ impl Exporter<'_> {
             | NodeKind::Repeat(_)
             | NodeKind::PlacedDocument(_)
             | NodeKind::Intertwine { .. } => {
-                let g = vectorcraft_effects::expand_live_deep(Some(self.doc), n);
+                let g = livipen_effects::expand_live_deep(Some(self.doc), n);
                 for c in g.children().into_iter().flatten() {
                     self.node(s, c, page, false);
                 }
@@ -1297,7 +1297,7 @@ impl Exporter<'_> {
     /// `overprints`, paints and overprints are kept (but not a white one with Discard White
     /// Overprint).
     fn overprinting(&mut self, s: &mut Surface, overprints: bool, paint: &Paint, draw: impl FnOnce(&mut Self, &mut Surface)) {
-        let white = || self.doc.setup.discard_white_overprint && vectorcraft_doc::overprint::is_white(paint);
+        let white = || self.doc.setup.discard_white_overprint && livipen_doc::overprint::is_white(paint);
         if overprints && self.overprint && !paint.is_none() && !white() {
             self.overprinted = true;
             crate::forms::form(s, Mark::Overprint, |s| draw(self, s));
@@ -1308,7 +1308,7 @@ impl Exporter<'_> {
 
     /// Is `p` a paint PDF has no paint for when it paints a fill (`fill`) or a stroke, which
     /// [`Self::area`] draws as art: a pattern swatch or a gradient drawn as pixels
-    /// ([`vectorcraft_color::GradientPaint::draws_as_pixels`])?
+    /// ([`livipen_color::GradientPaint::draws_as_pixels`])?
     fn area_paint(&self, p: &Paint, fill: bool) -> bool {
         match p {
             Paint::Pattern { pattern, .. } => self.doc.pattern(pattern).is_some(),
@@ -1380,7 +1380,7 @@ impl Exporter<'_> {
     }
 
     /// Pattern swatch `name` placed by `at` (pattern space → the current space) as a PDF tiling
-    /// pattern (ISO 32000-1, 8.7.3.1): one period of the tiling ([`vectorcraft_doc::PatternDef::period`],
+    /// pattern (ISO 32000-1, 8.7.3.1): one period of the tiling ([`livipen_doc::PatternDef::period`],
     /// what the canvas repeats too) with every tile instance reaching into it, in paint order, so
     /// brick and hex tilings and overlapping tiles repeat as they are; clipped to the period when
     /// art reaches out of it. `None` for a pattern nested deeper than [`MAX_PATTERN_DEPTH`], a period
@@ -1421,8 +1421,8 @@ impl Exporter<'_> {
     /// scaled type gets its pixels too): a freeform gradient's colour field (at most
     /// [`MAX_FIELD_PX`] a side), or a linear or radial gradient (at most [`MAX_GRADIENT_PX`] a side),
     /// with dither's noise when it paints a fill (`fill`).
-    fn field_image(&mut self, s: &mut Surface, g: &vectorcraft_color::GradientPaint, bounds: Rect, area: Rect, fill: bool) {
-        use vectorcraft_color::freeform::{painted_box, spread_scale};
+    fn field_image(&mut self, s: &mut Surface, g: &livipen_color::GradientPaint, bounds: Rect, area: Rect, fill: bool) {
+        use livipen_color::freeform::{painted_box, spread_scale};
         let Some(b) = painted_box(bounds) else { return };
         let area = area.abs();
         // The area's sides in points on the page.
@@ -1467,7 +1467,7 @@ impl Exporter<'_> {
             // The area the stroke paints (dashes, caps, joins, profile, arrowheads, alignment), as
             // Outline Stroke makes it, painted with the pattern's tiles or the gradient's image (a
             // gradient along or across the stroke is written as slices below).
-            let region = stroke::outline_region(&vectorcraft_geom::PathData::from_bezpath(bp), r, st).to_bezpath();
+            let region = stroke::outline_region(&livipen_geom::PathData::from_bezpath(bp), r, st).to_bezpath();
             if let Some(clip) = to_path(s, &region) {
                 let area = region.bounding_box();
                 self.area(s, &clip, krilla::paint::FillRule::NonZero, &st.paint, (st.opacity, st.blend), st.paint_bounds(bounds), area, false);
@@ -1587,9 +1587,9 @@ impl Exporter<'_> {
     /// over all of it). False when it has no known brush.
     fn brush_art(&mut self, s: &mut Surface, bp: &BezPath, st: &StrokeLayer, page: Rect) -> bool {
         let doc = self.doc;
-        let brushes = self.brushes.get_or_insert_with(|| vectorcraft_brush::library(doc));
+        let brushes = self.brushes.get_or_insert_with(|| livipen_brush::library(doc));
         let Some(b) = st.brush.as_deref().and_then(|name| brushes.iter().find(|b| b.name == name)) else { return false };
-        let art = vectorcraft_brush::stroke_pieces(doc, b, bp, st);
+        let art = livipen_brush::stroke_pieces(doc, b, bp, st);
         let mut pushes = 0;
         if st.blend != BlendMode::Normal {
             s.push_blend_mode(blend(st.blend));
@@ -1609,21 +1609,21 @@ impl Exporter<'_> {
     }
 
     ///
-    /// Inline graphics ([`vectorcraft_doc::TextRun::inline`]) are drawn as their symbols' art
+    /// Inline graphics ([`livipen_doc::TextRun::inline`]) are drawn as their symbols' art
     /// (vector paths, like symbol instances) where the layout placed them; their characters
     /// write no glyph.
     fn text(&mut self, s: &mut Surface, n: &Node, t: &TextObject, page: Rect) {
         let doc = self.doc;
         let resolved = doc.inline_resolved(t);
         let t = &*resolved;
-        let layout = vectorcraft_text::layout(vectorcraft_text::FontDb::global(), t);
+        let layout = livipen_text::layout(livipen_text::FontDb::global(), t);
         let tb = t.xf.transform_rect_bbox(layout.bounds);
         // The object's own fills and strokes paint the whole outline: those below the Characters
         // row under the characters, the others over them.
         let (below, above) = n.appearance.split_contents();
         let all = (!n.appearance.items.is_empty()).then(|| {
             let mut all = layout.to_bezpath();
-            for (_, bar) in vectorcraft_text::decorations(&layout, vectorcraft_text::FontDb::global(), t) {
+            for (_, bar) in livipen_text::decorations(&layout, livipen_text::FontDb::global(), t) {
                 all.extend(bar.iter());
             }
             all.apply_affine(t.xf);
@@ -1640,7 +1640,7 @@ impl Exporter<'_> {
         // Ruby can't be real text in one run (it isn't characters of the base text): the type's
         // characters go out as outlines where ruby is present, ruby included.
         let plain = (!self.outline_text && t.ruby.is_empty()).then(|| t.plain_text());
-        let bars = vectorcraft_text::decorations(&layout, vectorcraft_text::FontDb::global(), t);
+        let bars = livipen_text::decorations(&layout, livipen_text::FontDb::global(), t);
         for (i, run) in t.runs.iter().enumerate() {
             let mut bp = BezPath::new();
             for g in layout.glyphs.iter().filter(|g| g.run == i).chain(layout.ruby.iter().filter(|g| g.run == i)) {
@@ -1853,7 +1853,7 @@ impl Exporter<'_> {
     }
 
     /// Draw colour bitmap glyph `g`'s image (on `s` in text space), its PNG written once.
-    fn glyph_image(&mut self, s: &mut Surface, g: &vectorcraft_text::PositionedGlyph) {
+    fn glyph_image(&mut self, s: &mut Surface, g: &livipen_text::PositionedGlyph) {
         let Some((image, to_text)) = g.placed_image() else { return };
         if !writable(s, to_text, image.rect()) {
             return;
@@ -1908,7 +1908,7 @@ impl Exporter<'_> {
         if let Some(f) = self.fonts.get(&id) {
             return f.clone();
         }
-        let Some(face) = vectorcraft_text::FontDb::global().face_by_id(id) else {
+        let Some(face) = livipen_text::FontDb::global().face_by_id(id) else {
             self.fonts.insert(id, None);
             return None;
         };
@@ -1944,7 +1944,7 @@ impl Exporter<'_> {
     /// settings say ([`crate::images::recode`], [`crate::images::recode_cmyk`] for CMYK images);
     /// cached by key (and size when images are resampled). `None`, with [`UNDECODED`] among the
     /// warnings, for an image that is missing, can't be decoded or is in [`Self::left_out`].
-    fn load_image(&mut self, im: &vectorcraft_doc::ImageObject, size: (f64, f64)) -> Option<Image> {
+    fn load_image(&mut self, im: &livipen_doc::ImageObject, size: (f64, f64)) -> Option<Image> {
         let key = im.key.as_str();
         let c = self.compression;
         let sized = [c.color.downsample, c.gray.downsample, c.mono.downsample].iter().any(|d| *d != crate::Downsample::None);
@@ -1957,7 +1957,7 @@ impl Exporter<'_> {
         let out = self.out.clone();
         let img = doc.image_blob(im).filter(|_| !self.left_out.contains(key)).and_then(|blob| {
             let cmyk_image = blob.is_cmyk();
-            if !cmyk_image && self.convert && doc.color_mode == vectorcraft_doc::ColorMode::Cmyk {
+            if !cmyk_image && self.convert && doc.color_mode == livipen_doc::ColorMode::Cmyk {
                 self.rgb_in_cmyk.images.insert(key.to_string());
             }
             let r = if cmyk_image {
@@ -1982,7 +1982,7 @@ impl Exporter<'_> {
     /// image's soft mask, as an RGBA image's is, rather than as a luminosity soft mask over it,
     /// through which CoreGraphics draws CMYK images on black boxes (#2159). `None` for other
     /// images and masks; cached like [`Self::load_image`].
-    fn masked_image(&mut self, im: &vectorcraft_doc::ImageObject, m: &vectorcraft_doc::OpacityMask) -> Option<Image> {
+    fn masked_image(&mut self, im: &livipen_doc::ImageObject, m: &livipen_doc::OpacityMask) -> Option<Image> {
         let art = &m.art;
         let NodeKind::Image(mi) = &art.kind else { return None };
         let plain =
@@ -2009,7 +2009,7 @@ impl Exporter<'_> {
     }
 
     /// Draw image `im`: `img` when given (its pixels already written), else as it is loaded.
-    fn image(&mut self, s: &mut Surface, im: &vectorcraft_doc::ImageObject, img: Option<Image>) {
+    fn image(&mut self, s: &mut Surface, im: &livipen_doc::ImageObject, img: Option<Image>) {
         // An image placed or sized beyond [`MAX_COORD`] is left out.
         if !writable(s, im.xf, Rect::new(0.0, 0.0, im.width.max(1).into(), im.height.max(1).into())) {
             return;
@@ -2023,7 +2023,7 @@ impl Exporter<'_> {
 }
 
 /// The size image `im` is placed at: its pixel grid's sides through its transform.
-fn placed_size(im: &vectorcraft_doc::ImageObject) -> (f64, f64) {
+fn placed_size(im: &livipen_doc::ImageObject) -> (f64, f64) {
     let [a, b, c, d, ..] = im.xf.as_coeffs();
     (im.width as f64 * a.hypot(b), im.height as f64 * c.hypot(d))
 }
@@ -2059,7 +2059,7 @@ fn png_8_bit(bytes: &[u8]) -> Option<Vec<u8>> {
 /// Image `blob` as it is: PNG, JPEG, GIF and WebP through the PDF writer (JPEG data unchanged),
 /// other formats decoded. Without `sixteen_bit` (a file before PDF 1.5), a PNG of 16 bits a
 /// sample is written at 8 bits ([`png_8_bit`]).
-fn embed(blob: &vectorcraft_doc::ImageBlob, interpolate: bool, sixteen_bit: bool) -> Option<Image> {
+fn embed(blob: &livipen_doc::ImageBlob, interpolate: bool, sixteen_bit: bool) -> Option<Image> {
     let bytes = blob.bytes.as_ref().clone();
     let direct = match blob.mime.as_str() {
         "image/png" if !sixteen_bit && png_16_bit(&bytes) => png_8_bit(&bytes).and_then(|png| Image::from_png(png.into(), interpolate).ok()),
@@ -2077,8 +2077,8 @@ fn embed(blob: &vectorcraft_doc::ImageBlob, interpolate: bool, sixteen_bit: bool
 }
 
 /// Is `g` drawn from its font's SVG document, which the PDF writer can't draw as a font's glyph?
-fn is_svg_glyph(g: &vectorcraft_text::PositionedGlyph) -> bool {
-    vectorcraft_text::FontDb::global().is_svg_glyph(g.font_id, g.gid)
+fn is_svg_glyph(g: &livipen_text::PositionedGlyph) -> bool {
+    livipen_text::FontDb::global().is_svg_glyph(g.font_id, g.gid)
 }
 
 /// The characters a line-break hyphen can stand for, as real text: '-' and U+2010 (HYPHEN).
@@ -2088,11 +2088,11 @@ const BREAK_HYPHENS: &str = "-\u{2010}";
 /// where it breaks a line inside a word: a glyph that stands for no character of the text (length
 /// 0) and that its face's character map gives to '-' or, failing that, to U+2010. `None` for any
 /// other glyph, kashida tatweels included.
-fn break_hyphen(g: &vectorcraft_text::PositionedGlyph) -> Option<std::ops::Range<usize>> {
+fn break_hyphen(g: &livipen_text::PositionedGlyph) -> Option<std::ops::Range<usize>> {
     if g.len != 0 || g.gid == 0 {
         return None;
     }
-    let face = vectorcraft_text::FontDb::global().face_by_id(g.font_id)?;
+    let face = livipen_text::FontDb::global().face_by_id(g.font_id)?;
     BREAK_HYPHENS.char_indices().find(|&(_, c)| face.glyph_for(c) == g.gid).map(|(i, c)| i..i + c.len_utf8())
 }
 
@@ -2124,7 +2124,7 @@ mod tests {
     #[test]
     fn a_16_bit_png_at_8_bits_keeps_its_color_type_and_icc_profile() {
         use image::{ImageDecoder, ImageEncoder};
-        let icc = vectorcraft_color::cms::icc_bytes(vectorcraft_color::cms::GRAY).unwrap().to_vec();
+        let icc = livipen_color::cms::icc_bytes(livipen_color::cms::GRAY).unwrap().to_vec();
         let gray = image::DynamicImage::ImageLuma16(image::ImageBuffer::from_fn(4, 2, |x, y| image::Luma([x as u16 * 20000 + y as u16])));
         let mut png = vec![];
         let mut encoder = image::codecs::png::PngEncoder::new(&mut png);

@@ -14,13 +14,13 @@
 //! Behaviour reference (public documentation):
 //! <https://helpx.adobe.com/illustrator/desktop/design-with-text/edit-format-text/adjust-word-and-letterspacing-in-justified-text.html>.
 
+use livipen_doc::{JustificationOptions, SingleWordJustify};
 use serde_json::{Map, Value, json};
-use vectorcraft_doc::{JustificationOptions, SingleWordJustify};
 
 use super::swatch_options::label;
 use super::{DialogSpec, form};
 use crate::state::Dialog;
-use crate::{VectorcraftApp, widgets};
+use crate::{LiviPenApp, widgets};
 
 /// The dialog kind of Justification.
 pub const KIND: &str = "justification";
@@ -65,7 +65,7 @@ fn single_word_name(s: SingleWordJustify) -> &'static str {
 }
 
 /// Open Justification on the paragraph attributes the Paragraph panel shows.
-pub fn open(app: &mut VectorcraftApp) -> Result<Value, String> {
+pub fn open(app: &mut LiviPenApp) -> Result<Value, String> {
     crate::panels::character::text_style(app).ok_or("select some type first")?;
     // While typing, the dialog acts on the paragraphs of the text being edited.
     let mut targets = json!({});
@@ -113,7 +113,7 @@ fn problem(d: &Dialog) -> Option<&'static str> {
     out_of_order.then(|| tl!("Minimum must not exceed Desired, nor Desired Maximum."))
 }
 
-fn body(app: &mut VectorcraftApp, ui: &mut egui::Ui, d: &mut Dialog) -> bool {
+fn body(app: &mut LiviPenApp, ui: &mut egui::Ui, d: &mut Dialog) -> bool {
     // Its own grid: a label column and three value columns.
     egui::Grid::new("justification-spacing").num_columns(4).spacing([10.0, 8.0]).min_col_width(70.0).show(ui, |ui| {
         ui.label("");
@@ -205,7 +205,7 @@ fn changes(p: &Map<String, Value>) -> bool {
     p.keys().any(|k| !matches!(k.as_str(), "ids" | "start" | "end"))
 }
 
-fn confirm(app: &mut VectorcraftApp, d: &Dialog) -> Result<Value, String> {
+fn confirm(app: &mut LiviPenApp, d: &Dialog) -> Result<Value, String> {
     if let Some(why) = problem(d) {
         return Err(why.into());
     }
@@ -223,12 +223,12 @@ fn confirm(app: &mut VectorcraftApp, d: &Dialog) -> Result<Value, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use vectorcraft_engine::Session;
-    use vectorcraft_engine::doc::{NodeId, NodeKind, ParaStyle};
+    use livipen_engine::Session;
+    use livipen_engine::doc::{NodeId, NodeKind, ParaStyle};
 
     /// A selected area type object with two paragraphs.
-    fn app() -> (VectorcraftApp, u64) {
-        let mut app = VectorcraftApp::new(Session::new(), Default::default());
+    fn app() -> (LiviPenApp, u64) {
+        let mut app = LiviPenApp::new(Session::new(), Default::default());
         app.run("file.new", json!({"width": 400, "height": 400})).unwrap();
         let id = app.run("text.create", json!({"x": 10, "y": 10, "text": "One\nTwo", "area": {"width": 200, "height": 100}})).unwrap()["id"]
             .as_u64()
@@ -237,21 +237,21 @@ mod tests {
         (app, id)
     }
 
-    fn paras(app: &VectorcraftApp, id: u64) -> (ParaStyle, ParaStyle) {
+    fn paras(app: &LiviPenApp, id: u64) -> (ParaStyle, ParaStyle) {
         match &app.session.active().unwrap().doc.node(NodeId(id)).unwrap().kind {
             NodeKind::Text(t) => (t.para_at(0).clone(), t.para_at(1).clone()),
             _ => panic!("not text"),
         }
     }
 
-    fn frame(app: &mut VectorcraftApp) {
+    fn frame(app: &mut LiviPenApp) {
         let ctx = egui::Context::default();
         crate::theme::install_fonts(&ctx);
         let mut out = ctx.run_ui(egui::RawInput::default(), |ui| super::super::show(app, ui.ctx()));
         out.textures_delta.clear();
     }
 
-    fn set(app: &mut VectorcraftApp, key: &str, v: Value) {
+    fn set(app: &mut LiviPenApp, key: &str, v: Value) {
         app.ui.dialog.as_mut().unwrap().fields.insert(key.into(), v);
     }
 

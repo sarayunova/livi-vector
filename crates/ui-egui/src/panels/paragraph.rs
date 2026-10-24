@@ -5,14 +5,14 @@
 //! Hyphenation… and picks the Single-line or Every-line Composer.
 
 use egui::{Ui, vec2};
-use serde_json::{Value, json};
-use vectorcraft_doc::{
+use livipen_doc::{
     Composer, HyphenationOptions, JustificationOptions, Justify, Kinsoku, Mojikumi, NodeKind, ParaDirection, ParaStyle, SingleWordJustify,
 };
+use serde_json::{Value, json};
 
 use super::character::{Metric, Shared, text_style};
 use super::{pstate, set_pstate};
-use crate::VectorcraftApp;
+use crate::LiviPenApp;
 use crate::theme::Tokens;
 use crate::widgets::{self, menu_item};
 
@@ -28,7 +28,7 @@ pub const ALIGNMENTS: [(Justify, &str, &str, &str); 7] = [
 
 /// Paragraph attributes apply to the selected text objects' paragraphs or, while the Type tool
 /// edits text, to the paragraphs its selection (or caret) touches (ending its typing session).
-fn format(app: &mut VectorcraftApp, p: Value) {
+fn format(app: &mut LiviPenApp, p: Value) {
     para_cmd(app, "text.setFormat", p);
 }
 
@@ -44,18 +44,18 @@ pub const ALIGN_COMMANDS: [(&str, &str); 5] = [
 
 /// Align the paragraphs of the selected type, or those the Type tool's selection touches, as
 /// `justify` (an [`ALIGN_COMMANDS`] alignment, #1111).
-pub(crate) fn align(app: &mut VectorcraftApp, justify: &str) -> Result<Value, String> {
+pub(crate) fn align(app: &mut LiviPenApp, justify: &str) -> Result<Value, String> {
     text_style(app).ok_or("select some type first")?;
     para_cmd(app, "text.setStyle", json!({ "justify": justify }));
     Ok(Value::Null)
 }
 
-fn para_cmd(app: &mut VectorcraftApp, cmd: &str, p: Value) {
+fn para_cmd(app: &mut LiviPenApp, cmd: &str, p: Value) {
     run_on_paragraphs(app, cmd, p).ok();
 }
 
 /// Run `cmd` on the paragraphs the Paragraph panel acts on ([`format`]) and return its result.
-pub(crate) fn run_on_paragraphs(app: &mut VectorcraftApp, cmd: &str, mut p: Value) -> Result<Value, String> {
+pub(crate) fn run_on_paragraphs(app: &mut LiviPenApp, cmd: &str, mut p: Value) -> Result<Value, String> {
     if let Some((id, a, b)) = super::character::text_editing(app) {
         super::character::end_typing(app);
         p["ids"] = json!([id.0]);
@@ -67,7 +67,7 @@ pub(crate) fn run_on_paragraphs(app: &mut VectorcraftApp, cmd: &str, mut p: Valu
 
 /// Does the paragraph being edited (at the caret), else the selected text's first paragraph, run
 /// right to left: its Paragraph Direction, else from its first strong character?
-fn resolved_rtl(app: &VectorcraftApp, para: &ParaStyle) -> bool {
+fn resolved_rtl(app: &LiviPenApp, para: &ParaStyle) -> bool {
     let editing = super::character::text_editing(app);
     let text = editing.and_then(|(id, _, _)| match app.session.active().and_then(|d| d.doc.node(id)).map(|n| &n.kind) {
         Some(NodeKind::Text(t)) => Some(t.as_ref()),
@@ -75,8 +75,8 @@ fn resolved_rtl(app: &VectorcraftApp, para: &ParaStyle) -> bool {
     });
     let Some(t) = text.or_else(|| super::character::first_selected_text(app)) else { return para.direction == Some(ParaDirection::RightToLeft) };
     let plain = t.plain_text();
-    let paragraph = vectorcraft_text::edit::paragraph_at(&plain, editing.map_or(0, |(_, a, _)| a));
-    vectorcraft_text::paragraph_is_rtl(plain.get(paragraph).unwrap_or_default(), para.direction)
+    let paragraph = livipen_text::edit::paragraph_at(&plain, editing.map_or(0, |(_, a, _)| a));
+    livipen_text::paragraph_is_rtl(plain.get(paragraph).unwrap_or_default(), para.direction)
 }
 
 /// The alignment button that shows `justify` in a paragraph running right to left (`rtl`) or not:
@@ -92,7 +92,7 @@ fn shown_alignment(justify: Justify, rtl: bool) -> Justify {
 /// Add the displayed alignments touched by the byte range (all paragraphs without a range).
 /// Walk forward through run fragments so paragraph lookup never rescans an earlier prefix.
 /// Only Auto needs paragraph text; borrow a fragment until style runs split it.
-fn collect_text_alignment(text: &vectorcraft_doc::TextObject, range: Option<(usize, usize)>, shared: &mut Option<Justify>) -> bool {
+fn collect_text_alignment(text: &livipen_doc::TextObject, range: Option<(usize, usize)>, shared: &mut Option<Justify>) -> bool {
     use std::borrow::Cow;
     let (a, b) = range.map_or((0, usize::MAX), |(a, b)| (a.min(b), a.max(b)));
     let mut record = |index, plain: &str, start, end| {
@@ -100,7 +100,7 @@ fn collect_text_alignment(text: &vectorcraft_doc::TextObject, range: Option<(usi
             return true;
         }
         let para = text.para_at(index);
-        let rtl = para.justify == Justify::Auto && vectorcraft_text::paragraph_is_rtl(plain, para.direction);
+        let rtl = para.justify == Justify::Auto && livipen_text::paragraph_is_rtl(plain, para.direction);
         let value = shown_alignment(para.justify, rtl);
         if shared.is_some_and(|old| old != value) {
             return false;
@@ -113,7 +113,7 @@ fn collect_text_alignment(text: &vectorcraft_doc::TextObject, range: Option<(usi
     for run in &text.runs {
         let mut rest = run.text.as_str();
         while !rest.is_empty() {
-            let span = vectorcraft_text::edit::paragraph_at(rest, 0);
+            let span = livipen_text::edit::paragraph_at(rest, 0);
             let part = rest.get(span.clone()).unwrap_or_default();
             let para = text.para_at(index);
             if para.justify == Justify::Auto && !part.is_empty() {
@@ -146,7 +146,7 @@ fn collect_text_alignment(text: &vectorcraft_doc::TextObject, range: Option<(usi
 }
 
 /// Visit every paragraph the Paragraph panel acts on.
-fn visit_paragraphs(app: &VectorcraftApp, mut f: impl FnMut(&ParaStyle)) {
+fn visit_paragraphs(app: &LiviPenApp, mut f: impl FnMut(&ParaStyle)) {
     let Some(st) = app.session.active() else { return };
     if let Some((id, a, b)) = super::character::text_editing(app)
         && let Some(NodeKind::Text(text)) = st.doc.node(id).map(|n| &n.kind)
@@ -169,7 +169,7 @@ fn visit_paragraphs(app: &VectorcraftApp, mut f: impl FnMut(&ParaStyle)) {
 }
 
 /// A distance shared by every paragraph in scope, or `None` when they differ (blank spin field).
-fn shared_para_field(app: &VectorcraftApp, field: impl Fn(&ParaStyle) -> f64) -> Option<f64> {
+fn shared_para_field(app: &LiviPenApp, field: impl Fn(&ParaStyle) -> f64) -> Option<f64> {
     let mut acc = Shared::None;
     let mut any = false;
     visit_paragraphs(app, |p| {
@@ -183,7 +183,7 @@ fn shared_para_field(app: &VectorcraftApp, field: impl Fn(&ParaStyle) -> f64) ->
 }
 
 /// A justification option shared by every paragraph in scope, or `None` when they differ.
-pub(crate) fn shared_justification_f64(app: &VectorcraftApp, f: impl Fn(&JustificationOptions) -> f64) -> Option<f64> {
+pub(crate) fn shared_justification_f64(app: &LiviPenApp, f: impl Fn(&JustificationOptions) -> f64) -> Option<f64> {
     let mut acc = Shared::None;
     let mut any = false;
     visit_paragraphs(app, |p| {
@@ -197,12 +197,12 @@ pub(crate) fn shared_justification_f64(app: &VectorcraftApp, f: impl Fn(&Justifi
 }
 
 /// Single Word Justification shared by every paragraph in scope, or `None` when they differ.
-pub(crate) fn shared_single_word_justify(app: &VectorcraftApp) -> Option<SingleWordJustify> {
+pub(crate) fn shared_single_word_justify(app: &LiviPenApp) -> Option<SingleWordJustify> {
     shared_para(app, |p| p.justification.single_word)
 }
 
 /// A paragraph attribute shared by every paragraph in scope, or `None` when they differ.
-fn shared_para<T: PartialEq + Copy>(app: &VectorcraftApp, field: impl Fn(&ParaStyle) -> T) -> Option<T> {
+fn shared_para<T: PartialEq + Copy>(app: &LiviPenApp, field: impl Fn(&ParaStyle) -> T) -> Option<T> {
     let mut acc = Shared::None;
     let mut any = false;
     visit_paragraphs(app, |p| {
@@ -216,12 +216,12 @@ fn shared_para<T: PartialEq + Copy>(app: &VectorcraftApp, field: impl Fn(&ParaSt
 }
 
 /// The composer every paragraph in scope shares, or `None` when they differ (neither menu item checked).
-fn shared_composer(app: &VectorcraftApp) -> Option<Composer> {
+fn shared_composer(app: &LiviPenApp) -> Option<Composer> {
     shared_para(app, |p| p.composer)
 }
 
 /// Hyphenation shared by every paragraph in scope, or `None` when they differ (checkbox off).
-pub(crate) fn shared_hyphenate(app: &VectorcraftApp) -> Option<bool> {
+pub(crate) fn shared_hyphenate(app: &LiviPenApp) -> Option<bool> {
     shared_para(app, |p| p.hyphenate)
 }
 
@@ -230,7 +230,7 @@ fn paragraph_plain_at(plain: &str, index: usize) -> &str {
     let mut rest = plain;
     let mut idx = 0;
     while idx <= index && (!rest.is_empty() || idx == 0) {
-        let span = vectorcraft_text::edit::paragraph_at(rest, 0);
+        let span = livipen_text::edit::paragraph_at(rest, 0);
         let part = rest.get(span.clone()).unwrap_or("");
         if idx == index {
             return part;
@@ -245,14 +245,14 @@ fn paragraph_plain_at(plain: &str, index: usize) -> &str {
 }
 
 /// Whether the Paragraph Direction buttons would highlight RTL for this paragraph.
-fn displayed_paragraph_rtl(text: &vectorcraft_doc::TextObject, index: usize) -> bool {
+fn displayed_paragraph_rtl(text: &livipen_doc::TextObject, index: usize) -> bool {
     let plain = text.plain_text();
     let para = text.para_at(index);
-    vectorcraft_text::paragraph_is_rtl(paragraph_plain_at(&plain, index), para.direction)
+    livipen_text::paragraph_is_rtl(paragraph_plain_at(&plain, index), para.direction)
 }
 
 /// Collect the direction the Paragraph panel shows for each paragraph in `text`; `false` is LTR.
-fn collect_text_direction(text: &vectorcraft_doc::TextObject, range: Option<(usize, usize)>, shared: &mut Option<bool>) -> bool {
+fn collect_text_direction(text: &livipen_doc::TextObject, range: Option<(usize, usize)>, shared: &mut Option<bool>) -> bool {
     let para_range = range.map(|(a, b)| text.paragraphs_in(a, b)).unwrap_or_else(|| 0..text.paragraph_count());
     for i in para_range {
         let rtl = displayed_paragraph_rtl(text, i);
@@ -265,7 +265,7 @@ fn collect_text_direction(text: &vectorcraft_doc::TextObject, range: Option<(usi
 }
 
 /// `None` when paragraphs in scope disagree on displayed direction (neither direction button on).
-fn selected_paragraph_direction(app: &VectorcraftApp, fallback: &ParaStyle) -> Option<bool> {
+fn selected_paragraph_direction(app: &LiviPenApp, fallback: &ParaStyle) -> Option<bool> {
     let default = Some(resolved_rtl(app, fallback));
     let Some(st) = app.session.active() else { return default };
     let mut shared = None;
@@ -274,7 +274,7 @@ fn selected_paragraph_direction(app: &VectorcraftApp, fallback: &ParaStyle) -> O
     {
         return if collect_text_direction(text, Some((a, b)), &mut shared) { shared.or(default) } else { None };
     }
-    fn collect(node: &vectorcraft_doc::Node, shared: &mut Option<bool>) -> bool {
+    fn collect(node: &livipen_doc::Node, shared: &mut Option<bool>) -> bool {
         if let NodeKind::Text(text) = &node.kind {
             return collect_text_direction(text, None, shared);
         }
@@ -289,17 +289,17 @@ fn selected_paragraph_direction(app: &VectorcraftApp, fallback: &ParaStyle) -> O
 }
 
 /// A hyphenation option shared by every paragraph in scope, or `None` when they differ.
-pub(crate) fn shared_hyphenation_field<T: PartialEq + Copy>(app: &VectorcraftApp, f: impl Fn(&HyphenationOptions) -> T) -> Option<T> {
+pub(crate) fn shared_hyphenation_field<T: PartialEq + Copy>(app: &LiviPenApp, f: impl Fn(&HyphenationOptions) -> T) -> Option<T> {
     shared_para(app, |p| f(&p.hyphenation))
 }
 
 /// The hyphenation zone shared by every paragraph in scope, or `None` when they differ.
-pub(crate) fn shared_hyphenation_zone(app: &VectorcraftApp) -> Option<f64> {
+pub(crate) fn shared_hyphenation_zone(app: &LiviPenApp) -> Option<f64> {
     shared_para_field(app, |p| p.hyphenation.zone)
 }
 
 /// None means differing displayed alignments, following the other mixed-value controls.
-fn selected_alignment(app: &VectorcraftApp, fallback: &ParaStyle) -> Option<Justify> {
+fn selected_alignment(app: &LiviPenApp, fallback: &ParaStyle) -> Option<Justify> {
     let default = Some(shown_alignment(fallback.justify, fallback.direction == Some(ParaDirection::RightToLeft)));
     let Some(st) = app.session.active() else { return default };
     let mut shared = None;
@@ -308,7 +308,7 @@ fn selected_alignment(app: &VectorcraftApp, fallback: &ParaStyle) -> Option<Just
     {
         return if collect_text_alignment(text, Some((a, b)), &mut shared) { shared.or(default) } else { None };
     }
-    fn collect(node: &vectorcraft_doc::Node, shared: &mut Option<Justify>) -> bool {
+    fn collect(node: &livipen_doc::Node, shared: &mut Option<Justify>) -> bool {
         if let NodeKind::Text(text) = &node.kind {
             return collect_text_alignment(text, None, shared);
         }
@@ -324,7 +324,7 @@ fn selected_alignment(app: &VectorcraftApp, fallback: &ParaStyle) -> Option<Just
 
 /// The seven alignment buttons shared by Paragraph and Properties; no button is selected
 /// when the paragraphs they act on have differing displayed alignments.
-pub fn alignment_buttons(app: &mut VectorcraftApp, ui: &mut Ui, para: &ParaStyle, size: f32) {
+pub fn alignment_buttons(app: &mut LiviPenApp, ui: &mut Ui, para: &ParaStyle, size: f32) {
     let shown = selected_alignment(app, para);
     for (j, icon, tip, id) in ALIGNMENTS {
         if widgets::icon_button(ui, icon, tip, shown == Some(j), size).clicked() {
@@ -336,7 +336,7 @@ pub fn alignment_buttons(app: &mut VectorcraftApp, ui: &mut Ui, para: &ParaStyle
 /// Type › Bullets and Numbering › Apply Bullets (`type.applyBullets {bullet?}`): the paragraphs of
 /// the selected type, or those the Type tool's selection touches, become a bulleted list with
 /// `bullet`; without it, a list keeps its bullet and other paragraphs take the dot.
-pub(crate) fn apply_bullets(app: &mut VectorcraftApp, p: &Value) -> Result<Value, String> {
+pub(crate) fn apply_bullets(app: &mut LiviPenApp, p: &Value) -> Result<Value, String> {
     text_style(app).ok_or("select some type first")?;
     let params = match p.get("bullet") {
         Some(b) => json!({ "bullet": b }),
@@ -349,7 +349,7 @@ pub(crate) fn apply_bullets(app: &mut VectorcraftApp, p: &Value) -> Result<Value
 /// the selected type, or those the Type tool's selection touches, become a numbered list with
 /// number style `number`; without it, a numbered list keeps its style and other paragraphs are
 /// numbered 1, 2, 3.
-pub(crate) fn apply_numbers(app: &mut VectorcraftApp, p: &Value) -> Result<Value, String> {
+pub(crate) fn apply_numbers(app: &mut LiviPenApp, p: &Value) -> Result<Value, String> {
     text_style(app).ok_or("select some type first")?;
     let params = match p.get("number") {
         Some(n) => json!({ "number": n }),
@@ -362,8 +362,8 @@ pub(crate) fn apply_numbers(app: &mut VectorcraftApp, p: &Value) -> Result<Value
 /// the panel acts on a bulleted list (`text.setFormat {list: "bullet"}`) and shows pressed while
 /// they all are one. The arrow lists the presets (`{bullet}`): None turns the list off, and the
 /// one every paragraph has is checked.
-pub fn bullets_button(app: &mut VectorcraftApp, ui: &mut Ui, size: f32) {
-    use vectorcraft_doc::text::Bullet;
+pub fn bullets_button(app: &mut LiviPenApp, ui: &mut Ui, size: f32) {
+    use livipen_doc::text::Bullet;
     let t = Tokens::get(ui.ctx());
     let shown = shared_para(app, |p| p.list.filter(|l| l.number.is_none()).map(|l| l.bullet));
     if widgets::icon_button(ui, "dc-para-bullets", tl!("Bullets"), matches!(shown, Some(Some(_))), size).clicked() {
@@ -399,8 +399,8 @@ pub fn bullets_button(app: &mut VectorcraftApp, ui: &mut Ui, size: f32) {
 
 /// A row of the Bullets presets: a check when `checked`, the bullet drawn (a slash for None), then
 /// its name. Whether it was clicked.
-fn bullet_row(ui: &mut Ui, name: &str, bullet: Option<vectorcraft_doc::text::Bullet>, checked: bool) -> bool {
-    use vectorcraft_doc::text::Bullet;
+fn bullet_row(ui: &mut Ui, name: &str, bullet: Option<livipen_doc::text::Bullet>, checked: bool) -> bool {
+    use livipen_doc::text::Bullet;
     let t = Tokens::get(ui.ctx());
     let (rect, resp) = ui.allocate_exact_size(vec2(130.0, 22.0), egui::Sense::click());
     if resp.hovered() {
@@ -429,8 +429,8 @@ fn bullet_row(ui: &mut Ui, name: &str, bullet: Option<vectorcraft_doc::text::Bul
 /// paragraphs the panel acts on a numbered list (`text.setFormat {list: "number"}`) and shows
 /// pressed while they all are one. The arrow lists the presets (`{number}`), each shown by its
 /// first three numbers: None turns the list off, and the one every paragraph has is checked.
-pub fn numbers_button(app: &mut VectorcraftApp, ui: &mut Ui, size: f32) {
-    use vectorcraft_doc::text::NumberStyle;
+pub fn numbers_button(app: &mut LiviPenApp, ui: &mut Ui, size: f32) {
+    use livipen_doc::text::NumberStyle;
     let t = Tokens::get(ui.ctx());
     let shown = shared_para(app, |p| p.list.and_then(|l| l.number));
     if widgets::icon_button(ui, "dc-para-numbers", tl!("Numbered List"), matches!(shown, Some(Some(_))), size).clicked() {
@@ -480,14 +480,14 @@ fn number_row(ui: &mut Ui, sample: &str, checked: bool) -> bool {
 }
 
 /// The Hyphenate checkbox for the paragraphs the panel acts on.
-pub fn hyphenate_check(app: &mut VectorcraftApp, ui: &mut Ui, _para: &ParaStyle) {
+pub fn hyphenate_check(app: &mut LiviPenApp, ui: &mut Ui, _para: &ParaStyle) {
     let hyphenate = shared_hyphenate(app);
     if widgets::check(ui, tl!("Hyphenate"), hyphenate == Some(true), true) {
         format(app, json!({"hyphenate": hyphenate != Some(true)}));
     }
 }
 
-pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
+pub fn show(app: &mut LiviPenApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let Some((_, para)) = text_style(app) else {
         super::empty_state(ui, "pilcrow", tl!("No text selected"), tl!("Select a text object to edit its paragraph attributes."));
@@ -559,7 +559,7 @@ pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
     // How long the kashidas are that justify Arabic lines, with the Middle Eastern (Indic) options.
     if app.session.prefs.show_indic_options {
         ui.horizontal(|ui| {
-            use vectorcraft_doc::text::Kashida;
+            use livipen_doc::text::Kashida;
             widgets::dim_label(ui, tl!("Insert Kashidas"));
             let kinds = [
                 (tl!("None"), Kashida::None, "none"),
@@ -609,7 +609,7 @@ pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
     }
 }
 
-pub fn menu(app: &mut VectorcraftApp, ui: &mut Ui) {
+pub fn menu(app: &mut LiviPenApp, ui: &mut Ui) {
     let style = text_style(app);
     let has = style.is_some();
     let hidden: bool = pstate(ui.ctx(), "pa-hide-options");
@@ -636,7 +636,7 @@ pub fn menu(app: &mut VectorcraftApp, ui: &mut Ui) {
     // the East Asian options.
     if app.session.prefs.show_east_asian_options {
         ui.separator();
-        let top_to_top = style.as_ref().is_some_and(|(_, p)| p.leading_model == vectorcraft_doc::LeadingModel::EmBoxTop);
+        let top_to_top = style.as_ref().is_some_and(|(_, p)| p.leading_model == livipen_doc::LeadingModel::EmBoxTop);
         if menu_item(ui, tl!("Top-to-Top Leading"), has, top_to_top) {
             format(app, json!({"leadingModel": "emBoxTop"}));
         }
@@ -648,7 +648,7 @@ pub fn menu(app: &mut VectorcraftApp, ui: &mut Ui) {
         ui.add_enabled_ui(has, |ui| {
             // Indented like the items beside it (their check column).
             ui.menu_button(format!("   {}", tl!("Burasagari")), |ui| {
-                use vectorcraft_doc::Burasagari;
+                use livipen_doc::Burasagari;
                 for (label, b, key) in [
                     (tl!("None"), Burasagari::None, "none"),
                     (tl!("Regular"), Burasagari::Standard, "standard"),
@@ -680,9 +680,9 @@ pub fn menu(app: &mut VectorcraftApp, ui: &mut Ui) {
 /// indents or paragraph spacing, Hyphenate off with the default Hyphenation and Justification
 /// options, Auto direction, Bottom-to-Bottom Leading, Regular burasagari, the Hard kinsoku set, the
 /// Every-line Composer, Roman Hanging Punctuation off and no kashidas.
-fn reset_panel(app: &mut VectorcraftApp) {
+fn reset_panel(app: &mut LiviPenApp) {
     let h = HyphenationOptions::default();
-    let j = vectorcraft_doc::JustificationOptions::default();
+    let j = livipen_doc::JustificationOptions::default();
     para_cmd(app, "text.setStyle", json!({"justify": "auto"}));
     format(
         app,
@@ -701,9 +701,9 @@ fn reset_panel(app: &mut VectorcraftApp) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use vectorcraft_engine::Session;
+    use livipen_engine::Session;
 
-    fn alignment_row(app: &mut VectorcraftApp, ui: &mut Ui, size: f32) -> egui::Rect {
+    fn alignment_row(app: &mut LiviPenApp, ui: &mut Ui, size: f32) -> egui::Rect {
         let para = text_style(app).map_or_else(ParaStyle::default, |(_, p)| p);
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 3.0;
@@ -714,7 +714,7 @@ mod tests {
     }
 
     // Inspect the actual selected wells, including the shared Properties-size buttons.
-    fn alignment_frame(ctx: &egui::Context, app: &mut VectorcraftApp, size: f32) -> (Vec<Justify>, egui::Pos2) {
+    fn alignment_frame(ctx: &egui::Context, app: &mut LiviPenApp, size: f32) -> (Vec<Justify>, egui::Pos2) {
         let mut row = egui::Rect::NOTHING;
         let mut frame = ctx.run_ui(egui::RawInput::default(), |ui| row = alignment_row(app, ui, size));
         frame.textures_delta.clear();
@@ -740,17 +740,17 @@ mod tests {
         (selected, centers[1])
     }
 
-    fn editing_text(text: &str) -> (VectorcraftApp, Value) {
-        let mut app = VectorcraftApp::new(Session::new(), Default::default());
+    fn editing_text(text: &str) -> (LiviPenApp, Value) {
+        let mut app = LiviPenApp::new(Session::new(), Default::default());
         app.run("file.new", json!({"width": 400, "height": 200})).unwrap();
         app.session.select_tool("type", Default::default()).unwrap();
         let id = app.run("text.create", json!({"x": 20, "y": 50, "text": text})).unwrap()["id"].clone();
-        app.session.apply_actions(vec![vectorcraft_tools::Action::Notify("text.editNew".into())]).unwrap();
+        app.session.apply_actions(vec![livipen_tools::Action::Notify("text.editNew".into())]).unwrap();
         assert!(super::super::character::text_editing(&app).is_some());
         (app, id)
     }
 
-    fn select_range(app: &mut VectorcraftApp, start: usize, end: usize) {
+    fn select_range(app: &mut LiviPenApp, start: usize, end: usize) {
         app.session.set_tool_option("select", &json!({"start": start, "end": end}));
     }
 
@@ -841,7 +841,7 @@ mod tests {
             alignment_row(app, ui, 28.0);
         });
         assert_eq!(alignment_frame(&ctx, &mut app, 28.0).0, [Justify::Center]);
-        let node = app.session.active().unwrap().doc.node(vectorcraft_doc::NodeId(id.as_u64().unwrap())).unwrap();
+        let node = app.session.active().unwrap().doc.node(livipen_doc::NodeId(id.as_u64().unwrap())).unwrap();
         let NodeKind::Text(text) = &node.kind else { panic!("text") };
         assert_eq!(
             (text.para_at(0).justify, text.para_at(1).justify, text.para_at(2).justify),
@@ -963,10 +963,10 @@ mod tests {
     /// direction: Auto then follows it.
     #[test]
     fn alignment_buttons_show_the_resolved_alignment_and_direction_sets_it() {
-        let mut app = VectorcraftApp::new(Session::new(), Default::default());
+        let mut app = LiviPenApp::new(Session::new(), Default::default());
         app.session.execute("file.new", &json!({"width": 400, "height": 200})).unwrap();
         app.session.execute("text.create", &json!({"x": 200, "y": 50, "text": "שלום"})).unwrap();
-        let shown = |app: &VectorcraftApp| {
+        let shown = |app: &LiviPenApp| {
             let para = text_style(app).unwrap().1;
             shown_alignment(para.justify, resolved_rtl(app, &para))
         };
@@ -980,7 +980,7 @@ mod tests {
         assert_eq!(shown(&app), Justify::Left);
         // The direction buttons show with the Indic options only.
         crate::i18n::set_current(crate::i18n::Lang::EN);
-        let tips = |app: &mut VectorcraftApp| {
+        let tips = |app: &mut LiviPenApp| {
             let ctx = egui::Context::default();
             let mut frame = ctx.run_ui(egui::RawInput::default(), |ui| show(app, ui));
             frame.textures_delta.clear();
@@ -995,26 +995,26 @@ mod tests {
     /// paragraph's setting, and Reset Panel sets it back to None.
     #[test]
     fn insert_kashidas_shows_with_the_indic_options_and_reset_panel_turns_it_off() {
-        let mut app = VectorcraftApp::new(Session::new(), Default::default());
+        let mut app = LiviPenApp::new(Session::new(), Default::default());
         app.run("file.new", json!({"width": 400, "height": 200})).unwrap();
         let id = app.run("text.create", json!({"x": 20, "y": 50, "text": "كتب محمد"})).unwrap()["id"].clone();
         app.run("select.set", json!({"ids": [id]})).unwrap();
         crate::i18n::set_current(crate::i18n::Lang::EN);
-        let painted = |app: &mut VectorcraftApp| crate::tests_labels::painted_text(app, show);
+        let painted = |app: &mut LiviPenApp| crate::tests_labels::painted_text(app, show);
         assert!(!painted(&mut app).contains("Insert Kashidas"));
         app.session.prefs.show_indic_options = true;
         let text = painted(&mut app);
         assert!(text.contains("Insert Kashidas") && text.contains("None"), "{text}");
         app.run("text.setFormat", json!({"kashida": "medium"})).unwrap();
         assert!(painted(&mut app).contains("Medium"));
-        let kashida = |app: &VectorcraftApp| {
-            let node = app.session.active().unwrap().doc.node(vectorcraft_doc::NodeId(id.as_u64().unwrap())).unwrap();
+        let kashida = |app: &LiviPenApp| {
+            let node = app.session.active().unwrap().doc.node(livipen_doc::NodeId(id.as_u64().unwrap())).unwrap();
             let NodeKind::Text(text) = &node.kind else { panic!("text") };
             text.para_at(0).kashida
         };
-        assert_eq!(kashida(&app), vectorcraft_doc::text::Kashida::Medium);
+        assert_eq!(kashida(&app), livipen_doc::text::Kashida::Medium);
         reset_panel(&mut app);
-        assert_eq!(kashida(&app), vectorcraft_doc::text::Kashida::None);
+        assert_eq!(kashida(&app), livipen_doc::text::Kashida::None);
     }
 
     /// The Bullets button makes the paragraphs the Type tool's selection touches a bulleted list
@@ -1023,19 +1023,19 @@ mod tests {
     /// off.
     #[test]
     fn the_bullets_button_and_its_presets_set_the_list_and_reset_panel_clears_it() {
-        use vectorcraft_doc::text::{Bullet, ParaList};
+        use livipen_doc::text::{Bullet, ParaList};
         crate::i18n::set_current(crate::i18n::Lang::EN);
         let (mut app, id) = editing_text("One\nTwo");
         select_range(&mut app, 0, 0);
-        let lists = |app: &VectorcraftApp| {
-            let node = app.session.active().unwrap().doc.node(vectorcraft_doc::NodeId(id.as_u64().unwrap())).unwrap();
+        let lists = |app: &LiviPenApp| {
+            let node = app.session.active().unwrap().doc.node(livipen_doc::NodeId(id.as_u64().unwrap())).unwrap();
             let NodeKind::Text(text) = &node.kind else { panic!("text") };
             (text.para_at(0).list, text.para_at(1).list)
         };
         let ctx = egui::Context::default();
         crate::theme::install_fonts(&ctx);
         let row = std::cell::Cell::new(egui::Rect::NOTHING);
-        let mut draw = |app: &mut VectorcraftApp, ui: &mut Ui| {
+        let mut draw = |app: &mut LiviPenApp, ui: &mut Ui| {
             row.set(ui.horizontal(|ui| bullets_button(app, ui, 28.0)).response.rect);
         };
         super::super::tests_appearance::frame_events(&ctx, &mut app, vec![], &mut draw);
@@ -1044,7 +1044,7 @@ mod tests {
         super::super::tests_appearance::click(&ctx, &mut app, button, &mut draw);
         assert_eq!(lists(&app), (Some(ParaList::bulleted(Bullet::Dot)), None), "the caret's paragraph");
         assert_eq!(shared_para(&app, |p| p.list.map(|l| l.bullet)), Some(Some(Bullet::Dot)), "the button shows pressed");
-        let mut pick = |app: &mut VectorcraftApp, name: &str| {
+        let mut pick = |app: &mut LiviPenApp, name: &str| {
             super::super::tests_appearance::click(&ctx, app, arrow, &mut draw);
             let texts = super::super::tests_appearance::frame_events(&ctx, app, vec![], &mut draw);
             let at = super::super::tests_appearance::text_rect(&texts, name).center();
@@ -1070,12 +1070,12 @@ mod tests {
     /// applies a numbered list, and Reset Panel turns it off.
     #[test]
     fn the_numbered_list_button_and_its_presets_set_the_list_and_reset_panel_clears_it() {
-        use vectorcraft_doc::text::{NumberStyle, ParaList};
+        use livipen_doc::text::{NumberStyle, ParaList};
         crate::i18n::set_current(crate::i18n::Lang::EN);
         let (mut app, id) = editing_text("One\nTwo");
         select_range(&mut app, 0, 0);
-        let lists = |app: &VectorcraftApp| {
-            let node = app.session.active().unwrap().doc.node(vectorcraft_doc::NodeId(id.as_u64().unwrap())).unwrap();
+        let lists = |app: &LiviPenApp| {
+            let node = app.session.active().unwrap().doc.node(livipen_doc::NodeId(id.as_u64().unwrap())).unwrap();
             let NodeKind::Text(text) = &node.kind else { panic!("text") };
             (text.para_at(0).list, text.para_at(1).list)
         };
@@ -1083,7 +1083,7 @@ mod tests {
         let ctx = egui::Context::default();
         crate::theme::install_fonts(&ctx);
         let row = std::cell::Cell::new(egui::Rect::NOTHING);
-        let mut draw = |app: &mut VectorcraftApp, ui: &mut Ui| {
+        let mut draw = |app: &mut LiviPenApp, ui: &mut Ui| {
             row.set(ui.horizontal(|ui| numbers_button(app, ui, 28.0)).response.rect);
         };
         super::super::tests_appearance::frame_events(&ctx, &mut app, vec![], &mut draw);
@@ -1092,7 +1092,7 @@ mod tests {
         super::super::tests_appearance::click(&ctx, &mut app, button, &mut draw);
         assert_eq!(lists(&app), (numbered(NumberStyle::Arabic), None), "the caret's paragraph");
         assert_eq!(shared_para(&app, |p| p.list.and_then(|l| l.number)), Some(Some(NumberStyle::Arabic)), "the button shows pressed");
-        let mut pick = |app: &mut VectorcraftApp, name: &str| {
+        let mut pick = |app: &mut LiviPenApp, name: &str| {
             super::super::tests_appearance::click(&ctx, app, arrow, &mut draw);
             let texts = super::super::tests_appearance::frame_events(&ctx, app, vec![], &mut draw);
             let at = super::super::tests_appearance::text_rect(&texts, name).center();
@@ -1115,7 +1115,7 @@ mod tests {
         // The Numbered List button shows pressed and the Bullets button doesn't, and the other way
         // round for a bulleted list.
         // Each button and the arrow beside it have the same name; only a button shows pressed.
-        let pressed = |app: &mut VectorcraftApp| {
+        let pressed = |app: &mut LiviPenApp| {
             let nodes = crate::widgets::accessibility_tests::tree(|ui| {
                 ui.horizontal(|ui| {
                     bullets_button(app, ui, 28.0);
@@ -1143,7 +1143,7 @@ mod tests {
     /// save neither.
     #[test]
     fn reset_panel_resets_the_hyphenation_options() {
-        let mut app = VectorcraftApp::new(Session::new(), Default::default());
+        let mut app = LiviPenApp::new(Session::new(), Default::default());
         app.run("file.new", json!({"width": 400, "height": 200})).unwrap();
         let id = app.run("text.create", json!({"x": 20, "y": 50, "text": "First\nSecond"})).unwrap()["id"].clone();
         app.run(
@@ -1154,8 +1154,8 @@ mod tests {
             }),
         )
         .unwrap();
-        let paras = |app: &VectorcraftApp| {
-            let node = app.session.active().unwrap().doc.node(vectorcraft_doc::NodeId(id.as_u64().unwrap())).unwrap();
+        let paras = |app: &LiviPenApp| {
+            let node = app.session.active().unwrap().doc.node(livipen_doc::NodeId(id.as_u64().unwrap())).unwrap();
             let NodeKind::Text(text) = &node.kind else { panic!("text") };
             [text.para_at(0).clone(), text.para_at(1).clone()]
         };
@@ -1163,7 +1163,7 @@ mod tests {
             assert!(para.hyphenate);
             assert_ne!(para.hyphenation, HyphenationOptions::default());
             assert!(para.roman_hanging);
-            assert_ne!(para.justification, vectorcraft_doc::JustificationOptions::default());
+            assert_ne!(para.justification, livipen_doc::JustificationOptions::default());
         }
         reset_panel(&mut app);
         for para in paras(&app) {

@@ -12,7 +12,7 @@
 
 use std::sync::Arc;
 
-use vectorcraft_geom::{FillRule, PathData};
+use livipen_geom::{FillRule, PathData};
 
 use crate::{Node, NodeId, NodeKind};
 
@@ -58,7 +58,7 @@ fn zero_ids(n: &mut Node) {
 
 #[cfg(test)]
 mod tests {
-    use vectorcraft_geom::{Rect, shapes};
+    use livipen_geom::{Rect, shapes};
 
     use super::*;
 

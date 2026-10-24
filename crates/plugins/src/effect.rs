@@ -14,9 +14,9 @@ use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::sync::Mutex;
 
+use livipen_doc::{Appearance, AppearanceItem};
+use livipen_geom::{FillRule, PathData, Rect};
 use serde_json::{Value, json};
-use vectorcraft_doc::{Appearance, AppearanceItem};
-use vectorcraft_geom::{FillRule, PathData, Rect};
 
 use crate::objects::{decode, output_geometry, paint_lists};
 use crate::{Error, Kind, Limits, Result, registry};
@@ -201,8 +201,8 @@ fn run(plugin: &crate::Plugin, mut params: Value, path: &PathData, bounds: Rect,
 
 #[cfg(test)]
 mod tests {
-    use vectorcraft_color::{Color, Paint};
-    use vectorcraft_doc::{FillLayer, StrokeLayer};
+    use livipen_color::{Color, Paint};
+    use livipen_doc::{FillLayer, StrokeLayer};
 
     use super::*;
 

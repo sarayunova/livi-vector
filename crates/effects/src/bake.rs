@@ -19,9 +19,9 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use vectorcraft_doc::color::Paint;
-use vectorcraft_doc::{Appearance, AppearanceItem, Document, Effect, FillLayer, Knockout, Node, NodeKind, StrokeLayer};
-use vectorcraft_geom::{Affine, FillRule, PathData, Rect, Vec2};
+use livipen_doc::color::Paint;
+use livipen_doc::{Appearance, AppearanceItem, Document, Effect, FillLayer, Knockout, Node, NodeKind, StrokeLayer};
+use livipen_geom::{Affine, FillRule, PathData, Rect, Vec2};
 
 use crate::distort::{transform_move, transform_offsets};
 use crate::group::{has_own_paint, paints};
@@ -31,7 +31,7 @@ use crate::{
     has_item_geometry, has_pathfinder, is_geometry, is_pathfinder, merged_params, needs_outline, outline_text, reshape,
 };
 
-fn item_effects(item: &AppearanceItem) -> &[vectorcraft_doc::Effect] {
+fn item_effects(item: &AppearanceItem) -> &[livipen_doc::Effect] {
     match item {
         AppearanceItem::Fill(f) => &f.effects,
         AppearanceItem::Stroke(s) => &s.effects,
@@ -69,11 +69,11 @@ fn geometry(n: &Node) -> Option<(PathData, FillRule)> {
     }
 }
 
-fn apply(effects: &[vectorcraft_doc::Effect], path: &PathData, ctx: &GeomContext) -> PathData {
+fn apply(effects: &[livipen_doc::Effect], path: &PathData, ctx: &GeomContext) -> PathData {
     if !has_geometry(effects) || path.is_empty() {
         return path.clone();
     }
-    let b = vectorcraft_geom::Shape::bounding_box(&path.to_bezpath());
+    let b = livipen_geom::Shape::bounding_box(&path.to_bezpath());
     apply_geometry_with(effects, path, b, ctx)
 }
 
@@ -90,7 +90,7 @@ fn path_kind(d: &mut Document, path: PathData, rule: FillRule) -> NodeKind {
 /// `n` with its geometry effects evaluated (`None` = unchanged).
 fn bake_node(d: &mut Document, n: &Node) -> Option<Node> {
     // A cancelled export leaves the rest of the document as it is: the caller drops the result.
-    if !needs_bake(n) || vectorcraft_doc::cancel::is_cancelled() {
+    if !needs_bake(n) || livipen_doc::cancel::is_cancelled() {
         return None;
     }
     // Colour adjustments: the object recoloured (inside it too), then baked as it is.
@@ -175,7 +175,7 @@ fn bake_pieces(d: &mut Document, mut m: Node) -> Node {
 
 /// Give `n` and its descendants a new id wherever one was already `seen` (the pieces evaluated art
 /// copies from its source keep ids of their own).
-pub fn fresh_ids(d: &mut Document, n: &mut Node, seen: &mut std::collections::HashSet<vectorcraft_doc::NodeId>) {
+pub fn fresh_ids(d: &mut Document, n: &mut Node, seen: &mut std::collections::HashSet<livipen_doc::NodeId>) {
     if !seen.insert(n.id) {
         n.id = d.alloc_id();
         seen.insert(n.id);
@@ -599,14 +599,14 @@ pub fn bake_document(doc: &Document) -> Option<Document> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use livipen_color::{Color, Paint};
+    use livipen_doc::{CharStyle, Effect, NodeId, TextObject};
+    use livipen_geom::{Point, Rect, shapes};
     use serde_json::json;
-    use vectorcraft_color::{Color, Paint};
-    use vectorcraft_doc::{CharStyle, Effect, NodeId, TextObject};
-    use vectorcraft_geom::{Point, Rect, shapes};
 
     /// Type tests need glyph outlines, which only the optional craft-fonts build input provides.
     fn skip_without_craft_fonts() -> bool {
-        let skip = vectorcraft_text::CRAFT_FONTS.is_empty();
+        let skip = livipen_text::CRAFT_FONTS.is_empty();
         if skip {
             eprintln!("skipped: built without craft-fonts (set CRAFT_FONTS_DIR to a craft-fonts checkout to run it)");
         }
@@ -678,7 +678,7 @@ mod tests {
         // Strokes ignore dither, so the filled outline goes without it and looks as the stroke did.
         let mut n = Node::path(NodeId(50), shapes::rectangle(Rect::new(0.0, 0.0, 100.0, 100.0)), Appearance::default_art());
         if let AppearanceItem::Stroke(s) = &mut n.appearance.items[1] {
-            let mut g = vectorcraft_color::GradientPaint::new(Default::default());
+            let mut g = livipen_color::GradientPaint::new(Default::default());
             g.gradient.dither = true;
             s.paint = Paint::Gradient(Box::new(g));
         }
@@ -694,8 +694,8 @@ mod tests {
         let mut n = Node::path(NodeId(50), shapes::rectangle(Rect::new(0.0, 0.0, 100.0, 100.0)), Appearance::default_art());
         if let AppearanceItem::Stroke(s) = &mut n.appearance.items[1] {
             s.width = 10.0;
-            s.paint = Paint::Gradient(Box::new(vectorcraft_color::GradientPaint::new(Default::default())));
-            s.gradient_mode = vectorcraft_doc::StrokeGradientMode::Along;
+            s.paint = Paint::Gradient(Box::new(livipen_color::GradientPaint::new(Default::default())));
+            s.gradient_mode = livipen_doc::StrokeGradientMode::Along;
             s.opacity = 0.5;
         }
         let m = bake_appearance(&n).unwrap();
@@ -909,7 +909,7 @@ mod tests {
         shadowed.appearance.effects.push(fx("stylize.dropShadow", json!({})));
         let mut gradient = type_node(50);
         if let NodeKind::Text(t) = &mut gradient.kind {
-            t.runs[0].style.fill = Paint::Gradient(Box::new(vectorcraft_color::GradientPaint::new(vectorcraft_color::Gradient::default())));
+            t.runs[0].style.fill = Paint::Gradient(Box::new(livipen_color::GradientPaint::new(livipen_color::Gradient::default())));
         }
         let mut reshaped = type_node(50);
         let mut fill = FillLayer::new(Paint::solid(Color::BLACK));
@@ -1029,7 +1029,7 @@ mod tests {
         // A 10 pt line with `n` anchors.
         let line = |n: usize| {
             let pts: Vec<Point> = (0..n).map(|i| Point::new(i as f64 * 10.0 / n as f64, 0.0)).collect();
-            PathData::new(vec![vectorcraft_geom::SubPath::polyline(&pts, false)])
+            PathData::new(vec![livipen_geom::SubPath::polyline(&pts, false)])
         };
         let right = json!({"moveH": 10, "copies": 1000});
         let down = json!({"moveV": 10, "copies": 1});
@@ -1048,7 +1048,7 @@ mod tests {
     }
     /// A 10 pt square painted with a red to blue gradient and a Transform effect with 2 copies.
     fn gradient_copies(id: u64) -> Node {
-        use vectorcraft_color::{Gradient, GradientKind, GradientPaint, GradientStop};
+        use livipen_color::{Gradient, GradientKind, GradientPaint, GradientStop};
         let stops = vec![GradientStop::new(0.0, Color::rgb(1.0, 0.0, 0.0)), GradientStop::new(1.0, Color::rgb(0.0, 0.0, 1.0))];
         let paint = Paint::Gradient(Box::new(GradientPaint::new(Gradient::new(GradientKind::Linear, stops))));
         let mut n = Node::path(NodeId(id), shapes::rectangle(Rect::new(0.0, 0.0, 10.0, 10.0)), Appearance::basic(paint, Paint::None, 0.0));

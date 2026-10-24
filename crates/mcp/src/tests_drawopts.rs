@@ -1,8 +1,8 @@
 //! `draw_path` / `draw_shape` style the object they draw in the same call: `name`, `opacity`,
 //! `dash`, `cap`, `join` and `effects` (#2112).
 
+use livipen_doc::{LineCap, LineJoin, Node, NodeId};
 use serde_json::{Value, json};
-use vectorcraft_doc::{LineCap, LineJoin, Node, NodeId};
 
 use crate::{Backend, Headless, Server, call_tool};
 
@@ -145,7 +145,7 @@ fn schemas_list_the_options() {
 fn a_bad_paint_draws_nothing() {
     let mut h = headless();
     let (before, undo, svg) =
-        (objects(&h), h.session.doc().unwrap().history.undo.len(), vectorcraft_svg::export(&h.session.doc().unwrap().doc, &Default::default()));
+        (objects(&h), h.session.doc().unwrap().history.undo.len(), livipen_svg::export(&h.session.doc().unwrap().doc, &Default::default()));
     for bad in [
         json!({"stroke": "currentColor"}),
         json!({"fill": "currentColor"}),
@@ -165,7 +165,7 @@ fn a_bad_paint_draws_nothing() {
             let st = h.session.doc().unwrap();
             assert_eq!(objects(&h), before, "{tool} {args} drew something");
             assert_eq!(st.history.undo.len(), undo, "{tool} {args} left an undo step");
-            assert_eq!(vectorcraft_svg::export(&st.doc, &Default::default()), svg, "{tool} {args} changed the SVG");
+            assert_eq!(livipen_svg::export(&st.doc, &Default::default()), svg, "{tool} {args} changed the SVG");
         }
     }
     // A good call is one undo step, named as the drawing command names its own.

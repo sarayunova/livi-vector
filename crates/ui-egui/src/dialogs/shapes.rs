@@ -4,12 +4,12 @@
 //! tool, [`open_options`]): OK then sets the options the tool's next drag and click use, and draws
 //! nothing.
 
+use livipen_doc::Unit;
+use livipen_geom::{Point, Rect};
 use serde_json::{Value, json};
-use vectorcraft_doc::Unit;
-use vectorcraft_geom::{Point, Rect};
 
 use super::{DialogSpec, form, run_and_close};
-use crate::VectorcraftApp;
+use crate::LiviPenApp;
 use crate::panels::transform::artboard_rect;
 use crate::state::Dialog;
 use crate::widgets;
@@ -44,7 +44,7 @@ fn title(d: &Dialog) -> &'static str {
 /// (<https://helpx.adobe.com/illustrator/using/tool-techniques/rectangular-grid-tool.html>,
 /// <https://helpx.adobe.com/illustrator/using/tool-techniques/arc-tool.html>): the click dialog's
 /// fields at the tool's options, with no click to draw at.
-pub(crate) fn open_options(app: &mut VectorcraftApp, tool: &str) -> Result<Value, String> {
+pub(crate) fn open_options(app: &mut LiviPenApp, tool: &str) -> Result<Value, String> {
     if !OPTION_TOOLS.contains(&tool) {
         return Err(format!("the {tool} tool has no options"));
     }
@@ -134,7 +134,7 @@ pub(crate) fn arc_pin_to_anchor(d: &mut Dialog) {
     let refi = d.fields.get("reference").and_then(|v| v.as_u64()).map(|n| (n as usize).min(8)).unwrap_or(0);
     let w = d.f64("lengthX", 100.0).abs().max(1e-9);
     let h = d.f64("lengthY", 100.0).abs().max(1e-9);
-    let rp = vectorcraft_geom::reference_point(Rect::new(0.0, 0.0, w, h), refi);
+    let rp = livipen_geom::reference_point(Rect::new(0.0, 0.0, w, h), refi);
     d.fields.insert("x".into(), json!(anchor.x - rp.x));
     d.fields.insert("y".into(), json!(anchor.y - rp.y));
 }
@@ -148,13 +148,13 @@ pub(crate) fn grid_pin_to_anchor(d: &mut Dialog) {
     let anchor = Point::new(d.f64("__anchorX", d.f64("x", 0.0)), d.f64("__anchorY", d.f64("y", 0.0)));
     let refi = grid_reference(d);
     let (w, h) = (d.f64("width", 100.0), d.f64("height", 100.0));
-    let rp = vectorcraft_geom::reference_point(Rect::new(0.0, 0.0, w, h), refi);
+    let rp = livipen_geom::reference_point(Rect::new(0.0, 0.0, w, h), refi);
     d.fields.insert("x".into(), json!(anchor.x - rp.x));
     d.fields.insert("y".into(), json!(anchor.y - rp.y));
 }
 
 /// The form's fields, then a grid's switches.
-fn body(app: &mut VectorcraftApp, ui: &mut egui::Ui, d: &mut Dialog) -> bool {
+fn body(app: &mut LiviPenApp, ui: &mut egui::Ui, d: &mut Dialog) -> bool {
     let unit = app.session.general_unit();
     if matches!(d.kind.as_str(), "rectangularGrid" | "polarGrid") {
         ui.horizontal(|ui| {
@@ -254,7 +254,7 @@ fn box_origin(d: &Dialog) -> (f64, f64) {
     }
 }
 
-fn confirm(app: &mut VectorcraftApp, d: &Dialog) -> Result<Value, String> {
+fn confirm(app: &mut LiviPenApp, d: &Dialog) -> Result<Value, String> {
     // Tool Options: the options the tool's next drag and click use; nothing is drawn.
     if d.bool(TOOL_OPTIONS) {
         let r = app.run("tool.setOption", json!({"tool": d.kind, "values": tool_options(d)}));
@@ -341,15 +341,15 @@ fn confirm(app: &mut VectorcraftApp, d: &Dialog) -> Result<Value, String> {
     // else along General › Constrain Angle, turned about the point the dialog places at the click
     // (a grid's reference point, the other shapes' top-left corner or centre).
     let options = options.or_else(|| (d.kind == "spiral").then(|| params.clone()));
-    let result = match vectorcraft_engine::perspective_click(&app.session, id, &params, vectorcraft_geom::Point::new(x, y)) {
+    let result = match livipen_engine::perspective_click(&app.session, id, &params, livipen_geom::Point::new(x, y)) {
         Some((id, params)) => run_and_close(app, &id, params),
         None => {
             let pivot = if matches!(d.kind.as_str(), "rectangularGrid" | "polarGrid") {
-                vectorcraft_geom::reference_point(grid_placed(d), grid_reference(d))
+                livipen_geom::reference_point(grid_placed(d), grid_reference(d))
             } else {
-                vectorcraft_geom::Point::new(x, y)
+                livipen_geom::Point::new(x, y)
             };
-            let params = vectorcraft_engine::constrain_click(&app.session, id, params, pivot);
+            let params = livipen_engine::constrain_click(&app.session, id, params, pivot);
             run_and_close(app, id, params)
         }
     }?;
@@ -362,11 +362,11 @@ fn confirm(app: &mut VectorcraftApp, d: &Dialog) -> Result<Value, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use vectorcraft_engine::Session;
+    use livipen_engine::Session;
 
     #[test]
     fn spiral_click_dialog_uses_and_updates_tool_options() {
-        let mut app = VectorcraftApp::new(Session::new(), Default::default());
+        let mut app = LiviPenApp::new(Session::new(), Default::default());
         app.run("file.new", json!({"width": 300, "height": 200})).unwrap();
         app.run("tool.select", json!({"tool": "spiral"})).unwrap();
         app.run("tool.setOption", json!({"tool": "spiral", "values": {"decay": 72.0, "segments": 14, "clockwise": false}})).unwrap();
@@ -398,10 +398,10 @@ mod tests {
 
     #[test]
     fn a_negative_line_length_draws_and_keeps_the_same_direction() {
-        let mut app = VectorcraftApp::new(Session::new(), Default::default());
+        let mut app = LiviPenApp::new(Session::new(), Default::default());
         app.run("file.new", json!({"width": 300, "height": 200})).unwrap();
         app.run("tool.select", json!({"tool": "lineSegment"})).unwrap();
-        let line_bounds = |app: &VectorcraftApp, i: usize| {
+        let line_bounds = |app: &LiviPenApp, i: usize| {
             let doc = &app.session.doc().unwrap().doc;
             let n = &doc.layers[0].children().unwrap()[i];
             n.path_data().and_then(|p| p.bounds()).expect("line bounds")

@@ -1,12 +1,12 @@
 //! The text engine's newer features combined through commands: Auto Size and Shrink Text to Fit
 //! with inline graphics, per-paragraph attributes, the paragraph composer and vertical
 //! alignment; editing and undo across them; and a save round trip with all of them on.
-//! (`vectorcraft_text`'s `tests_combos` covers the layout side.)
+//! (`livipen_text`'s `tests_combos` covers the layout side.)
 
+use livipen_doc::text::INLINE_CHAR;
+use livipen_doc::{AreaFit, Composer, Justify, NodeKind, TextKind, TextObject, VerticalAlign};
+use livipen_geom::Rect;
 use serde_json::{Value, json};
-use vectorcraft_doc::text::INLINE_CHAR;
-use vectorcraft_doc::{AreaFit, Composer, Justify, NodeKind, TextKind, TextObject, VerticalAlign};
-use vectorcraft_geom::Rect;
 
 use super::*;
 
@@ -50,8 +50,8 @@ fn frame(s: &Session, id: NodeId) -> Rect {
     }
 }
 
-fn lay(t: &TextObject) -> vectorcraft_text::TextLayout {
-    vectorcraft_text::layout(vectorcraft_text::FontDb::global(), t)
+fn lay(t: &TextObject) -> livipen_text::TextLayout {
+    livipen_text::layout(livipen_text::FontDb::global(), t)
 }
 
 /// Auto Size's frame is tight: the text fits, and a point less overflows.
@@ -61,9 +61,8 @@ fn assert_tight(s: &Session, id: NodeId, what: &str) {
     let b = frame(s, id);
     let mut less = t.clone();
     less.area.fit = AreaFit::None;
-    less.kind = TextKind::Area {
-        frame: vectorcraft_geom::PathData::from_bezpath(&vectorcraft_geom::Shape::to_path(&Rect::new(b.x0, b.y0, b.x1, b.y1 - 1.0), 0.1)),
-    };
+    less.kind =
+        TextKind::Area { frame: livipen_geom::PathData::from_bezpath(&livipen_geom::Shape::to_path(&Rect::new(b.x0, b.y0, b.x1, b.y1 - 1.0), 0.1)) };
     assert!(lay(&less).overflow, "{what}: a point less overflows ({b:?})");
 }
 
@@ -296,7 +295,7 @@ fn every_feature_saves_and_reopens() {
     assert!(!l.overflow && l.fit_scale < 1.0, "{}", l.fit_scale);
     assert_eq!(l.inlines.len(), 1);
     let doc = s.doc().unwrap().doc.clone();
-    let back = vectorcraft_format::load(&vectorcraft_format::save(&doc, false)).unwrap();
+    let back = livipen_format::load(&livipen_format::save(&doc, false)).unwrap();
     let NodeKind::Text(t2) = &back.node(id).unwrap().kind else { panic!("not text") };
     let mut t2 = (**t2).clone();
     // Resolved art bounds and layout caches aren't saved: resolve them as opening does.

@@ -1,9 +1,9 @@
 //! Tests for Pathfinder, Object → Path and Type commands.
 
+use livipen_color::{Color, Paint};
+use livipen_doc::{Appearance, NodeKind};
+use livipen_geom::{FillRule, PathData, Rect};
 use serde_json::{Value, json};
-use vectorcraft_color::{Color, Paint};
-use vectorcraft_doc::{Appearance, NodeKind};
-use vectorcraft_geom::{FillRule, PathData, Rect};
 
 use super::*;
 
@@ -22,7 +22,7 @@ fn ids(v: &Value) -> Vec<NodeId> {
     v["ids"].as_array().unwrap().iter().map(|x| NodeId(x.as_u64().unwrap())).collect()
 }
 
-fn node(s: &Session, id: NodeId) -> vectorcraft_doc::Node {
+fn node(s: &Session, id: NodeId) -> livipen_doc::Node {
     s.doc().unwrap().doc.node(id).cloned().unwrap()
 }
 
@@ -39,7 +39,7 @@ fn path_of(s: &Session, id: NodeId) -> (PathData, FillRule) {
 
 fn area_of(s: &Session, id: NodeId) -> f64 {
     let (p, r) = path_of(s, id);
-    vectorcraft_pathops::area(&p, r)
+    livipen_pathops::area(&p, r)
 }
 
 fn bounds(s: &Session, id: NodeId) -> Rect {
@@ -267,7 +267,7 @@ fn name_sources(s: &mut Session, a: NodeId, b: NodeId, names: [Option<&str>; 2])
     .unwrap();
 }
 
-fn named_nodes<'a>(n: &'a vectorcraft_doc::Node, name: &str, out: &mut Vec<&'a vectorcraft_doc::Node>) {
+fn named_nodes<'a>(n: &'a livipen_doc::Node, name: &str, out: &mut Vec<&'a livipen_doc::Node>) {
     if n.name.as_deref() == Some(name) {
         out.push(n);
     }
@@ -279,9 +279,9 @@ fn named_nodes<'a>(n: &'a vectorcraft_doc::Node, name: &str, out: &mut Vec<&'a v
 }
 
 fn check_svg_name(s: &Session, id: NodeId, name: &str) {
-    let svg = vectorcraft_svg::export(&s.doc().unwrap().doc, &Default::default());
+    let svg = livipen_svg::export(&s.doc().unwrap().doc, &Default::default());
     assert_eq!(svg.matches(&format!("id=\"{name}\"")).count(), 1, "{svg}");
-    let imported = vectorcraft_svg::import(&svg).unwrap();
+    let imported = livipen_svg::import(&svg).unwrap();
     let mut matches = vec![];
     for layer in &imported.layers {
         named_nodes(layer, name, &mut matches);
@@ -301,7 +301,7 @@ fn pathfinder_shape_names_follow_paint_order_without_changing_output_or_undo() {
         s.edit("Source opacity and blend", |d, _| {
             d.node_mut(a).unwrap().opacity = 0.4;
             d.node_mut(b).unwrap().opacity = 0.8;
-            d.node_mut(b).unwrap().blend = vectorcraft_color::BlendMode::Multiply;
+            d.node_mut(b).unwrap().blend = livipen_color::BlendMode::Multiply;
             Ok(())
         })
         .unwrap();
@@ -529,10 +529,10 @@ fn auto_simplify_keeps_the_shape_within_a_400th_of_its_size() {
     let result = path_of(&s, id).0.clone();
     assert!(result.anchor_count() < original.anchor_count() / 2, "{}", result.anchor_count());
     // How far each point along the original lies from the nearest point of the result.
-    use vectorcraft_geom::ParamCurve;
-    use vectorcraft_geom::kurbo::ParamCurveNearest;
+    use livipen_geom::ParamCurve;
+    use livipen_geom::kurbo::ParamCurveNearest;
     let fitted = &result.subpaths[0];
-    let off = |p: vectorcraft_geom::Point| {
+    let off = |p: livipen_geom::Point| {
         (0..fitted.segment_count()).map(|i| fitted.segment(i).nearest(p, 1e-9).distance_sq.sqrt()).fold(f64::INFINITY, f64::min)
     };
     let sp = &original.subpaths[0];
@@ -625,7 +625,7 @@ fn simplify_refreshes_changed_path_selection_and_undo() {
     let kept = NodeId(s.execute("path.create", &json!({"anchors": [{"x": 350, "y": 180}]})).unwrap()["id"].as_u64().unwrap());
     let unrelated = rect(&mut s, 400.0, 200.0, 40.0, 30.0);
     s.edit("selection fixture", |d, sel| {
-        d.guides.push(vectorcraft_doc::Guide::new(true, 30.0));
+        d.guides.push(livipen_doc::Guide::new(true, 30.0));
         sel.set([kept, id]);
         sel.anchors.insert(id, [(0, 19)].into_iter().collect());
         sel.anchors.insert(kept, [(0, 0)].into_iter().collect());
@@ -857,8 +857,8 @@ fn create_outlines_matches_text_bounds() {
 #[test]
 fn create_outlines_turns_bitmap_glyphs_into_images() {
     let _fonts = crate::adding_fonts();
-    use vectorcraft_text::test_fonts::{COLOUR_CHAR, colour_bitmap_family, colour_bitmap_font};
-    vectorcraft_text::FontDb::global().add_font(colour_bitmap_font(false).unwrap());
+    use livipen_text::test_fonts::{COLOUR_CHAR, colour_bitmap_family, colour_bitmap_font};
+    livipen_text::FontDb::global().add_font(colour_bitmap_font(false).unwrap());
     let mut s = session();
     let r = s
         .execute(
@@ -888,12 +888,12 @@ fn create_outlines_turns_bitmap_glyphs_into_images() {
 #[test]
 fn create_outlines_keeps_an_image_already_under_a_glyph_images_key() {
     let _fonts = crate::adding_fonts();
-    use vectorcraft_text::test_fonts::{COLOUR_CHAR, COLOUR_LARGE, COLOUR_PPEM, colour_bitmap_family, colour_bitmap_font, solid_png};
-    vectorcraft_text::FontDb::global().add_font(colour_bitmap_font(false).unwrap());
+    use livipen_text::test_fonts::{COLOUR_CHAR, COLOUR_LARGE, COLOUR_PPEM, colour_bitmap_family, colour_bitmap_font, solid_png};
+    livipen_text::FontDb::global().add_font(colour_bitmap_font(false).unwrap());
     let mut s = session();
-    let glyph = vectorcraft_doc::ImageBlob::png(solid_png(COLOUR_PPEM.into(), COLOUR_LARGE));
+    let glyph = livipen_doc::ImageBlob::png(solid_png(COLOUR_PPEM.into(), COLOUR_LARGE));
     let taken = glyph.content_key();
-    let other = vectorcraft_doc::ImageBlob::png(solid_png(4, [0, 255, 0, 255]));
+    let other = livipen_doc::ImageBlob::png(solid_png(4, [0, 255, 0, 255]));
     std::sync::Arc::make_mut(&mut s.doc_mut().unwrap().doc).images.insert(taken.clone(), other.clone());
     s.execute("text.create", &json!({"x": 10, "y": 50, "text": COLOUR_CHAR.to_string(), "size": 32, "font": colour_bitmap_family(false)})).unwrap();
     let r = ids(&s.execute("type.createOutlines", &json!({})).unwrap());
@@ -915,7 +915,7 @@ fn set_style_size_changes_bounds() {
     assert!(b1.width() > b0.width() * 1.8, "{b0:?} → {b1:?}");
     let NodeKind::Text(tx) = node(&s, t).kind else { panic!() };
     assert_eq!(tx.first_style().size, 24.0);
-    assert_eq!(tx.para.justify, vectorcraft_doc::Justify::Center);
+    assert_eq!(tx.para.justify, livipen_doc::Justify::Center);
     assert_eq!(tx.first_style().fill, Paint::solid(Color::rgb(1.0, 0.0, 0.0)));
     assert!(s.execute("text.setStyle", &json!({"justify": "diagonal"})).is_err());
     assert!(s.execute("text.setStyle", &json!({})).is_err());
@@ -965,13 +965,13 @@ fn divide_cutting_lines_keep_appearance_unrelated_art_and_one_undo() {
             let n = d.node_mut(base).unwrap();
             n.appearance = Appearance::basic(Paint::solid(Color::rgb(0.2, 0.5, 0.7)), Paint::solid(Color::BLACK), 3.0).into();
             n.opacity = 0.65;
-            n.blend = vectorcraft_color::BlendMode::Multiply;
+            n.blend = livipen_color::BlendMode::Multiply;
             let n = d.node_mut(cutter).unwrap();
             n.appearance =
                 Appearance::basic(if line_has_fill { Paint::solid(Color::BLACK) } else { Paint::None }, Paint::solid(Color::rgb(0.8, 0.2, 0.1)), 2.0)
                     .into();
             if curved {
-                let mut bp = vectorcraft_geom::BezPath::new();
+                let mut bp = livipen_geom::BezPath::new();
                 bp.move_to((-10.0, 50.0));
                 bp.curve_to((30.0, 15.0), (70.0, 85.0), (110.0, 50.0));
                 n.kind = NodeKind::Path { path: PathData::from_bezpath(&bp), rule: FillRule::NonZero, live: None, clipping: false, guide: false };
@@ -1019,7 +1019,7 @@ fn divide_keeps_implicitly_closed_filled_paths_including_zero_signed_area() {
         s.edit("open fill fixture", |d, sel| {
             let mut appearance = Appearance::basic(Paint::solid(Color::rgb(0.1, 0.7, 0.2)), Paint::None, 0.0);
             // An empty top fill must not hide the nonempty fill below it.
-            appearance.items.insert(0, vectorcraft_doc::AppearanceItem::Fill(vectorcraft_doc::FillLayer::new(Paint::None)));
+            appearance.items.insert(0, livipen_doc::AppearanceItem::Fill(livipen_doc::FillLayer::new(Paint::None)));
             d.node_mut(filled).unwrap().appearance = appearance.into();
             d.node_mut(cutter).unwrap().appearance = Appearance::basic(Paint::None, Paint::solid(Color::BLACK), 1.0).into();
             sel.set([cutter, filled]);
@@ -1081,8 +1081,8 @@ fn offset_path_that_leaves_nothing_says_so() {
 #[test]
 fn create_outlines_turns_colr_glyphs_into_layer_groups() {
     let _fonts = crate::adding_fonts();
-    use vectorcraft_text::test_fonts::{COLOUR_CHAR, colr_family, colr_font};
-    vectorcraft_text::FontDb::global().add_font(colr_font(true).unwrap());
+    use livipen_text::test_fonts::{COLOUR_CHAR, colr_family, colr_font};
+    livipen_text::FontDb::global().add_font(colr_font(true).unwrap());
     let mut s = session();
     s.execute("text.create", &json!({"x": 10, "y": 50, "text": format!("{COLOUR_CHAR}F"), "size": 32, "font": colr_family(true)})).unwrap();
     let r = ids(&s.execute("type.createOutlines", &json!({})).unwrap());
@@ -1092,8 +1092,8 @@ fn create_outlines_turns_colr_glyphs_into_layer_groups() {
     assert!(matches!(ch[1].kind, NodeKind::Path { .. } | NodeKind::Compound { .. }), "the `F` an outline");
     let mut nodes = vec![];
     ch[0].walk(&mut |n| nodes.push((n.id, n.blend, n.appearance.fill_paint())));
-    assert!(nodes.iter().any(|(_, _, p)| matches!(p, vectorcraft_color::Paint::Gradient(_))), "its gradients");
-    assert!(nodes.iter().any(|(_, b, _)| *b == vectorcraft_color::BlendMode::Multiply), "its multiply");
+    assert!(nodes.iter().any(|(_, _, p)| matches!(p, livipen_color::Paint::Gradient(_))), "its gradients");
+    assert!(nodes.iter().any(|(_, b, _)| *b == livipen_color::BlendMode::Multiply), "its multiply");
     let d = &s.doc().unwrap().doc;
     let mut seen = std::collections::HashSet::new();
     assert!(nodes.iter().all(|(id, ..)| d.node(*id).is_some() && seen.insert(*id)), "ids of the document's, each once");

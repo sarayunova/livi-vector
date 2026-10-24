@@ -3,13 +3,13 @@
 use std::ops::Range;
 
 use kurbo::{Affine, BezPath, PathEl, Point, Rect, Shape, Vec2};
-use unicode_bidi::{BidiInfo, Level};
-use vectorcraft_doc::text::Kashida;
-use vectorcraft_doc::{
+use livipen_doc::text::Kashida;
+use livipen_doc::{
     Burasagari, CharStyle, HyphenationOptions, InlineArt, Justify, Kinsoku, LeadingModel, Mojikumi, ParaDirection, ParaStyle, PathAlign, PathEffect,
     RubyAlign, RubyPosition, SingleWordJustify, TextKind, TextObject,
 };
-use vectorcraft_geom::{ArcPath, PathData};
+use livipen_geom::{ArcPath, PathData};
+use unicode_bidi::{BidiInfo, Level};
 
 use crate::composer::{Breakpoint, Params, compose};
 use crate::fontdb::FontDb;
@@ -118,7 +118,7 @@ impl Ctx<'_> {
     /// [`list_markers`]) of list paragraph `pr` (attributes `para`, right to left when `rtl`)
     /// before its glyphs `sg` and return how many glyphs went in (none for a paragraph without a
     /// marker). The marker's characters are set in
-    /// [`vectorcraft_doc::text::ParaList::marker_style`], and a tab after them takes the text to
+    /// [`livipen_doc::text::ParaList::marker_style`], and a tab after them takes the text to
     /// the next tab stop past them on the first line, the left indent counting as a stop when no
     /// explicit stop comes before it. In a horizontal right-to-left paragraph, whose indents are
     /// mirrored ([`line_indents`]), these are measured from the right, and a number reads left to
@@ -127,7 +127,7 @@ impl Ctx<'_> {
     /// paragraph's first byte, in its first character's run, at the paragraph's embedding level.
     fn prepend_marker(&self, pr: &Range<usize>, para: &ParaStyle, text: Option<&str>, rtl: bool, sg: &mut Vec<SGlyph>) -> usize {
         let Some(text) = text.filter(|_| para.list.is_some() && !pr.is_empty()) else { return 0 };
-        let st = vectorcraft_doc::text::ParaList::marker_style(self.style_at(pr.start));
+        let st = livipen_doc::text::ParaList::marker_style(self.style_at(pr.start));
         let Some(run) = self.runs.iter().position(|(r, _)| r.start <= pr.start && pr.start < r.end) else { return 0 };
         // The paragraph's direction: the marker starts a right-to-left paragraph at its right.
         let level = if rtl { Level::rtl() } else { Level::ltr() };
@@ -171,12 +171,12 @@ impl Ctx<'_> {
         // Art in the text's colours takes the run's fill (black when it isn't a colour) and
         // stroke.
         let plain = g.inline.is_some() || blank;
-        let colour_of = |p: &vectorcraft_doc::color::Paint| match p {
-            vectorcraft_doc::color::Paint::Solid { color, .. } => Some(*color),
+        let colour_of = |p: &livipen_doc::color::Paint| match p {
+            livipen_doc::color::Paint::Solid { color, .. } => Some(*color),
             _ => None,
         };
         let st = self.style_at(g.byte);
-        let foreground = colour_of(&st.fill).unwrap_or(vectorcraft_doc::color::Color::BLACK);
+        let foreground = colour_of(&st.fill).unwrap_or(livipen_doc::color::Color::BLACK);
         let stroke = colour_of(&st.stroke).filter(|_| st.has_stroke());
         let (colour, image) = match (!plain).then(|| self.db.glyph_colour(&g.face, g.gid, foreground, stroke)).flatten() {
             Some(crate::colr::ColourContent::Art(art)) => (Some(art), None),
@@ -524,8 +524,8 @@ fn layout_once(db: &FontDb, t: &TextObject, opts: &LayoutOptions) -> TextLayout 
         TextKind::Point => flow(&mut cx, &paras, t, None),
         TextKind::Area { frame } => {
             let to_lines = line_xf.inverse();
-            let wrap: Vec<vectorcraft_doc::WrapShape> = if vertical {
-                t.wrap.iter().map(|w| vectorcraft_doc::WrapShape { path: w.path.transformed(to_lines), ..w.clone() }).collect()
+            let wrap: Vec<livipen_doc::WrapShape> = if vertical {
+                t.wrap.iter().map(|w| livipen_doc::WrapShape { path: w.path.transformed(to_lines), ..w.clone() }).collect()
             } else {
                 t.wrap.clone()
             };
@@ -741,8 +741,8 @@ fn glyph_em(g: &SGlyph) -> f64 {
 /// An inline graphic has its run's em (whatever its scale): it counts as one of the line's
 /// largest characters only when its run's size is, and moves with the text of its run (its art
 /// stays centred on that text's cap height).
-fn align_shift(g: &SGlyph, a: vectorcraft_doc::CharAlign, line_em: f64, vertical: bool) -> f64 {
-    use vectorcraft_doc::CharAlign;
+fn align_shift(g: &SGlyph, a: livipen_doc::CharAlign, line_em: f64, vertical: bool) -> f64 {
+    use livipen_doc::CharAlign;
     let icf = || g.face.icf_margins();
     let k = match a {
         CharAlign::RomanBaseline => return 0.0,
@@ -1094,7 +1094,7 @@ fn intersect_intervals(a: &[(f64, f64)], b: &[(f64, f64)]) -> Vec<(f64, f64)> {
 }
 
 impl Region {
-    fn cells(path: &BezPath, opts: &LayoutOptions, wrap: &[vectorcraft_doc::WrapShape]) -> Vec<Region> {
+    fn cells(path: &BezPath, opts: &LayoutOptions, wrap: &[livipen_doc::WrapShape]) -> Vec<Region> {
         // A frame out of range has no cells, and a wrap shape out of range is left out.
         let Some(polys) = polygons(path) else { return vec![] };
         // Every cell shares one copy of the frame's polygons and one copy of the text wrap shapes.
@@ -1109,7 +1109,7 @@ impl Region {
             let area: f64 = polys[0].iter().zip(polys[0].iter().cycle().skip(1)).map(|(a, b)| a.x * b.y - b.x * a.y).sum::<f64>().abs() * 0.5;
             (area - bbox.area()).abs() <= bbox.area() * 1e-6 + 1e-9
         };
-        let max = vectorcraft_doc::AreaOptions::MAX_ROWS_COLUMNS;
+        let max = livipen_doc::AreaOptions::MAX_ROWS_COLUMNS;
         let (rows, cols) = (opts.rows.clamp(1, max), opts.columns.clamp(1, max));
         let gutter = opts.gutter.max(0.0);
         let cw = ((bbox.width() - gutter * (cols - 1) as f64) / cols as f64).max(0.0);
@@ -1199,7 +1199,7 @@ impl Region {
 fn the_cells_of_a_frame_share_its_polygons_and_the_wrap_shapes() {
     let frame = kurbo::Circle::new((0.0, 0.0), 1000.0).to_path(0.1);
     let square = PathData::from_bezpath(&Rect::new(-10.0, -10.0, 10.0, 10.0).to_path(0.1));
-    let wrap = vectorcraft_doc::WrapShape { path: square, wrap: Default::default() };
+    let wrap = livipen_doc::WrapShape { path: square, wrap: Default::default() };
     let cells = Region::cells(&frame, &LayoutOptions { rows: 100, columns: 100, ..LayoutOptions::default() }, &[wrap]);
     assert_eq!(cells.len(), 10_000);
     let first = &cells[0];
@@ -1369,8 +1369,8 @@ impl Pen<'_> {
 /// Advance of a tab at pen position `x`: up to the next stop after it (explicit stops first, then
 /// every ½ inch), and the leader of that stop (default stops have none). Right, centre and decimal
 /// stops align the text that follows (`rest`, up to the next tab) on the stop.
-fn tab_advance<'t>(tabs: &'t [vectorcraft_doc::TabStop], origin: f64, x: f64, rest: &[SGlyph]) -> (f64, &'t str) {
-    use vectorcraft_doc::TabAlign;
+fn tab_advance<'t>(tabs: &'t [livipen_doc::TabStop], origin: f64, x: f64, rest: &[SGlyph]) -> (f64, &'t str) {
+    use livipen_doc::TabAlign;
     let rel = x - origin;
     let seg: Vec<&SGlyph> = rest.iter().take_while(|g| g.ch != '\t').collect();
     let width: f64 = seg.iter().map(|g| g.adv).sum();
@@ -1387,7 +1387,7 @@ fn tab_advance<'t>(tabs: &'t [vectorcraft_doc::TabStop], origin: f64, x: f64, re
     let (at, leader) = explicit.unwrap_or_else(|| {
         let last = tabs.iter().map(|t| t.position).fold(0.0, f64::max).max(0.0);
         let base = rel.max(last);
-        (((base / vectorcraft_doc::text::DEFAULT_TAB_INTERVAL).floor() + 1.0) * vectorcraft_doc::text::DEFAULT_TAB_INTERVAL, "")
+        (((base / livipen_doc::text::DEFAULT_TAB_INTERVAL).floor() + 1.0) * livipen_doc::text::DEFAULT_TAB_INTERVAL, "")
     });
     ((at - rel).max(0.0), leader)
 }
@@ -1395,7 +1395,7 @@ fn tab_advance<'t>(tabs: &'t [vectorcraft_doc::TabStop], origin: f64, x: f64, re
 /// The width of glyphs `from..to` of `sg` set on a line whose content starts `x_start` from the
 /// tab origin: tabs of the text take what [`tab_advance`] gives them, not the width of their
 /// glyph. The tab after a list marker (length 0) keeps its own width.
-fn set_width(sg: &[SGlyph], from: usize, to: usize, tabs: &[vectorcraft_doc::TabStop], x_start: f64) -> f64 {
+fn set_width(sg: &[SGlyph], from: usize, to: usize, tabs: &[livipen_doc::TabStop], x_start: f64) -> f64 {
     let mut x = x_start;
     for (j, g) in sg.iter().enumerate().take(to).skip(from) {
         x += if g.ch == '\t' && g.len > 0 { tab_advance(tabs, 0.0, x, sg.get(j + 1..to).unwrap_or_default()).0 } else { g.adv };
@@ -1478,7 +1478,7 @@ fn break_line(
     g: &[SGlyph],
     i: usize,
     width: f64,
-    tabs: &[vectorcraft_doc::TabStop],
+    tabs: &[livipen_doc::TabStop],
     x_start: f64,
     hyphenate: Option<(&HyphenationOptions, f64)>,
     burasagari: Burasagari,
@@ -1595,7 +1595,7 @@ fn hangs(g: &SGlyph) -> bool {
 /// `g` starts or ends a line. Quotation marks, hyphens, full stops and commas hang whole, and
 /// asterisks, tildes, ellipses, en and em dashes, colons and semicolons hang by half (the amounts
 /// published for Roman Hanging Punctuation). A, V, W, Y, v, w and y hang by a tenth of their
-/// advance, VectorCraft's own amount for their slanted sides. Other characters, East Asian
+/// advance, Livi Pen's own amount for their slanted sides. Other characters, East Asian
 /// punctuation (which burasagari hangs) and inline graphics don't hang.
 fn optical_share(g: &SGlyph) -> f64 {
     if g.inline.is_some() || g.tcy.is_some() {
@@ -2034,10 +2034,10 @@ fn compose_para(
 
 /// The list marker of each of the paragraphs `paras` of `t` (None for none): bullets, and numbers
 /// counted through consecutive list paragraphs from [`TextObject::list_count`], as
-/// [`vectorcraft_doc::text::ParaList::next_marker`] counts them.
+/// [`livipen_doc::text::ParaList::next_marker`] counts them.
 fn list_markers(t: &TextObject, paras: &[Range<usize>]) -> Vec<Option<String>> {
     let mut count = t.list_count;
-    paras.iter().enumerate().map(|(pi, pr)| vectorcraft_doc::text::ParaList::next_marker(t.para_at(pi).list, pr.is_empty(), &mut count)).collect()
+    paras.iter().enumerate().map(|(pi, pr)| livipen_doc::text::ParaList::next_marker(t.para_at(pi).list, pr.is_empty(), &mut count)).collect()
 }
 
 /// Whether paragraph `para` (right to left when `rtl`) has its indents mirrored: a horizontal
@@ -2107,7 +2107,7 @@ fn flow(cx: &mut Ctx<'_>, paras: &[Range<usize>], t: &TextObject, regions: Optio
         }
         // …and Auto Leading: characters whose leading is Auto take this paragraph's share of their size.
         let auto_leading = |st: &CharStyle| st.leading.unwrap_or_else(|| para.justification.auto_leading_for(st.size));
-        if para.justification.auto_leading != vectorcraft_doc::JustificationOptions::default().auto_leading {
+        if para.justification.auto_leading != livipen_doc::JustificationOptions::default().auto_leading {
             for g in sg.iter_mut().filter(|g| g.inline.is_none()) {
                 g.leading = auto_leading(cx.style_at(g.byte));
             }

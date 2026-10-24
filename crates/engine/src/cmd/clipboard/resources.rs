@@ -16,10 +16,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
+use livipen_brush::Brush;
+use livipen_color::{Color, Paint, Swatch};
+use livipen_doc::{Appearance, AppearanceItem, Document, GraphicStyle, Node, NodeKind, PatternDef, Symbol, TextStyleDef};
 use serde_json::{Map, Value, json};
-use vectorcraft_brush::Brush;
-use vectorcraft_color::{Color, Paint, Swatch};
-use vectorcraft_doc::{Appearance, AppearanceItem, Document, GraphicStyle, Node, NodeKind, PatternDef, Symbol, TextStyleDef};
 
 use super::super::patterncmds::add_pattern;
 use super::super::{Result, bad, unique_name};
@@ -504,7 +504,7 @@ impl Clipboard {
         let used = Used::of(&Defs::of(src), &nodes);
         let pick = |r: Res, list: &[TextStyleDef]| list.iter().filter(|s| used.has(r, &s.name)).cloned().collect::<Vec<_>>();
         let brushes = match used.names.get(&Res::Brush) {
-            Some(names) => vectorcraft_brush::library(src).into_iter().filter(|b| names.contains(&b.name)).collect(),
+            Some(names) => livipen_brush::library(src).into_iter().filter(|b| names.contains(&b.name)).collect(),
             None => vec![],
         };
         Self {
@@ -612,14 +612,14 @@ impl Clipboard {
         if brushes.is_empty() {
             return;
         }
-        let mut lib = vectorcraft_brush::library(d);
+        let mut lib = livipen_brush::library(d);
         let before = lib.len();
         for b in brushes {
             let p = place(&mut lib, b, same_doc, PartialEq::eq);
             out.placed(Res::Brush, &b.name, &p);
         }
         if lib.len() != before {
-            vectorcraft_brush::store(d, &lib);
+            livipen_brush::store(d, &lib);
         }
     }
 

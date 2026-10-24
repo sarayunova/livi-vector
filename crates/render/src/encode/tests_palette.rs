@@ -1,6 +1,6 @@
-use vectorcraft_color::{Color, Paint};
-use vectorcraft_doc::{Appearance, Node};
-use vectorcraft_geom::shapes;
+use livipen_color::{Color, Paint};
+use livipen_doc::{Appearance, Node};
+use livipen_geom::shapes;
 
 use super::png::{PngOptions, encode_indexed};
 use super::quantize::{Dither, Indexed, PaletteOptions, Reduction, quantize};

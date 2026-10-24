@@ -2,9 +2,9 @@
 //! count as similar, and edits made to one of them reaching the others in proportion, as one undo
 //! step. Behaviour: <https://helpx.adobe.com/illustrator/desktop/manage-objects/edit-objects/edit-similar-objects.html>.
 
+use livipen_doc::{Node, NodeKind};
+use livipen_geom::{Affine, PathData, Rect};
 use serde_json::{Value, json};
-use vectorcraft_doc::{Node, NodeKind};
-use vectorcraft_geom::{Affine, PathData, Rect};
 
 use super::*;
 

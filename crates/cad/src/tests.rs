@@ -2,9 +2,9 @@
 
 use std::sync::Arc;
 
-use vectorcraft_color::{Color, Paint};
-use vectorcraft_doc::{Appearance, CharStyle, Dash, Document, ImageBlob, ImageObject, Node, NodeKind, TextObject, Unit};
-use vectorcraft_geom::{Affine, PathData, Point, Rect, shapes};
+use livipen_color::{Color, Paint};
+use livipen_doc::{Appearance, CharStyle, Dash, Document, ImageBlob, ImageObject, Node, NodeKind, TextObject, Unit};
+use livipen_geom::{Affine, PathData, Point, Rect, shapes};
 
 use crate::*;
 
@@ -192,7 +192,7 @@ fn circles_and_circular_arcs_are_native_dxf_entities() {
         let c = Point::new(120.0, 50.0);
         let r = 30.0;
         let k = r * shapes::KAPPA;
-        let mut arc = vectorcraft_geom::BezPath::new();
+        let mut arc = livipen_geom::BezPath::new();
         arc.move_to(Point::new(c.x + r, c.y));
         arc.curve_to(Point::new(c.x + r, c.y - k), Point::new(c.x + k, c.y - r), Point::new(c.x, c.y - r));
         vec![
@@ -230,7 +230,7 @@ fn closed_circular_arc_with_a_closing_chord_is_not_a_circle() {
         let c = Point::new(50.0, 50.0);
         let r = 30.0;
         let k = r * shapes::KAPPA;
-        let mut arc = vectorcraft_geom::BezPath::new();
+        let mut arc = livipen_geom::BezPath::new();
         arc.move_to(Point::new(c.x + r, c.y));
         arc.curve_to(Point::new(c.x + r, c.y - k), Point::new(c.x + k, c.y - r), Point::new(c.x, c.y - r));
         arc.curve_to(Point::new(c.x - k, c.y - r), Point::new(c.x - r, c.y - k), Point::new(c.x - r, c.y));
@@ -419,7 +419,7 @@ fn alter_paths_writes_strokes_as_filled_outlines() {
     let mut d = shapes_doc();
     let rect = d.layers[0].children().and_then(|c| c.first()).map(|n| n.id).unwrap();
     if let Some(st) = d.node_mut(rect).and_then(|n| n.appearance.stroke_mut()) {
-        st.align = vectorcraft_doc::StrokeAlign::Outside;
+        st.align = livipen_doc::StrokeAlign::Outside;
     }
     assert_eq!(kinds(&export(&d, &opts(&d)).unwrap()), [&fill[..], &rect_stroke, &["CIRCLE"]].concat());
     let editable = export(&d, &DxfOptions { preserve: Preserve::Editability, ..opts(&d) }).unwrap();
@@ -463,7 +463,7 @@ fn a_bullet_is_text_of_its_own_before_its_paragraph() {
     let mut d = text_doc("Item", 20.0);
     let id = d.layers[0].children().unwrap()[0].id;
     if let Some(NodeKind::Text(t)) = d.node_mut(id).map(|n| &mut n.kind) {
-        t.para.list = Some(vectorcraft_doc::text::ParaList::bulleted(vectorcraft_doc::text::Bullet::Dot));
+        t.para.list = Some(livipen_doc::text::ParaList::bulleted(livipen_doc::text::Bullet::Dot));
         t.para.left_indent = 18.0;
         t.para.first_line_indent = -18.0;
     }
@@ -478,8 +478,8 @@ fn a_bullet_is_text_of_its_own_before_its_paragraph() {
     let id = d.layers[0].children().unwrap()[0].id;
     let mut bullet_x = f64::NAN;
     if let Some(NodeKind::Text(t)) = d.node_mut(id).map(|n| &mut n.kind) {
-        t.para.list = Some(vectorcraft_doc::text::ParaList::bulleted(vectorcraft_doc::text::Bullet::Dot));
-        let lay = vectorcraft_text::layout(vectorcraft_text::FontDb::global(), t);
+        t.para.list = Some(livipen_doc::text::ParaList::bulleted(livipen_doc::text::Bullet::Dot));
+        let lay = livipen_text::layout(livipen_text::FontDb::global(), t);
         let m = &lay.markers[0];
         let bullet = m.glyphs.clone().find(|&i| i != m.tab).unwrap();
         assert!(lay.glyphs[m.tab].origin.x < lay.glyphs[bullet].origin.x, "the tab before the bullet");
@@ -497,7 +497,7 @@ fn a_bullet_is_text_of_its_own_before_its_paragraph() {
 /// number's left.
 #[test]
 fn a_number_is_text_of_its_own_before_its_paragraph() {
-    use vectorcraft_doc::text::{NumberStyle, ParaList};
+    use livipen_doc::text::{NumberStyle, ParaList};
     let numbered = |text: &str, count: u32| {
         let mut d = text_doc(text, 20.0);
         let id = d.layers[0].children().unwrap()[0].id;
@@ -523,9 +523,9 @@ fn shrunk_area_type_is_text_at_the_size_it_draws_at() {
     let id = d.layers[0].children().unwrap()[0].id;
     let mut fit = 1.0;
     if let Some(NodeKind::Text(t)) = d.node_mut(id).map(|n| &mut n.kind) {
-        t.kind = vectorcraft_doc::TextKind::Area { frame: shapes::rectangle(Rect::new(0.0, 0.0, 120.0, 30.0)) };
-        t.area.fit = vectorcraft_doc::AreaFit::ShrinkText { min_percent: 10.0 };
-        let lay = vectorcraft_text::layout(vectorcraft_text::FontDb::global(), t);
+        t.kind = livipen_doc::TextKind::Area { frame: shapes::rectangle(Rect::new(0.0, 0.0, 120.0, 30.0)) };
+        t.area.fit = livipen_doc::AreaFit::ShrinkText { min_percent: 10.0 };
+        let lay = livipen_text::layout(livipen_text::FontDb::global(), t);
         assert!(!lay.overflow && lay.fit_scale < 0.9, "the text is shrunk to fit: {}", lay.fit_scale);
         fit = lay.fit_scale;
     }
@@ -628,7 +628,7 @@ fn crop_keeps_an_instance_whose_art_reaches_the_region() {
     // while the 20 × 20 square around the origin, moved to (-60, -60) to (-40, -40), is off it.
     let mut d = doc_with(|d| vec![Node::new(d.alloc_id(), NodeKind::SymbolInstance { symbol: "Far".into(), xf: Affine::translate((-50.0, -50.0)) })]);
     let art = path(&mut d, shapes::rectangle(Rect::new(100.0, 50.0, 140.0, 90.0)), Paint::solid(Color::rgb(1.0, 0.0, 0.0)), Paint::None, 0.0);
-    d.symbols.push(vectorcraft_doc::Symbol { name: "Far".into(), art: Arc::new(art) });
+    d.symbols.push(livipen_doc::Symbol { name: "Far".into(), art: Arc::new(art) });
     let o = DxfOptions { crop: true, ..opts(&d) };
     assert!(!kinds(&export(&d, &o).unwrap()).is_empty());
 }

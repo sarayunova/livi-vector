@@ -3,12 +3,12 @@
 
 use std::sync::Arc;
 
-use vectorcraft_color::Color;
-use vectorcraft_color::cms::{self, Cms, Model, ProfileKind};
-use vectorcraft_color::swatch::REGISTRATION;
-use vectorcraft_doc::inks::{Link, inks, plates, visit_node_colors};
-use vectorcraft_doc::overprint::darken_overprints;
-use vectorcraft_doc::{ColorMode, Document, Node};
+use livipen_color::Color;
+use livipen_color::cms::{self, Cms, Model, ProfileKind};
+use livipen_color::swatch::REGISTRATION;
+use livipen_doc::inks::{Link, inks, plates, visit_node_colors};
+use livipen_doc::overprint::darken_overprints;
+use livipen_doc::{ColorMode, Document, Node};
 
 use super::{DEFAULT_FREQUENCY, PrintInk, PrintSettings};
 

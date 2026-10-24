@@ -2,19 +2,19 @@
 
 > **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-24 · **Change:** minor (pen pressure and the pen's eraser end on macOS, read from AppKit's tablet events, #852, not yet tried on a Mac; previously: patch: web pen buttons/modifiers preserved, touch-only input left to eframe, session-only palm rejection; tool cursors painted into the window on Wayland, #1652, not run on Linux; borderless title-bar window on Windows, #1758, awaiting confirmation; a window surface larger than 8192 px keeps working, #1459 in part; Linux Display Server preference opens the window through XWayland, #1151) · **Target:** Adobe Illustrator 2026 (30.x)
 
-What hardware Illustrator uses, per platform, against VectorCraft. Illustrator's side is from its public
+What hardware Illustrator uses, per platform, against Livi Pen. Illustrator's side is from its public
 documentation (GPU Performance, touch workspace, pen pressure pages); ours from the code
 (`crates/ui-egui/src/canvas.rs`, `touch.rs`, `graphics.rs`, `crates/render`). Part of
 [target-app-parity.md](target-app-parity.md).
 
 ## Summary
 
-**~35% (estimated), 25–45 h.** VectorCraft rasterizes the canvas on the CPU (multithreaded `vello_cpu`) and uses
+**~35% (estimated), 25–45 h.** Livi Pen rasterizes the canvas on the CPU (multithreaded `vello_cpu`) and uses
 the GPU only to composite, so any GPU that can show a window works, at the cost of GPU-accelerated preview
-on huge documents. VectorCraft reads pen pressure on Windows, on the web, on macOS, and on Linux under X11 and XWayland, and it
+on huge documents. Livi Pen reads pen pressure on Windows, on the web, on macOS, and on Linux under X11 and XWayland, and it
 reads the pen's eraser end on macOS and on Linux under X11 and XWayland.
 
-| Feature | Illustrator | VectorCraft macOS | Windows | Linux | Web | Status / hours |
+| Feature | Illustrator | Livi Pen macOS | Windows | Linux | Web | Status / hours |
 |---|---|---|---|---|---|---|
 | GPU-accelerated canvas (GPU Performance, GPU Preview, GPU anti-aliasing) | Metal, DirectX | CPU raster, GPU composite (wgpu/Metal) | CPU raster, GPU composite (DX12, OpenGL fallback) | CPU raster, GPU composite (Vulkan/GL) | WebGPU, WebGL2 fallback | partial; a GPU renderer spike is pending (M5): 15–25 h |
 | Multithreaded rendering off the UI thread | partial | yes | yes | yes | single-threaded | beyond Illustrator |

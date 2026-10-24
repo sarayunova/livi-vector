@@ -1,18 +1,17 @@
 //! The font menus list the installed fonts without asking for them (#36).
 
+use livipen_engine::Session;
+use livipen_text::{FontDb, system_font_dirs};
 use serde_json::json;
-use vectorcraft_engine::Session;
-use vectorcraft_text::{FontDb, system_font_dirs};
 
-use crate::{VectorcraftApp, menus};
+use crate::{LiviPenApp, menus};
 
 #[test]
 fn type_font_menu_lists_every_available_family() {
-    let mut app = VectorcraftApp::new(Session::new(), Default::default());
+    let mut app = LiviPenApp::new(Session::new(), Default::default());
     app.run("file.new", json!({})).unwrap();
-    let fonts = |app: &VectorcraftApp| -> Vec<String> {
-        menus::menu_entries(app).into_iter().filter(|e| e.path == ["Type", "Font"]).map(|e| e.label).collect()
-    };
+    let fonts =
+        |app: &LiviPenApp| -> Vec<String> { menus::menu_entries(app).into_iter().filter(|e| e.path == ["Type", "Font"]).map(|e| e.label).collect() };
     let labels = fonts(&app);
     assert_eq!(labels, *FontDb::global().menu_family_list());
     let installed = FontDb::with_font_dirs(system_font_dirs());
@@ -25,7 +24,7 @@ fn type_font_menu_lists_every_available_family() {
 
 #[test]
 fn the_character_panel_menu_refreshes_the_font_list() {
-    let mut app = VectorcraftApp::new(Session::new(), Default::default());
+    let mut app = LiviPenApp::new(Session::new(), Default::default());
     app.run("file.new", json!({})).unwrap();
     // The installed fonts are always listed: the menu offers to look for new ones instead.
     let text = crate::tests_labels::painted_text(&mut app, crate::panels::character::menu);

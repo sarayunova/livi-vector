@@ -1,11 +1,11 @@
 //! SVG `<text>` import fidelity: placement in the tree, type on a path, per-character positions,
 //! paints and the style cascade.
 
-use vectorcraft_color::{GradientKind, Paint};
-use vectorcraft_doc::{CharStyle, Document, Justify, Node, NodeKind, TextKind, TextObject};
-use vectorcraft_geom::{Point, Rect};
-use vectorcraft_svg::{import, import_with_report};
-use vectorcraft_text::{FontDb, layout};
+use livipen_color::{GradientKind, Paint};
+use livipen_doc::{CharStyle, Document, Justify, Node, NodeKind, TextKind, TextObject};
+use livipen_geom::{Point, Rect};
+use livipen_svg::{import, import_with_report};
+use livipen_text::{FontDb, layout};
 
 fn svg(body: &str) -> String {
     format!(r#"<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="400" height="300">{body}</svg>"#)
@@ -357,9 +357,9 @@ fn white_space_handling() {
 
 #[test]
 fn placeholder_ids_never_clash_with_the_files() {
-    let d = open(r#"<rect id="vectorcraft-text-0" width="5" height="5"/><text y="20">Safe</text>"#);
+    let d = open(r#"<rect id="livipen-text-0" width="5" height="5"/><text y="20">Safe</text>"#);
     assert_eq!(only_text(&d).plain_text(), "Safe");
-    assert_eq!(art(&d)[0].name.as_deref(), Some("vectorcraft-text-0"));
+    assert_eq!(art(&d)[0].name.as_deref(), Some("livipen-text-0"));
 }
 
 #[test]
@@ -371,7 +371,7 @@ fn linked_text_keeps_its_url_and_stroke_style() {
     assert_eq!(n.url(), Some("https://example.com/t"));
     let st = only_text(&d).first_style();
     assert!(close(st.stroke_width, 1.2, 1e-9), "{}", st.stroke_width);
-    assert_eq!(st.stroke_join, vectorcraft_doc::LineJoin::Round);
+    assert_eq!(st.stroke_join, livipen_doc::LineJoin::Round);
     assert_eq!(st.stroke_dash.as_ref().map(|d| d.pattern.clone()), Some(vec![2.0, 1.0]));
 }
 
@@ -539,7 +539,7 @@ fn gradients_on_scaled_text_stay_in_place() {
 /// The start of a type-on-a-path object's path and a point a little way along it, in document
 /// space.
 fn path_start(t: &TextObject) -> (Point, Point) {
-    use vectorcraft_geom::kurbo::{ParamCurve, PathEl};
+    use livipen_geom::kurbo::{ParamCurve, PathEl};
     let TextKind::OnPath { path, .. } = &t.kind else { panic!("{:?}", t.kind) };
     let mut bp = path.to_bezpath();
     bp.apply_affine(t.xf);

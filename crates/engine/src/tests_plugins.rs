@@ -2,23 +2,23 @@
 //! transactional), live-effect plug-ins in appearance stacks, and the `plugin.*` management
 //! commands.
 
+use livipen_color::{Color, Paint};
+use livipen_geom::{PathData, Point, SubPath};
+use livipen_plugins::wat as tpl;
 use serde_json::{Value, json};
-use vectorcraft_color::{Color, Paint};
-use vectorcraft_geom::{PathData, Point, SubPath};
-use vectorcraft_plugins::wat as tpl;
 
 use super::*;
 
 /// The example Desaturate plug-in (built from `crates/plugins/example`).
 const DESATURATE: &[u8] = include_bytes!("../../plugins/tests/fixtures/desaturate.wasm");
-const DESATURATE_ID: &str = "org.vectorcraft.example.desaturate";
+const DESATURATE_ID: &str = "com.livi-pen.liviverse.example.desaturate";
 
 fn run(s: &mut Session, cmd: &str, p: Value) -> Value {
     s.execute(cmd, &p).unwrap_or_else(|e| panic!("{cmd}: {e}"))
 }
 
 fn install(s: &mut Session, wasm: &[u8]) -> Value {
-    run(s, "plugin.install", json!({"dataBase64": vectorcraft_format::base64_encode(wasm)}))
+    run(s, "plugin.install", json!({"dataBase64": livipen_format::base64_encode(wasm)}))
 }
 
 fn install_wat(s: &mut Session, src: &str) -> Value {
@@ -39,7 +39,7 @@ fn rect(s: &mut Session, x: f64, fill: &str) -> NodeId {
     id
 }
 
-fn node(s: &Session, id: NodeId) -> vectorcraft_doc::Node {
+fn node(s: &Session, id: NodeId) -> livipen_doc::Node {
     s.doc().unwrap().doc.node(id).unwrap().clone()
 }
 
@@ -147,7 +147,7 @@ fn live_effect_plugins_reshape_editable_art_and_expand() {
         let n = node(s, a);
         let path = n.path_data().unwrap().clone();
         let b = path.bounds().unwrap();
-        vectorcraft_render::effects::apply_geometry(&n.appearance.effects, &path, b)
+        livipen_render::effects::apply_geometry(&n.appearance.effects, &path, b)
     };
     run(&mut s, "effect.apply", json!({"ids": [a.0], "effect": "plugin.test.engine.echo"}));
     assert_eq!(effected(&s), *node(&s, a).path_data().unwrap(), "identity");
@@ -193,15 +193,15 @@ fn live_effects_are_given_their_object_s_paints() {
     let effected = |s: &Session, item: Option<usize>| {
         let n = node(s, id);
         let path = n.path_data().unwrap().clone();
-        let ctx = vectorcraft_render::effects::GeomContext::of(&n);
+        let ctx = livipen_render::effects::GeomContext::of(&n);
         let (effects, ctx) = match item {
             Some(i) => match &n.appearance.items[i] {
-                vectorcraft_doc::AppearanceItem::Stroke(st) => (st.effects.clone(), ctx.item(&n.appearance.items[i])),
+                livipen_doc::AppearanceItem::Stroke(st) => (st.effects.clone(), ctx.item(&n.appearance.items[i])),
                 other => panic!("not a stroke: {other:?}"),
             },
             None => (n.appearance.effects.clone(), ctx),
         };
-        vectorcraft_render::effects::apply_geometry_with(&effects, &path, path.bounds().unwrap(), &ctx)
+        livipen_render::effects::apply_geometry_with(&effects, &path, path.bounds().unwrap(), &ctx)
     };
     let own = node(&s, id).path_data().unwrap().clone();
     let remove = |s: &mut Session| run(s, "effect.remove", json!({"ids": [id.0], "index": 0, "item": null}));
@@ -238,8 +238,8 @@ fn expanding_a_fill_gives_its_plug_in_effect_the_fill_it_sits_on() {
     let fill = node(&s, id).appearance.items.iter().position(|i| i.is_fill()).unwrap();
     run(&mut s, "effect.apply", json!({"ids": [id.0], "effect": "plugin.test.engine.onfill", "item": fill}));
     // Drawn, the gradient fills the triangle: a point of it outside the rectangle is painted.
-    let opts = vectorcraft_render::RenderOptions { background: Some([255, 255, 255, 255]), ..Default::default() };
-    let drawn = vectorcraft_render::Renderer::new().render(&s.doc().unwrap().doc, 40, 40, vectorcraft_geom::Affine::IDENTITY, &opts);
+    let opts = livipen_render::RenderOptions { background: Some([255, 255, 255, 255]), ..Default::default() };
+    let drawn = livipen_render::Renderer::new().render(&s.doc().unwrap().doc, 40, 40, livipen_geom::Affine::IDENTITY, &opts);
     assert_ne!(drawn.pixel(15, 1), [255, 255, 255, 255], "drawn as a triangle");
     run(&mut s, "select.set", json!({"ids": [id.0]}));
     run(&mut s, "object.expand", json!({"steps": 2}));
@@ -283,10 +283,10 @@ fn filters_set_effects_and_stroke_styles() {
     filter(&mut s, "test.engine.setfx", fx).unwrap();
     let n = node(&s, id);
     let st = n.appearance.stroke().unwrap();
-    assert_eq!((st.width, st.join, st.cap, st.miter_limit), (4.0, vectorcraft_doc::LineJoin::Round, vectorcraft_doc::LineCap::Square, 4.0));
+    assert_eq!((st.width, st.join, st.cap, st.miter_limit), (4.0, livipen_doc::LineJoin::Round, livipen_doc::LineCap::Square, 4.0));
     let effects = &n.appearance.effects;
     assert_eq!(effects.iter().map(|e| (e.id.as_str(), e.visible)).collect::<Vec<_>>(), [("distort.roughen", true), ("plugin.test.engine.fx", false)]);
-    assert_eq!(effects[0].params, vectorcraft_render::effects::merged_params("distort.roughen", &json!({"size": 3})), "filled in");
+    assert_eq!(effects[0].params, livipen_render::effects::merged_params("distort.roughen", &json!({"size": 3})), "filled in");
     assert_eq!(effects[1].params, json!({"n": 2}));
     // Handed back unchanged (an echo), nothing changes, not even the records' parameters.
     install_wat(&mut s, &tpl::module(&tpl::manifest("test.engine.same", "filter", "{}"), tpl::ECHO, "", 1));
@@ -362,12 +362,12 @@ fn filters_keep_their_data_with_the_document() {
     filter(&mut s, other).unwrap();
     assert_eq!(node(&s, id).name.as_deref(), Some("Nothing kept"));
     // Saved with the document, among its foreign data.
-    let saved = vectorcraft_format::load(&vectorcraft_format::save(&s.doc().unwrap().doc, false)).unwrap();
+    let saved = livipen_format::load(&livipen_format::save(&s.doc().unwrap().doc, false)).unwrap();
     assert_eq!(saved.plugin_data(pid), Some(&json!({"pen": 2})));
-    assert_eq!(saved.unknown.get(vectorcraft_doc::plugin_data::PLUGIN_DATA), Some(&json!({pid: {"pen": 2}})));
+    assert_eq!(saved.unknown.get(livipen_doc::plugin_data::PLUGIN_DATA), Some(&json!({pid: {"pen": 2}})));
     // Too much is refused, and the document stays as it was; null removes the data.
     let before = s.doc().unwrap().doc.clone();
-    let big = "x".repeat(vectorcraft_plugins::objects::MAX_DOCUMENT_DATA);
+    let big = "x".repeat(livipen_plugins::objects::MAX_DOCUMENT_DATA);
     install_wat(&mut s, &returning(keep(json!(big))));
     let e = filter(&mut s, pid).unwrap_err().to_string();
     assert!(e.contains("documentData"), "{e}");
@@ -392,7 +392,7 @@ fn plugin_management_commands() {
         json!({}),
         json!({"dataBase64": "!!"}),
         json!({"dataBase64": "AGFzbQ=="}),
-        json!({"dataBase64": vectorcraft_format::base64_encode(DESATURATE), "replace": false}),
+        json!({"dataBase64": livipen_format::base64_encode(DESATURATE), "replace": false}),
     ] {
         assert!(s.execute("plugin.install", &bad).is_err(), "{bad}");
     }
@@ -401,13 +401,13 @@ fn plugin_management_commands() {
     assert!(s.execute("plugin.reload", &json!({})).is_err(), "no folder set");
 
     // The Additional Plug-ins Folder preference installs what's in it.
-    let dir = std::env::temp_dir().join(format!("vectorcraft-engine-plugins-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("livipen-engine-plugins-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let src = tpl::returning(&tpl::manifest("test.engine.folder", "filter", "{}"), r#"{"objects":[]}"#);
     std::fs::write(dir.join("folder.wasm"), wat::parse_str(src).unwrap()).unwrap();
     std::fs::write(dir.join("broken.wasm"), b"\0asm?").unwrap();
     run(&mut s, "prefs.set", json!({"key": "pluginsFolder", "value": dir.display().to_string()}));
-    assert!(vectorcraft_plugins::registry::get("test.engine.folder").is_some());
+    assert!(livipen_plugins::registry::get("test.engine.folder").is_some());
     run(&mut s, "plugin.remove", json!({"id": "test.engine.folder"}));
     let r = run(&mut s, "plugin.reload", json!({}));
     assert_eq!(r["loaded"], json!(["test.engine.folder"]));
@@ -427,11 +427,11 @@ fn installed_plugins_are_kept_in_the_store() {
     s.attach_plugin_store(folder.0.clone());
     install_wat(&mut s, &src);
     assert_eq!(std::fs::read_dir(&folder.0).unwrap().count(), 1, "one file in the store");
-    vectorcraft_plugins::registry::remove(id);
+    livipen_plugins::registry::remove(id);
 
     let mut next = session();
     next.attach_plugin_store(folder.0.clone());
-    assert!(vectorcraft_plugins::registry::get(id).is_some(), "installed again from the store");
+    assert!(livipen_plugins::registry::get(id).is_some(), "installed again from the store");
     run(&mut next, "plugin.remove", json!({"id": id}));
     assert_eq!(std::fs::read_dir(&folder.0).unwrap().count(), 0, "removed from the store");
 
@@ -439,7 +439,7 @@ fn installed_plugins_are_kept_in_the_store() {
     std::fs::write(folder.0.join("broken.wasm"), b"\0asm?").unwrap();
     let mut third = session();
     third.attach_plugin_store(folder.0.clone());
-    assert!(vectorcraft_plugins::registry::get(id).is_none());
+    assert!(livipen_plugins::registry::get(id).is_none());
 }
 
 /// A heavy test filter `id` that counts `steps` down, then adds a triangle named "Plug-in".
@@ -455,18 +455,18 @@ fn heavy(id: &str, steps: u64) -> Vec<u8> {
 fn a_heavy_filter_installs_once_the_user_agrees() {
     let mut s = session();
     let id = "test.engine.heavy";
-    let data = vectorcraft_format::base64_encode(&heavy(id, 1));
+    let data = livipen_format::base64_encode(&heavy(id, 1));
     // With the file's name, as the app passes it.
     let inspected = run(&mut s, "plugin.inspect", json!({"dataBase64": data, "name": "route.wasm"}));
     assert_eq!((inspected["id"].as_str(), inspected["budget"].as_str()), (Some(id), Some("heavy")));
     assert_eq!(inspected["source"], "route.wasm");
-    assert!(vectorcraft_plugins::registry::get(id).is_none(), "inspecting installs nothing");
+    assert!(livipen_plugins::registry::get(id).is_none(), "inspecting installs nothing");
     let e = s.execute("plugin.install", &json!({"dataBase64": data})).unwrap_err().to_string();
     assert!(e.contains("heavy budget") && e.contains("5 minutes") && e.contains("allowHeavy"), "{e}");
-    assert!(vectorcraft_plugins::registry::get(id).is_none());
+    assert!(livipen_plugins::registry::get(id).is_none());
     let info = run(&mut s, "plugin.install", json!({"dataBase64": data, "allowHeavy": true}));
     assert_eq!(info["budget"], "heavy");
-    assert_eq!(vectorcraft_plugins::registry::get(id).unwrap().limits().fuel_base, vectorcraft_plugins::HEAVY_FUEL);
+    assert_eq!(livipen_plugins::registry::get(id).unwrap().limits().fuel_base, livipen_plugins::HEAVY_FUEL);
     let listed = run(&mut s, "plugin.list", json!({}));
     assert!(listed["plugins"].as_array().unwrap().iter().any(|p| p["id"] == id && p["budget"] == "heavy"));
     // A light plug-in's entry says nothing of budgets.
@@ -481,12 +481,12 @@ fn a_stored_heavy_filter_keeps_its_budget() {
     let id = "test.engine.storedheavy";
     let mut s = session();
     s.attach_plugin_store(folder.0.clone());
-    run(&mut s, "plugin.install", json!({"dataBase64": vectorcraft_format::base64_encode(&heavy(id, 1)), "allowHeavy": true}));
-    vectorcraft_plugins::registry::remove(id);
+    run(&mut s, "plugin.install", json!({"dataBase64": livipen_format::base64_encode(&heavy(id, 1)), "allowHeavy": true}));
+    livipen_plugins::registry::remove(id);
     let mut next = session();
     next.attach_plugin_store(folder.0.clone());
-    let plugin = vectorcraft_plugins::registry::get(id).expect("installed again from the store");
-    assert_eq!(plugin.limits().fuel_base, vectorcraft_plugins::HEAVY_FUEL);
+    let plugin = livipen_plugins::registry::get(id).expect("installed again from the store");
+    assert_eq!(plugin.limits().fuel_base, livipen_plugins::HEAVY_FUEL);
     run(&mut next, "plugin.remove", json!({"id": id}));
 }
 
@@ -499,7 +499,7 @@ fn a_filter_run_made_elsewhere_is_applied_by_plugin_run() {
     use cmd::plugin::FilterRun;
     let mut s = session();
     let id = "test.engine.handin";
-    run(&mut s, "plugin.install", json!({"dataBase64": vectorcraft_format::base64_encode(&heavy(id, 1)), "allowHeavy": true}));
+    run(&mut s, "plugin.install", json!({"dataBase64": livipen_format::base64_encode(&heavy(id, 1)), "allowHeavy": true}));
     let p = json!({"id": id, "ids": []});
     let named = |s: &Session, ids: &Value| s.doc().unwrap().doc.node(NodeId(ids[0].as_u64().unwrap())).unwrap().name.clone();
     // What it computed, as the app hands it in; here marked, so the test sees which output applied.
@@ -525,7 +525,7 @@ fn a_filter_run_made_elsewhere_is_applied_by_plugin_run() {
     assert_eq!(named(&s, &made).as_deref(), Some("Plug-in"), "made for objects that changed since");
     // A plug-in installed again is another one.
     let again = FilterRun::prepare(&s, &p).unwrap();
-    run(&mut s, "plugin.install", json!({"dataBase64": vectorcraft_format::base64_encode(&heavy(id, 1)), "allowHeavy": true}));
+    run(&mut s, "plugin.install", json!({"dataBase64": livipen_format::base64_encode(&heavy(id, 1)), "allowHeavy": true}));
     assert!(!again.current(&s));
     again.hand_in(&mut s, output.into_bytes());
     let made = run(&mut s, "plugin.run", p)["ids"].clone();
@@ -542,7 +542,7 @@ fn a_filter_run_made_elsewhere_keeps_its_document_data() {
     let id = "test.engine.handindata";
     let manifest = format!(r#"{{"id":"{id}","name":"Test {id}","version":"1","kind":"filter","budget":"heavy"}}"#);
     let install = |s: &mut Session, src: String| {
-        let data = vectorcraft_format::base64_encode(&wat::parse_str(src).unwrap());
+        let data = livipen_format::base64_encode(&wat::parse_str(src).unwrap());
         run(s, "plugin.install", json!({"dataBase64": data, "allowHeavy": true}));
     };
     // It first keeps the pens it found with the document.
@@ -572,11 +572,11 @@ fn a_filter_run_made_elsewhere_keeps_its_document_data() {
 fn a_cancelled_filter_run_changes_nothing() {
     let mut s = session();
     let id = "test.engine.cancelled";
-    run(&mut s, "plugin.install", json!({"dataBase64": vectorcraft_format::base64_encode(&heavy(id, 1 << 40)), "allowHeavy": true}));
+    run(&mut s, "plugin.install", json!({"dataBase64": livipen_format::base64_encode(&heavy(id, 1 << 40)), "allowHeavy": true}));
     let before = s.doc().unwrap().doc.clone();
-    let token = vectorcraft_doc::cancel::CancelToken::new();
+    let token = livipen_doc::cancel::CancelToken::new();
     token.cancel();
-    let r = vectorcraft_doc::cancel::scope(&token, None, || s.execute("plugin.run", &json!({"id": id})));
+    let r = livipen_doc::cancel::scope(&token, None, || s.execute("plugin.run", &json!({"id": id})));
     assert!(matches!(r, Err(EngineError::Cancelled)), "{r:?}");
     assert_eq!(s.doc().unwrap().doc, before);
 }

@@ -23,11 +23,11 @@
 use std::ops::Range;
 use std::sync::{Arc, Mutex};
 
+use livipen_doc::hit::hit_test;
+use livipen_doc::{NodeId, NodeKind, TextKind, TextObject, TextRun};
+use livipen_geom::{BezPath, Point, Rect, Shape};
+use livipen_text::{FontDb, TextLayout, edit};
 use serde_json::{Value, json};
-use vectorcraft_doc::hit::hit_test;
-use vectorcraft_doc::{NodeId, NodeKind, TextKind, TextObject, TextRun};
-use vectorcraft_geom::{BezPath, Point, Rect, Shape};
-use vectorcraft_text::{FontDb, TextLayout, edit};
 
 use crate::guides::DrawSnap;
 use crate::{Action, Cursor, Mods, Overlay, PointerEvent, PointerKind, Tool, ToolContext, ToolKey};
@@ -123,7 +123,7 @@ impl TypeTool {
         {
             return l.clone();
         }
-        let l = Arc::new(vectorcraft_text::layout(FontDb::global(), t));
+        let l = Arc::new(livipen_text::layout(FontDb::global(), t));
         *c = Some(((fonts, t.clone()), l.clone()));
         l
     }
@@ -238,7 +238,7 @@ impl TypeTool {
             TextKind::Area { frame } => frame.bounds().is_some_and(|b| b.inflate(tol, tol).contains(local)),
             _ => lay.bounds.inflate(tol, tol).contains(local),
         };
-        inside.then(|| vectorcraft_text::hit_byte(&lay, local))
+        inside.then(|| livipen_text::hit_byte(&lay, local))
     }
 
     fn select_word_or_para(&mut self, cx: &ToolContext, para: bool) {
@@ -250,7 +250,7 @@ impl TypeTool {
 
     /// Path under `p` for the Area Type / Type on a Path tools.
     fn path_at(cx: &ToolContext, p: Point, closed: bool) -> Option<NodeId> {
-        let h = hit_test(cx.doc, p, vectorcraft_doc::hit::HitOptions { tol: cx.tol(4.0), outline: true, ..Default::default() })?;
+        let h = hit_test(cx.doc, p, livipen_doc::hit::HitOptions { tol: cx.tol(4.0), outline: true, ..Default::default() })?;
         match &cx.doc.node(h.leaf)?.kind {
             NodeKind::Path { path, .. } if !closed || path.is_closed() => Some(h.leaf),
             _ => None,
@@ -261,10 +261,10 @@ impl TypeTool {
     /// edit, selecting the type); None when no type is under `p`. A click among the characters
     /// edits them, whatever Type Object Selection by Path Only says.
     fn edit_at(&mut self, cx: &ToolContext, p: Point) -> Option<Vec<Action>> {
-        let h = hit_test(cx.doc, p, vectorcraft_doc::hit::HitOptions { type_path_only: false, ..cx.hit_options() })?;
+        let h = hit_test(cx.doc, p, livipen_doc::hit::HitOptions { type_path_only: false, ..cx.hit_options() })?;
         let Some(NodeKind::Text(t)) = cx.doc.node(h.leaf).map(|n| &n.kind) else { return None };
         let lay = self.layout(t);
-        let byte = vectorcraft_text::hit_byte(&lay, t.xf.inverse() * p);
+        let byte = livipen_text::hit_byte(&lay, t.xf.inverse() * p);
         let mut out = self.finish(cx);
         self.start_editing(h.leaf, byte);
         self.clicks = (Some(p), 1);
@@ -286,7 +286,7 @@ impl TypeTool {
         // New type is set along General › Constrain Angle's axes (none at 0° or a whole turn): an
         // area's box measured along them, turned about its top-left corner, point type about its
         // first baseline's start.
-        let axes = vectorcraft_geom::constrain_axes(cx.constrain_angle);
+        let axes = livipen_geom::constrain_axes(cx.constrain_angle);
         let back = axes.map(|a| a.inverse());
         let area = drag
             .map(|d| match back {
@@ -317,7 +317,7 @@ impl TypeTool {
             }
             None => json!({"x": at.x, "y": at.y, "text": ""}),
         };
-        if let Some(rotation) = vectorcraft_geom::constrain_rotation(cx.constrain_angle) {
+        if let Some(rotation) = livipen_geom::constrain_rotation(cx.constrain_angle) {
             params["rotation"] = json!(rotation);
         }
         params["vertical"] = json!(self.vertical);
@@ -373,7 +373,7 @@ pub fn port_centre(t: &TextObject, port: Port, px: f64) -> Option<Point> {
             Some(if len > 1e-9 && len.is_finite() { corner + side * (rise.min(len / 2.0) / len) } else { corner })
         }
         TextKind::OnPath { path, .. } => {
-            let arc = vectorcraft_geom::ArcPath::new(path);
+            let arc = livipen_geom::ArcPath::new(path);
             let (start, end) = t.kind.path_span()?;
             if arc.is_empty() {
                 return None;
@@ -394,7 +394,7 @@ pub fn port_centre(t: &TextObject, port: Port, px: f64) -> Option<Point> {
 /// What the in and out ports of frame `id` of `d` show, its text `overflow`ing or not: an arrow
 /// where a frame of its thread comes before (in) or after (out) it, else a red "+" in the out port
 /// of text that doesn't fit, else nothing.
-pub fn port_states(d: &vectorcraft_doc::Document, id: NodeId, overflow: bool) -> (PortState, PortState) {
+pub fn port_states(d: &livipen_doc::Document, id: NodeId, overflow: bool) -> (PortState, PortState) {
     let thread = d.text_threads.iter().find(|t| t.contains(&id));
     let at = thread.and_then(|t| t.iter().position(|x| *x == id));
     let input = if at.is_some_and(|i| i > 0) { PortState::Threaded } else { PortState::Empty };
@@ -453,7 +453,7 @@ pub const PORTS_MAX: usize = 1_000;
 /// The text of `id` in `d` when it has ports: area type or type on a path a thread can hold, not in
 /// perspective ([`crate::select::is_threadable`]). The one test for drawing ports, clicking them and
 /// counting them toward [`PORTS_MAX`].
-pub fn ported(d: &vectorcraft_doc::Document, id: NodeId) -> Option<&TextObject> {
+pub fn ported(d: &livipen_doc::Document, id: NodeId) -> Option<&TextObject> {
     match d.node(id).filter(|n| crate::select::is_threadable(n)).map(|n| &n.kind) {
         Some(NodeKind::Text(t)) => Some(t),
         _ => None,
@@ -462,7 +462,7 @@ pub fn ported(d: &vectorcraft_doc::Document, id: NodeId) -> Option<&TextObject> 
 
 /// Are at most [`PORTS_MAX`] of `selected` [`ported`] (counting stops past it), so that their
 /// ports show?
-pub fn ports_shown(d: &vectorcraft_doc::Document, selected: &[NodeId]) -> bool {
+pub fn ports_shown(d: &livipen_doc::Document, selected: &[NodeId]) -> bool {
     selected.iter().filter(|id| ported(d, **id).is_some()).take(PORTS_MAX + 1).count() <= PORTS_MAX
 }
 
@@ -505,7 +505,7 @@ pub fn thread_ports(marks: &mut PortMarks, cx: &ToolContext) -> Vec<Overlay> {
         let Some(t) = ported(cx.doc, *id) else { continue };
         let over = match marks.seen.remove(id) {
             Some(((g, was), over)) if g == fonts && &was == t => over,
-            _ => vectorcraft_text::layout(FontDb::global(), t).overflow,
+            _ => livipen_text::layout(FontDb::global(), t).overflow,
         };
         ports(cx, *id, t, over, &mut o);
         kept.insert(*id, ((fonts, t.clone()), over));
@@ -608,7 +608,7 @@ impl Tool for TypeTool {
                 if self.selecting {
                     if let Some(t) = self.current(cx) {
                         let lay = self.layout(&t);
-                        self.caret = vectorcraft_text::hit_byte(&lay, t.xf.inverse() * ev.pos);
+                        self.caret = livipen_text::hit_byte(&lay, t.xf.inverse() * ev.pos);
                         self.clicks = (None, 0);
                     }
                 } else if self.press.is_some() {
@@ -741,9 +741,7 @@ impl Tool for TypeTool {
             }
             ToolKey::Left => {
                 let to = if a != b && !mods.shift {
-                    if lay.glyphs.iter().any(|g| g.rtl)
-                        && vectorcraft_text::caret_position(&lay, a).0.x > vectorcraft_text::caret_position(&lay, b).0.x
-                    {
+                    if lay.glyphs.iter().any(|g| g.rtl) && livipen_text::caret_position(&lay, a).0.x > livipen_text::caret_position(&lay, b).0.x {
                         b
                     } else {
                         a
@@ -752,7 +750,7 @@ impl Tool for TypeTool {
                     edit::prev_word(&text, self.caret)
                 } else {
                     if lay.glyphs.iter().any(|g| g.rtl) {
-                        vectorcraft_text::caret_horizontal_cluster(&lay, &text, self.caret, false)
+                        livipen_text::caret_horizontal_cluster(&lay, &text, self.caret, false)
                     } else {
                         edit::prev_cluster(&text, self.caret)
                     }
@@ -761,9 +759,7 @@ impl Tool for TypeTool {
             }
             ToolKey::Right => {
                 let to = if a != b && !mods.shift {
-                    if lay.glyphs.iter().any(|g| g.rtl)
-                        && vectorcraft_text::caret_position(&lay, a).0.x > vectorcraft_text::caret_position(&lay, b).0.x
-                    {
+                    if lay.glyphs.iter().any(|g| g.rtl) && livipen_text::caret_position(&lay, a).0.x > livipen_text::caret_position(&lay, b).0.x {
                         a
                     } else {
                         b
@@ -772,7 +768,7 @@ impl Tool for TypeTool {
                     edit::next_word(&text, self.caret)
                 } else {
                     if lay.glyphs.iter().any(|g| g.rtl) {
-                        vectorcraft_text::caret_horizontal_cluster(&lay, &text, self.caret, true)
+                        livipen_text::caret_horizontal_cluster(&lay, &text, self.caret, true)
                     } else {
                         edit::next_cluster(&text, self.caret)
                     }
@@ -782,7 +778,7 @@ impl Tool for TypeTool {
             ToolKey::Up | ToolKey::Down => {
                 let d = if key == ToolKey::Up { -1 } else { 1 };
                 let from = if a != b && !mods.shift { if d < 0 { a } else { b } } else { self.caret };
-                let x = self.goal_x.unwrap_or_else(|| lay.logical_point(vectorcraft_text::caret_position(&lay, from).0).x);
+                let x = self.goal_x.unwrap_or_else(|| lay.logical_point(livipen_text::caret_position(&lay, from).0).x);
                 let to = if mods.cmd {
                     // Cmd+Up/Down: paragraph start / end.
                     let p = edit::paragraph_at(&text, from);
@@ -794,18 +790,18 @@ impl Tool for TypeTool {
                         p.end
                     }
                 } else {
-                    vectorcraft_text::caret_vertical(&lay, from, d, x)
+                    livipen_text::caret_vertical(&lay, from, d, x)
                 };
                 let out = self.move_to(to, mods.shift);
                 self.goal_x = Some(x);
                 out
             }
             ToolKey::Home => {
-                let to = if mods.cmd { 0 } else { vectorcraft_text::line_home(&lay, self.caret) };
+                let to = if mods.cmd { 0 } else { livipen_text::line_home(&lay, self.caret) };
                 self.move_to(to, mods.shift)
             }
             ToolKey::End => {
-                let to = if mods.cmd { len } else { vectorcraft_text::line_end_of(&lay, self.caret) };
+                let to = if mods.cmd { len } else { livipen_text::line_end_of(&lay, self.caret) };
                 self.move_to(to, mods.shift)
             }
             _ => vec![],
@@ -853,7 +849,7 @@ impl Tool for TypeTool {
             Some(p) => p.range.start + p.active.as_ref().map_or(0, |r| r.start),
             None => self.caret.min(self.anchor),
         };
-        let (a, b) = vectorcraft_text::caret_position(&lay, at.min(len));
+        let (a, b) = livipen_text::caret_position(&lay, at.min(len));
         Some((t.xf * a, t.xf * b))
     }
     fn deactivate(&mut self, cx: &ToolContext) -> Vec<Action> {
@@ -959,7 +955,7 @@ impl Tool for TypeTool {
         if let (Some((_, s)), Some(d)) = (self.press, self.drag) {
             // The area being drawn (along the Constrain Angle's axes when one is set, as `on_up`
             // makes it) and its size.
-            let size = match vectorcraft_geom::constrain_axes(cx.constrain_angle) {
+            let size = match livipen_geom::constrain_axes(cx.constrain_angle) {
                 None => {
                     let r = Rect::from_points(s, d);
                     o.push(Overlay::Marquee(r));
@@ -1006,9 +1002,9 @@ impl Tool for TypeTool {
         if let Some(pe) = &self.preedit {
             // Marked text: a thin underline, a thick one under the clause being converted.
             let under = |o: &mut Vec<Overlay>, r: Range<usize>, width: f32| {
-                for q in vectorcraft_text::selection_quads(&lay, r.start.min(len), r.end.min(len)) {
+                for q in livipen_text::selection_quads(&lay, r.start.min(len), r.end.min(len)) {
                     let (l, rr) = (t.xf * q[3], t.xf * q[2]);
-                    o.push(Overlay::Path { path: vectorcraft_geom::Line::new(l, rr).to_path(0.1), color: [0, 0, 0], width, dashed: false });
+                    o.push(Overlay::Path { path: livipen_geom::Line::new(l, rr).to_path(0.1), color: [0, 0, 0], width, dashed: false });
                 }
             };
             under(&mut o, pe.range.clone(), 1.0);
@@ -1016,15 +1012,15 @@ impl Tool for TypeTool {
                 Some(r) if !r.is_empty() => under(&mut o, pe.range.start + r.start..pe.range.start + r.end, 2.5),
                 _ => {
                     let at = pe.range.start + pe.active.as_ref().map_or(pe.range.len(), |r| r.start);
-                    let (p, q) = vectorcraft_text::caret_position(&lay, at.min(len));
+                    let (p, q) = livipen_text::caret_position(&lay, at.min(len));
                     o.push(Overlay::Line { a: t.xf * p, b: t.xf * q, color: [0, 0, 0], dashed: false });
                 }
             }
         } else if a == b {
-            let (p, q) = vectorcraft_text::caret_position(&lay, self.caret.min(len));
+            let (p, q) = livipen_text::caret_position(&lay, self.caret.min(len));
             o.push(Overlay::Line { a: t.xf * p, b: t.xf * q, color: [0, 0, 0], dashed: false });
         } else {
-            for q in vectorcraft_text::selection_quads(&lay, a, b) {
+            for q in livipen_text::selection_quads(&lay, a, b) {
                 o.push(Overlay::Highlight { quad: q.map(|p| t.xf * p), color: [60, 120, 255, 90] });
             }
         }

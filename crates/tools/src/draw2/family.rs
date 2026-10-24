@@ -6,8 +6,8 @@
 //! While dragging, ↑/↓ change the spiral's segments, the grid rows or the concentric dividers; ←/→
 //! change grid columns / radial dividers.
 
+use livipen_geom::Point;
 use serde_json::{Value, json};
-use vectorcraft_geom::Point;
 
 use crate::guides::{DrawSnap, Leave};
 use crate::shape::{box_params, drag_rect, turned_box};
@@ -95,7 +95,7 @@ impl FamilyTool {
     /// the grids' corner keeps to a diagonal with Shift (a grid's square is taken along the
     /// Constrain Angle's axes instead when it turns them, [`Self::command_at`]).
     fn leave(&self, cx: &ToolContext, start: Point, m: Mods) -> Option<Leave> {
-        let turned = self.is_grid() && vectorcraft_geom::constrain_axes(cx.constrain_angle).is_some();
+        let turned = self.is_grid() && livipen_geom::constrain_axes(cx.constrain_angle).is_some();
         (self.id != "spiral").then(|| Leave::diagonal(start, m.shift && !turned))
     }
 
@@ -144,7 +144,7 @@ impl FamilyTool {
             _ => {
                 let r = drag_rect(start, p, m).abs();
                 let (w, h) = (r.width().max(1e-9), r.height().max(1e-9));
-                let rp = vectorcraft_geom::reference_point(vectorcraft_geom::Rect::new(0.0, 0.0, w, h), self.reference.min(8));
+                let rp = livipen_geom::reference_point(livipen_geom::Rect::new(0.0, 0.0, w, h), self.reference.min(8));
                 let anchor = Point::new(r.x0 + rp.x, r.y0 + rp.y);
                 (
                     "shape.arc".into(),
@@ -331,7 +331,7 @@ fn grid_length(v: &Value, current: f64) -> f64 {
 
 /// A grid divider skew from option value `v`: a finite number within the range, else `current`.
 fn grid_skew(v: &Value, current: f64) -> f64 {
-    let max = vectorcraft_geom::shapes::GRID_SKEW_MAX;
+    let max = livipen_geom::shapes::GRID_SKEW_MAX;
     v.as_f64().filter(|s| s.is_finite()).map_or(current, |s| s.clamp(-max, max))
 }
 
@@ -339,7 +339,7 @@ fn grid_skew(v: &Value, current: f64) -> f64 {
 mod tests {
     use super::*;
     use crate::testutil::*;
-    use vectorcraft_doc::Selection;
+    use livipen_doc::Selection;
 
     #[test]
     fn grid_drag_and_arrows() {

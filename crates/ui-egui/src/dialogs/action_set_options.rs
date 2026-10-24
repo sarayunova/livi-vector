@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 
 use super::DialogSpec;
 use crate::state::Dialog;
-use crate::{VectorcraftApp, widgets};
+use crate::{LiviPenApp, widgets};
 
 /// The dialog kind of New Set and Set Options.
 pub const KIND: &str = "actionSetOptions";
@@ -21,27 +21,27 @@ fn heading(d: &Dialog) -> String {
 }
 
 /// Open New Set, named "Set N" with the first number no set uses.
-pub fn open_new(app: &mut VectorcraftApp) {
+pub fn open_new(app: &mut LiviPenApp) {
     let taken = |n: usize| app.ui.action_sets.iter().any(|s| s.name == format!("Set {n}"));
     let n = (1..).find(|&n| !taken(n)).unwrap_or(1);
     app.ui.dialog = Some(Dialog::new(KIND, json!({"name": format!("Set {n}")})));
 }
 
 /// Open Set Options for the set at `set`, if there is one.
-pub fn open(app: &mut VectorcraftApp, set: usize) {
+pub fn open(app: &mut LiviPenApp, set: usize) {
     if let Some(s) = app.ui.action_sets.get(set) {
         app.ui.dialog = Some(Dialog::new(KIND, json!({"set": set, "name": s.name})));
     }
 }
 
-fn body(_: &mut VectorcraftApp, ui: &mut egui::Ui, d: &mut Dialog) -> bool {
+fn body(_: &mut LiviPenApp, ui: &mut egui::Ui, d: &mut Dialog) -> bool {
     widgets::label_row(ui, "Name:", 50.0, |ui| {
         super::form::text(ui, d, "name", 200.0);
     });
     false
 }
 
-fn confirm(app: &mut VectorcraftApp, d: &Dialog) -> Result<Value, String> {
+fn confirm(app: &mut LiviPenApp, d: &Dialog) -> Result<Value, String> {
     let name = d.str("name").trim().to_string();
     // OK is disabled without a name; `ui.dialog.confirm` keeps the dialog open the same way.
     if name.is_empty() {

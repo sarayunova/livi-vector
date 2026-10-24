@@ -7,9 +7,9 @@
 //! `%AI3_BeginEncoding` names (else `name`).
 
 use kurbo::{Affine, BezPath, ParamCurve, ParamCurveArclen};
-use vectorcraft_color::Paint;
-use vectorcraft_doc::{CharStyle, Justify, NodeKind, ParaStyle, TextKind, TextObject, TextRun};
-use vectorcraft_geom::PathData;
+use livipen_color::Paint;
+use livipen_doc::{CharStyle, Justify, NodeKind, ParaStyle, TextKind, TextObject, TextRun};
+use livipen_geom::PathData;
 
 use super::super::obj::V;
 use super::{FLIP, GState, Reader};

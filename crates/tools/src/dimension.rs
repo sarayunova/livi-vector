@@ -3,12 +3,12 @@
 //! measure instead: two points (linear) or two straight lines (angular), then a click places it;
 //! a click on a circle or arc gives its radius. Escape cancels without leaving any artwork.
 use crate::{Action, Cursor, Mods, Overlay, PointerEvent, PointerKind, Tool, ToolContext, ToolKey};
-use serde_json::{Value, json};
-use vectorcraft_doc::{
+use livipen_doc::{
     Node,
     dimension::{self, Dimension, DimensionMode, DimensionOptions, DimensionSource, PointRef, SegmentRef},
 };
-use vectorcraft_geom::{BezPath, Point, Vec2};
+use livipen_geom::{BezPath, Point, Vec2};
+use serde_json::{Value, json};
 
 /// The three kinds of dimension the tool draws.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -72,7 +72,7 @@ pub struct DimensionTool {
 /// `at` as a Shift click picks it: the direction from `last` snapped to 45° steps (from the
 /// constrain angle), the distance kept.
 fn constrained(cx: &ToolContext, last: Point, at: Point) -> Point {
-    last + vectorcraft_geom::constrain_angle_from(at - last, 45.0, cx.constrain_angle)
+    last + livipen_geom::constrain_angle_from(at - last, 45.0, cx.constrain_angle)
 }
 
 /// Nearest editable segment, with bounded work and no snapping to dimension artwork itself.
@@ -91,7 +91,7 @@ pub fn pick(cx: &ToolContext, p: Point) -> Option<SegmentRef> {
                         return;
                     }
                     *budget -= 1;
-                    use vectorcraft_geom::kurbo::ParamCurveNearest;
+                    use livipen_geom::kurbo::ParamCurveNearest;
                     let near = sp.segment(i).nearest(p, 1e-4);
                     if near.distance_sq < *dist * *dist {
                         *dist = near.distance_sq.sqrt();
@@ -125,14 +125,14 @@ fn anchor_near(cx: &ToolContext, edge: &SegmentRef, p: Point) -> Option<(usize, 
 
 /// The point of `edge` closest to `p`.
 fn nearest_on(cx: &ToolContext, edge: &SegmentRef, p: Point) -> Option<Point> {
-    use vectorcraft_geom::kurbo::ParamCurveNearest;
+    use livipen_geom::kurbo::ParamCurveNearest;
     let sp = cx.doc.node(edge.node)?.path_data()?.subpaths.get(edge.subpath)?;
     if edge.segment >= sp.segment_count() {
         return None;
     }
     let c = sp.segment(edge.segment);
     let t = c.nearest(p, 1e-4).t;
-    use vectorcraft_geom::kurbo::ParamCurve;
+    use livipen_geom::kurbo::ParamCurve;
     let q = c.eval(t);
     (q.x.is_finite() && q.y.is_finite()).then_some(q)
 }

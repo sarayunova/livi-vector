@@ -1,8 +1,8 @@
 //! A caller's params are checked against the command's description, but a journal replays as it
 //! was recorded (#1442).
 
+use livipen_engine::{Session, check_params};
 use serde_json::json;
-use vectorcraft_engine::{Session, check_params};
 
 /// `Session::execute` takes what it is given: the journal of an older version, an action recorded
 /// with a key a command no longer reads, still plays. The check is the caller's.
@@ -37,8 +37,8 @@ fn effect_params_no_longer_taken_still_replay_and_open() {
         s.execute(id, params).unwrap();
     }
     let doc = &s.active().unwrap().doc;
-    let back = vectorcraft_format::load(&vectorcraft_format::save(doc, false)).unwrap();
-    let stored = |d: &vectorcraft_doc::Document| d.layers[0].children().unwrap()[0].appearance.effects[0].params.clone();
+    let back = livipen_format::load(&livipen_format::save(doc, false)).unwrap();
+    let stored = |d: &livipen_doc::Document| d.layers[0].children().unwrap()[0].appearance.effects[0].params.clone();
     assert_eq!(stored(&back), stored(doc));
     assert_eq!(stored(&back)["blurr"], json!(3));
 }
@@ -90,8 +90,8 @@ fn an_effect_color_it_cannot_draw_is_refused() {
         assert_eq!(stored(&s), good);
     }
     let mut doc = (*s.active().unwrap().doc).clone();
-    doc.node_mut(vectorcraft_doc::NodeId(id)).unwrap().appearance.effects[0].params["color"] = json!("not-a-color");
-    let back = vectorcraft_format::load(&vectorcraft_format::save(&doc, false)).unwrap();
+    doc.node_mut(livipen_doc::NodeId(id)).unwrap().appearance.effects[0].params["color"] = json!("not-a-color");
+    let back = livipen_format::load(&livipen_format::save(&doc, false)).unwrap();
     assert_eq!(back.layers[0].children().unwrap()[0].appearance.effects[0].params["color"], json!("not-a-color"));
 }
 
@@ -132,8 +132,8 @@ fn a_tone_curve_channel_it_does_not_have_is_refused() {
         assert_eq!(stored(&s), good);
     }
     let mut doc = (*s.active().unwrap().doc).clone();
-    doc.node_mut(vectorcraft_doc::NodeId(id)).unwrap().appearance.effects[0].params["channel"] = json!("alpha");
-    let back = vectorcraft_format::load(&vectorcraft_format::save(&doc, false)).unwrap();
+    doc.node_mut(livipen_doc::NodeId(id)).unwrap().appearance.effects[0].params["channel"] = json!("alpha");
+    let back = livipen_format::load(&livipen_format::save(&doc, false)).unwrap();
     assert_eq!(back.layers[0].children().unwrap()[0].appearance.effects[0].params["channel"], json!("alpha"));
 }
 

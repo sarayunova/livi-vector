@@ -25,9 +25,9 @@
 //! through the last anchor; with Shift held it slides along its 45° step into line. Hovering shows
 //! where the next one would go.
 
+use livipen_doc::{NodeId, NodeKind};
+use livipen_geom::{BezPath, Point, Vec2};
 use serde_json::json;
-use vectorcraft_doc::{NodeId, NodeKind};
-use vectorcraft_geom::{BezPath, Point, Vec2};
 
 use crate::direct::hit_handle;
 use crate::draw2::{AnchorTool, editable_paths};
@@ -96,7 +96,7 @@ fn active_path(cx: &ToolContext) -> Option<(NodeId, Point, Point, Point)> {
 /// continues or joins to, and whether it's the path's first anchor. Only paths that can be edited,
 /// not guides.
 fn open_end_at(cx: &ToolContext, p: Point, tol: f64, except: Option<NodeId>) -> Option<(NodeId, bool)> {
-    let id = vectorcraft_doc::hit::hit_test(cx.doc, p, cx.hit_options())?.leaf;
+    let id = livipen_doc::hit::hit_test(cx.doc, p, cx.hit_options())?.leaf;
     if Some(id) == except || !cx.doc.is_editable(id) {
         return None;
     }
@@ -305,7 +305,7 @@ impl Tool for PenTool {
                 if let Some((id, si, ai, a)) = self.handle {
                     let mut h = ev.pos;
                     if ev.mods.shift {
-                        h = a + vectorcraft_geom::constrain_angle_from(ev.pos - a, 45.0, cx.constrain_angle);
+                        h = a + livipen_geom::constrain_angle_from(ev.pos - a, 45.0, cx.constrain_angle);
                     }
                     return vec![set_out_handle(id, si, ai, h)];
                 }
@@ -320,7 +320,7 @@ impl Tool for PenTool {
                 self.last = ev.pos;
                 let mut out_h = ev.pos;
                 if ev.mods.shift {
-                    out_h = a + vectorcraft_geom::constrain_angle_from(ev.pos - a, 45.0, cx.constrain_angle);
+                    out_h = a + livipen_geom::constrain_angle_from(ev.pos - a, 45.0, cx.constrain_angle);
                 }
                 let alt = ev.mods.alt;
                 let Some(id) = path else {
@@ -494,7 +494,7 @@ fn auto_add_delete(cx: &ToolContext, p: Point, m: Mods, tol: f64) -> Option<Acti
 fn spine_click(cx: &ToolContext, p: Point, tol: f64) -> Option<Vec<Action>> {
     for (id, path) in crate::direct::spines(cx).into_iter().filter(|(id, _)| cx.selection.contains(*id)) {
         let Some(NodeKind::Blend { children, spec }) = cx.doc.node(id).map(|n| &n.kind) else { continue };
-        let keys = vectorcraft_doc::live::blend_spine(children, spec).and_then(|(_, a)| a).unwrap_or_default();
+        let keys = livipen_doc::live::blend_spine(children, spec).and_then(|(_, a)| a).unwrap_or_default();
         if let Some((_, ai, _)) = path.anchors().find(|(_, _, a)| a.p.distance(p) <= tol) {
             if keys.contains(&ai) {
                 return Some(vec![]);
@@ -512,11 +512,11 @@ fn spine_click(cx: &ToolContext, p: Point, tol: f64) -> Option<Vec<Action>> {
 mod tests {
     use super::*;
     use crate::testutil::*;
-    use vectorcraft_doc::Selection;
+    use livipen_doc::Selection;
 
     #[test]
     fn press_inside_drag_threshold_places_a_corner() {
-        let (d, s) = (vectorcraft_doc::Document::new(500.0, 500.0), Selection::default());
+        let (d, s) = (livipen_doc::Document::new(500.0, 500.0), Selection::default());
         let paint = paint();
         let cx =
             ToolContext { zoom: 1.0, smart_guides: false, snap_to_point: false, snap_to_pixel: false, snap_to_grid: false, ..cx(&d, &s, &paint) };
@@ -532,7 +532,7 @@ mod tests {
     fn snapped_last_endpoint_converts_active_path_after_raw_miss() {
         let first = Point::new(100.0, 300.0);
         let last = Point::new(200.0, 400.0);
-        let (mut d, id, s) = drawing(vectorcraft_geom::SubPath::polyline(&[first, Point::new(200.0, 300.0), last], false));
+        let (mut d, id, s) = drawing(livipen_geom::SubPath::polyline(&[first, Point::new(200.0, 300.0), last], false));
         d.grid.spacing = 100.0;
         d.grid.subdivisions = 1;
         let paint = paint();
@@ -577,10 +577,10 @@ mod tests {
         let first = Point::new(100.0, 300.0);
         let last = Point::new(200.0, 400.0);
         let raw = Point::new(237.0, 403.0);
-        let (mut d, id, s) = drawing(vectorcraft_geom::SubPath::polyline(&[first, Point::new(200.0, 300.0), last], false));
+        let (mut d, id, s) = drawing(livipen_geom::SubPath::polyline(&[first, Point::new(200.0, 300.0), last], false));
         let other = d.alloc_id();
-        let path = vectorcraft_geom::PathData::single(vectorcraft_geom::SubPath::polyline(&[raw, Point::new(337.0, 403.0)], false));
-        d.insert(Some(d.layers[0].id), 2, vectorcraft_doc::Node::path(other, path, vectorcraft_doc::Appearance::default_art())).unwrap();
+        let path = livipen_geom::PathData::single(livipen_geom::SubPath::polyline(&[raw, Point::new(337.0, 403.0)], false));
+        d.insert(Some(d.layers[0].id), 2, livipen_doc::Node::path(other, path, livipen_doc::Appearance::default_art())).unwrap();
         d.grid.spacing = 100.0;
         d.grid.subdivisions = 1;
         let paint = paint();
@@ -615,7 +615,7 @@ mod tests {
     fn snapped_first_endpoint_closes_active_path_after_raw_miss() {
         let first = Point::new(100.0, 300.0);
         let last = Point::new(200.0, 400.0);
-        let (mut d, id, s) = drawing(vectorcraft_geom::SubPath::polyline(&[first, Point::new(200.0, 300.0), last], false));
+        let (mut d, id, s) = drawing(livipen_geom::SubPath::polyline(&[first, Point::new(200.0, 300.0), last], false));
         d.grid.spacing = 100.0;
         d.grid.subdivisions = 1;
         let paint = paint();
@@ -660,10 +660,10 @@ mod tests {
         let first = Point::new(100.0, 300.0);
         let last = Point::new(200.0, 400.0);
         let raw = Point::new(63.0, 303.0);
-        let (mut d, id, s) = drawing(vectorcraft_geom::SubPath::polyline(&[first, Point::new(200.0, 300.0), last], false));
+        let (mut d, id, s) = drawing(livipen_geom::SubPath::polyline(&[first, Point::new(200.0, 300.0), last], false));
         let other = d.alloc_id();
-        let path = vectorcraft_geom::PathData::single(vectorcraft_geom::SubPath::polyline(&[raw, Point::new(63.0, 403.0)], false));
-        d.insert(Some(d.layers[0].id), 2, vectorcraft_doc::Node::path(other, path, vectorcraft_doc::Appearance::default_art())).unwrap();
+        let path = livipen_geom::PathData::single(livipen_geom::SubPath::polyline(&[raw, Point::new(63.0, 403.0)], false));
+        d.insert(Some(d.layers[0].id), 2, livipen_doc::Node::path(other, path, livipen_doc::Appearance::default_art())).unwrap();
         d.grid.spacing = 100.0;
         d.grid.subdivisions = 1;
         let paint = paint();
@@ -712,8 +712,8 @@ mod tests {
         let (mut d, _) = doc_with_rect();
         let l = d.layers[0].id;
         let id = d.alloc_id();
-        let line = vectorcraft_geom::shapes::line(Point::new(10.0, 300.0), Point::new(60.0, 300.0));
-        d.insert(Some(l), 1, vectorcraft_doc::Node::path(id, line, vectorcraft_doc::Appearance::default_art())).unwrap();
+        let line = livipen_geom::shapes::line(Point::new(10.0, 300.0), Point::new(60.0, 300.0));
+        d.insert(Some(l), 1, livipen_doc::Node::path(id, line, livipen_doc::Appearance::default_art())).unwrap();
         let mut s = Selection::default();
         s.set([id]);
         let p = paint();
@@ -741,7 +741,7 @@ mod tests {
 
     #[test]
     fn space_pressed_inside_the_drag_threshold_moves_the_anchor_by_the_next_move_only() {
-        let (d, s) = (vectorcraft_doc::Document::new(500.0, 500.0), Selection::default());
+        let (d, s) = (livipen_doc::Document::new(500.0, 500.0), Selection::default());
         let paint = paint();
         let cx =
             ToolContext { zoom: 1.0, smart_guides: false, snap_to_point: false, snap_to_pixel: false, snap_to_grid: false, ..cx(&d, &s, &paint) };
@@ -781,8 +781,8 @@ mod tests {
         // moves with it.
         let l = d.layers[0].id;
         let id = d.alloc_id();
-        let line = vectorcraft_geom::shapes::line(Point::new(10.0, 300.0), Point::new(60.0, 300.0));
-        d.insert(Some(l), 1, vectorcraft_doc::Node::path(id, line, vectorcraft_doc::Appearance::default_art())).unwrap();
+        let line = livipen_geom::shapes::line(Point::new(10.0, 300.0), Point::new(60.0, 300.0));
+        d.insert(Some(l), 1, livipen_doc::Node::path(id, line, livipen_doc::Appearance::default_art())).unwrap();
         let mut s = Selection::default();
         s.set([id]);
         let cx = cx(&d, &s, &p);
@@ -802,12 +802,12 @@ mod tests {
     }
 
     /// A document with an open path of `anchors`, selected, being drawn by a Pen.
-    fn drawing(anchors: vectorcraft_geom::SubPath) -> (vectorcraft_doc::Document, NodeId, Selection) {
+    fn drawing(anchors: livipen_geom::SubPath) -> (livipen_doc::Document, NodeId, Selection) {
         let (mut d, _) = doc_with_rect();
         let l = d.layers[0].id;
         let id = d.alloc_id();
-        let path = vectorcraft_geom::PathData::single(anchors);
-        d.insert(Some(l), 1, vectorcraft_doc::Node::path(id, path, vectorcraft_doc::Appearance::default_art())).unwrap();
+        let path = livipen_geom::PathData::single(anchors);
+        d.insert(Some(l), 1, livipen_doc::Node::path(id, path, livipen_doc::Appearance::default_art())).unwrap();
         let mut s = Selection::default();
         s.set([id]);
         (d, id, s)
@@ -820,7 +820,7 @@ mod tests {
     #[test]
     fn clicking_the_last_anchor_retracts_its_handle_and_dragging_pulls_a_new_one() {
         // The last anchor is smooth: handles at 40 and 80 either side of (60, 300).
-        let mut sp = vectorcraft_geom::SubPath::polyline(&[Point::new(10.0, 300.0), Point::new(60.0, 300.0)], false);
+        let mut sp = livipen_geom::SubPath::polyline(&[Point::new(10.0, 300.0), Point::new(60.0, 300.0)], false);
         sp.anchors[1].h_in = Point::new(40.0, 300.0);
         sp.anchors[1].h_out = Point::new(80.0, 300.0);
         let (d, id, s) = drawing(sp);
@@ -846,7 +846,7 @@ mod tests {
     /// #544: picking the terminal anchor uses the pointer, even when new points snap elsewhere.
     #[test]
     fn terminal_anchor_conversion_precedes_grid_snapping() {
-        let (mut d, id, s) = drawing(vectorcraft_geom::SubPath::polyline(&[Point::new(13.0, 303.0), Point::new(63.0, 303.0)], false));
+        let (mut d, id, s) = drawing(livipen_geom::SubPath::polyline(&[Point::new(13.0, 303.0), Point::new(63.0, 303.0)], false));
         d.grid.spacing = 100.0;
         d.grid.subdivisions = 1;
         let p = paint();
@@ -871,10 +871,10 @@ mod tests {
 
     #[test]
     fn smart_guides_cannot_steal_a_terminal_anchor_press() {
-        let (mut d, id, s) = drawing(vectorcraft_geom::SubPath::polyline(&[Point::new(10.0, 300.0), Point::new(60.0, 300.0)], false));
+        let (mut d, id, s) = drawing(livipen_geom::SubPath::polyline(&[Point::new(10.0, 300.0), Point::new(60.0, 300.0)], false));
         let other = d.alloc_id();
-        let rect = vectorcraft_geom::shapes::rectangle(vectorcraft_geom::Rect::new(66.0, 300.0, 76.0, 310.0));
-        d.insert(Some(d.layers[0].id), 2, vectorcraft_doc::Node::path(other, rect, vectorcraft_doc::Appearance::default_art())).unwrap();
+        let rect = livipen_geom::shapes::rectangle(livipen_geom::Rect::new(66.0, 300.0, 76.0, 310.0));
+        d.insert(Some(d.layers[0].id), 2, livipen_doc::Node::path(other, rect, livipen_doc::Appearance::default_art())).unwrap();
         let p = paint();
         let cx = cx(&d, &s, &p);
         let pos = Point::new(63.0, 300.0);
@@ -895,7 +895,7 @@ mod tests {
         for zoom in [0.5, 1.0, 2.0] {
             let first = Point::new(100.0, 300.0);
             let last = Point::new(100.0 + 6.0 / zoom, 300.0);
-            let (d, id, selection) = drawing(vectorcraft_geom::SubPath::polyline(&[first, last], false));
+            let (d, id, selection) = drawing(livipen_geom::SubPath::polyline(&[first, last], false));
             for grid in [false, true] {
                 let cx = ToolContext {
                     zoom,
@@ -938,7 +938,7 @@ mod tests {
         for zoom in [0.5, 1.0, 2.0] {
             let first = Point::new(100.0, 300.0);
             let last = Point::new(100.0 + 6.0 / zoom, 300.0);
-            let (d, id, selection) = drawing(vectorcraft_geom::SubPath::polyline(&[first, last], false));
+            let (d, id, selection) = drawing(livipen_geom::SubPath::polyline(&[first, last], false));
             for grid in [false, true] {
                 let cx = ToolContext {
                     zoom,
@@ -967,7 +967,7 @@ mod tests {
     #[test]
     fn coincident_endpoints_keep_the_prior_tie_choice() {
         let at = Point::new(100.0, 300.0);
-        let (d, id, selection) = drawing(vectorcraft_geom::SubPath::polyline(&[at, at], false));
+        let (d, id, selection) = drawing(livipen_geom::SubPath::polyline(&[at, at], false));
         let paint = paint();
         for zoom in [0.5, 1.0, 2.0] {
             let cx = ToolContext { zoom, smart_guides: false, snap_to_point: false, ..cx(&d, &selection, &paint) };
@@ -985,7 +985,7 @@ mod tests {
 
     #[test]
     fn terminal_anchor_uses_the_selection_tolerance_at_each_zoom() {
-        let (d, id, s) = drawing(vectorcraft_geom::SubPath::polyline(&[Point::new(10.0, 300.0), Point::new(60.0, 300.0)], false));
+        let (d, id, s) = drawing(livipen_geom::SubPath::polyline(&[Point::new(10.0, 300.0), Point::new(60.0, 300.0)], false));
         let p = paint();
         for zoom in [0.5, 2.0] {
             let cx = ToolContext { zoom, selection_tolerance: 8.0, smart_guides: false, snap_to_point: false, ..cx(&d, &s, &p) };
@@ -1012,7 +1012,7 @@ mod tests {
     /// Upstream's point radius grows with the drawn anchor; cursor and press keep agreeing.
     #[test]
     fn enlarged_anchor_radius_is_used_for_endpoints_and_alt_conversion() {
-        let (d, id, s) = drawing(vectorcraft_geom::SubPath::polyline(&[Point::new(10.0, 300.0), Point::new(60.0, 300.0)], false));
+        let (d, id, s) = drawing(livipen_geom::SubPath::polyline(&[Point::new(10.0, 300.0), Point::new(60.0, 300.0)], false));
         let p = paint();
         for zoom in [0.5, 1.0, 2.0] {
             let cx = ToolContext { zoom, selection_tolerance: 1.0, anchor_size: 7, smart_guides: false, snap_to_point: false, ..cx(&d, &s, &p) };
@@ -1047,7 +1047,7 @@ mod tests {
     /// #516: Alt on the terminal anchor borrows Anchor Point, just like the other anchors.
     #[test]
     fn alt_on_the_terminal_anchor_pulls_symmetric_handles() {
-        let (d, id, s) = drawing(vectorcraft_geom::SubPath::polyline(&[Point::new(100.0, 300.0), Point::new(200.0, 300.0)], false));
+        let (d, id, s) = drawing(livipen_geom::SubPath::polyline(&[Point::new(100.0, 300.0), Point::new(200.0, 300.0)], false));
         let p = paint();
         let cx = cx(&d, &s, &p);
         let alt = Mods { alt: true, ..Mods::default() };
@@ -1068,7 +1068,7 @@ mod tests {
 
     #[test]
     fn ending_during_a_pen_gesture_commits_and_clears_it() {
-        let (d, _, s) = drawing(vectorcraft_geom::SubPath::polyline(&[Point::new(100.0, 300.0), Point::new(200.0, 300.0)], false));
+        let (d, _, s) = drawing(livipen_geom::SubPath::polyline(&[Point::new(100.0, 300.0), Point::new(200.0, 300.0)], false));
         let p = paint();
         let cx = cx(&d, &s, &p);
         for terminal in [false, true] {
@@ -1095,7 +1095,7 @@ mod tests {
     #[test]
     fn a_drag_from_the_first_anchor_always_closes() {
         let pts = [Point::new(100.0, 300.0), Point::new(200.0, 300.0), Point::new(200.0, 400.0)];
-        let (mut d, id, s) = drawing(vectorcraft_geom::SubPath::polyline(&pts, false));
+        let (mut d, id, s) = drawing(livipen_geom::SubPath::polyline(&pts, false));
         let p = paint();
         let mut t = PenTool { drawing: true, ..PenTool::default() };
         let a = t.pointer(&cx(&d, &s, &p), &PointerEvent::new(PointerKind::Down, 101.0, 301.0));
@@ -1117,7 +1117,7 @@ mod tests {
 
     #[test]
     fn a_one_anchor_path_does_not_close_on_itself() {
-        let (d, id, s) = drawing(vectorcraft_geom::SubPath::polyline(&[Point::new(10.0, 300.0)], false));
+        let (d, id, s) = drawing(livipen_geom::SubPath::polyline(&[Point::new(10.0, 300.0)], false));
         let p = paint();
         let cx = cx(&d, &s, &p);
         let mut t = PenTool { drawing: true, ..PenTool::default() };
@@ -1131,16 +1131,12 @@ mod tests {
         let (mut d, _) = doc_with_rect();
         let l = d.layers[0].id;
         let key = |id: NodeId, x: f64| {
-            let r = vectorcraft_geom::shapes::rectangle(vectorcraft_geom::Rect::new(x, 300.0, x + 20.0, 320.0));
-            std::sync::Arc::new(vectorcraft_doc::Node::path(id, r, vectorcraft_doc::Appearance::default_art()))
+            let r = livipen_geom::shapes::rectangle(livipen_geom::Rect::new(x, 300.0, x + 20.0, 320.0));
+            std::sync::Arc::new(livipen_doc::Node::path(id, r, livipen_doc::Appearance::default_art()))
         };
         let (g, k1, k2) = (d.alloc_id(), d.alloc_id(), d.alloc_id());
-        d.insert(
-            Some(l),
-            1,
-            vectorcraft_doc::Node::new(g, NodeKind::Blend { children: vec![key(k1, 100.0), key(k2, 200.0)], spec: Default::default() }),
-        )
-        .unwrap();
+        d.insert(Some(l), 1, livipen_doc::Node::new(g, NodeKind::Blend { children: vec![key(k1, 100.0), key(k2, 200.0)], spec: Default::default() }))
+            .unwrap();
         let mut s = Selection::default();
         s.set([g]);
         let p = paint();
@@ -1165,8 +1161,8 @@ mod tests {
         let l = d.layers[0].id;
         let id = d.alloc_id();
         let pts = [Point::new(300.0, 400.0), Point::new(350.0, 300.0), Point::new(400.0, 400.0)];
-        let path = vectorcraft_geom::PathData::single(vectorcraft_geom::SubPath::polyline(&pts, false));
-        d.insert(Some(l), 1, vectorcraft_doc::Node::path(id, path, vectorcraft_doc::Appearance::default_art())).unwrap();
+        let path = livipen_geom::PathData::single(livipen_geom::SubPath::polyline(&pts, false));
+        d.insert(Some(l), 1, livipen_doc::Node::path(id, path, livipen_doc::Appearance::default_art())).unwrap();
         let mut s = Selection::default();
         s.set([id]);
         let p = paint();
@@ -1202,7 +1198,7 @@ mod tests {
     /// there), in line with another object's centre; Shift slides it along its 45° step into line.
     #[test]
     fn anchors_snap_to_smart_guides() {
-        let (d, id, s) = drawing(vectorcraft_geom::SubPath::polyline(&[Point::new(10.0, 300.0), Point::new(60.0, 300.0)], false));
+        let (d, id, s) = drawing(livipen_geom::SubPath::polyline(&[Point::new(10.0, 300.0), Point::new(60.0, 300.0)], false));
         let p = paint();
         let cx = cx(&d, &s, &p);
         let mut t = PenTool { drawing: true, ..PenTool::default() };
@@ -1229,8 +1225,8 @@ mod tests {
     #[test]
     fn alt_over_a_shown_handle_or_an_anchor_converts() {
         // The middle anchor is smooth: handles at (150, 100) and (250, 100) round (200, 100).
-        let mut sp = vectorcraft_geom::SubPath::polyline(&[Point::new(100.0, 200.0), Point::new(200.0, 100.0), Point::new(300.0, 200.0)], false);
-        sp.anchors[1] = vectorcraft_geom::Anchor::smooth(Point::new(200.0, 100.0), Point::new(250.0, 100.0));
+        let mut sp = livipen_geom::SubPath::polyline(&[Point::new(100.0, 200.0), Point::new(200.0, 100.0), Point::new(300.0, 200.0)], false);
+        sp.anchors[1] = livipen_geom::Anchor::smooth(Point::new(200.0, 100.0), Point::new(250.0, 100.0));
         let (d, id, mut s) = drawing(sp);
         let p = paint();
         let alt = Mods { alt: true, ..Mods::default() };
@@ -1269,7 +1265,7 @@ mod tests {
     /// while drawing too; Alt away from paths still places an anchor.
     #[test]
     fn alt_over_a_segment_reshapes_it() {
-        let (d, id, s) = drawing(vectorcraft_geom::SubPath::polyline(&[Point::new(100.0, 300.0), Point::new(200.0, 300.0)], false));
+        let (d, id, s) = drawing(livipen_geom::SubPath::polyline(&[Point::new(100.0, 300.0), Point::new(200.0, 300.0)], false));
         let p = paint();
         let cx = cx(&d, &s, &p);
         let alt = Mods { alt: true, ..Mods::default() };
@@ -1299,11 +1295,11 @@ mod tests {
     /// drag with Direct Selection), but never another open path selected meanwhile.
     #[test]
     fn the_pen_draws_on_the_path_it_began_only() {
-        let (mut d, a, s) = drawing(vectorcraft_geom::SubPath::polyline(&[Point::new(10.0, 300.0), Point::new(60.0, 300.0)], false));
+        let (mut d, a, s) = drawing(livipen_geom::SubPath::polyline(&[Point::new(10.0, 300.0), Point::new(60.0, 300.0)], false));
         let l = d.layers[0].id;
         let b = d.alloc_id();
-        let line = vectorcraft_geom::shapes::line(Point::new(10.0, 400.0), Point::new(60.0, 400.0));
-        d.insert(Some(l), 2, vectorcraft_doc::Node::path(b, line, vectorcraft_doc::Appearance::default_art())).unwrap();
+        let line = livipen_geom::shapes::line(Point::new(10.0, 400.0), Point::new(60.0, 400.0));
+        d.insert(Some(l), 2, livipen_doc::Node::path(b, line, livipen_doc::Appearance::default_art())).unwrap();
         let p = paint();
         let mut t = PenTool { drawing: true, ..PenTool::default() };
         let cx_a = cx(&d, &s, &p);
@@ -1327,7 +1323,7 @@ mod tests {
     /// badge, and the asterisk comes back once the path is finished.
     #[test]
     fn the_new_path_asterisk_shows_only_before_a_path_is_started() {
-        let (d, _, s) = drawing(vectorcraft_geom::SubPath::polyline(&[Point::new(10.0, 300.0)], false));
+        let (d, _, s) = drawing(livipen_geom::SubPath::polyline(&[Point::new(10.0, 300.0)], false));
         let p = paint();
         let cx = cx(&d, &s, &p);
         let empty = Point::new(250.0, 450.0);

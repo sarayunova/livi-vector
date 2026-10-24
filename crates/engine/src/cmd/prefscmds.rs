@@ -8,7 +8,7 @@ use serde_json::{Map, Value, json};
 use super::*;
 use crate::Prefs;
 use crate::units::Measure;
-use vectorcraft_doc::{GridPrefs, Unit};
+use livipen_doc::{GridPrefs, Unit};
 
 /// What kind of value a preference holds.
 #[derive(Clone, Copy, Debug)]
@@ -391,9 +391,7 @@ fn validate_group(key: &str, current: &Value, v: &Value) -> std::result::Result<
             if let (Some(o), Some(p)) = (merged.as_object_mut(), v.as_object()) {
                 o.extend(p.clone());
             }
-            serde_json::from_value::<vectorcraft_tools::distort::perspective::widget::WidgetOptions>(merged)
-                .map(|o| json!(o))
-                .map_err(|e| e.to_string())
+            serde_json::from_value::<livipen_tools::distort::perspective::widget::WidgetOptions>(merged).map(|o| json!(o)).map_err(|e| e.to_string())
         }
         _ => Err(format!("unknown preference `{key}`")),
     }
@@ -545,19 +543,19 @@ impl Session {
             let folder = self.prefs.fonts_folder.trim();
             // A folder an automation caller chose is read without following its links out of it.
             let confined = crate::file_access::current().is_some();
-            vectorcraft_text::set_user_font_dirs_confined(if folder.is_empty() { vec![] } else { vec![folder.into()] }, confined);
+            livipen_text::set_user_font_dirs_confined(if folder.is_empty() { vec![] } else { vec![folder.into()] }, confined);
             // Once the fonts were scanned, scan again now: the folder's fonts appear (or go) in the
             // font menus, and type in them lays out again. The first scan reads it anyway.
-            if vectorcraft_text::FontDb::global().installed_fonts_changed() {
+            if livipen_text::FontDb::global().installed_fonts_changed() {
                 // Its result only counts the faces cataloged.
                 let _ = super::fonts::rescan(self, &serde_json::Value::Null);
             }
         }
         if hyphen_exceptions_changed {
             // Preferences › Hyphenation › Exceptions (#394): the layout reads the process-wide list.
-            vectorcraft_text::set_hyphenation_exceptions(&self.prefs.hyphenation_exceptions);
+            livipen_text::set_hyphenation_exceptions(&self.prefs.hyphenation_exceptions);
         }
-        vectorcraft_render::set_default_threads(u16::try_from(self.prefs.render_threads).ok());
+        livipen_render::set_default_threads(u16::try_from(self.prefs.render_threads).ok());
         for st in &mut self.docs {
             if history_changed {
                 st.history.limit = self.prefs.history_states as usize;

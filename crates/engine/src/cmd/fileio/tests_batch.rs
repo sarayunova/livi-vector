@@ -1,13 +1,13 @@
 //! Batch exports through Export for Screens (#1935): a file name pattern (the document's and the
 //! item's names, a counter, the date), folders by format, by item or both, layers and the selection
-//! as what is exported, and document formats (VectorCraft, Illustrator, EPS) as rows.
+//! as what is exported, and document formats (Livi Pen, Illustrator, EPS) as rows.
 
 use serde_json::{Value, json};
 
 use super::*;
 
 fn b64(v: &Value) -> Vec<u8> {
-    vectorcraft_format::base64_decode(v["dataBase64"].as_str().expect("dataBase64")).unwrap()
+    livipen_format::base64_decode(v["dataBase64"].as_str().expect("dataBase64")).unwrap()
 }
 
 /// A document of `artboards` 40×30 pt artboards side by side with a 20 pt square on the first.
@@ -62,7 +62,7 @@ fn the_logo_package_of_the_request() {
     let f = files(&r);
     let page = |name: &str| {
         let bytes = &f.iter().find(|(n, _)| n == name).unwrap().1;
-        let d = vectorcraft_pdf::import(bytes).unwrap();
+        let d = livipen_pdf::import(bytes).unwrap();
         let a = d.artboards.first().unwrap().rect;
         (a.width(), a.height())
     };
@@ -141,13 +141,13 @@ fn document_formats_write_one_artboard_each() {
     let mut s = session(2);
     let second = s.doc().unwrap().doc.artboards[1].rect;
     s.execute("shape.ellipse", &json!({"x": second.x0 + 5.0, "y": 5, "width": 10, "height": 10})).unwrap();
-    let r = export(&mut s, json!({"formats": [{"format": "vectorcraft"}, {"format": "ai"}, {"format": "eps"}]}));
+    let r = export(&mut s, json!({"formats": [{"format": "livipen"}, {"format": "ai"}, {"format": "eps"}]}));
     let n = names(&r);
-    assert_eq!(n, ["Artboard-1.vectorcraft", "Artboard-1.ai", "Artboard-1.eps", "Artboard-2.vectorcraft", "Artboard-2.ai", "Artboard-2.eps"]);
+    assert_eq!(n, ["Artboard-1.livipen", "Artboard-1.ai", "Artboard-1.eps", "Artboard-2.livipen", "Artboard-2.ai", "Artboard-2.eps"]);
     let all = files(&r);
     for (name, bytes) in &all {
         let mut t = Session::new();
-        t.execute("document.open", &json!({"name": name, "dataBase64": vectorcraft_format::base64_encode(bytes)})).unwrap();
+        t.execute("document.open", &json!({"name": name, "dataBase64": livipen_format::base64_encode(bytes)})).unwrap();
         let d = &t.doc().unwrap().doc;
         assert_eq!(d.artboards.len(), 1, "{name}: that artboard alone");
         let objects: usize = d.layers.iter().filter_map(|l| l.children()).map(|c| c.len()).sum();

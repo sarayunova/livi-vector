@@ -31,11 +31,11 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::mpsc::Sender;
 
+use livipen_render::encode::{RasterExportOptions, RasterFormat};
+use livipen_tools::{Mods, PointerEvent, PointerKind};
 use serde_json::{Value, json};
-use vectorcraft_render::encode::{RasterExportOptions, RasterFormat};
-use vectorcraft_tools::{Mods, PointerEvent, PointerKind};
 
-use crate::VectorcraftApp;
+use crate::LiviPenApp;
 use crate::canvas::Xf;
 
 /// Synthetic pointer input advances one event per frame: keep gestures and backlog modest.
@@ -56,7 +56,7 @@ fn input_count(p: &Value, key: &str, default: u64, max: u64) -> Result<usize, St
     usize::try_from(n.max(1)).map_err(|_| format!("`{key}` is out of range"))
 }
 
-fn reserve_synthetic(app: &mut VectorcraftApp, additional: usize) -> Result<(), String> {
+fn reserve_synthetic(app: &mut LiviPenApp, additional: usize) -> Result<(), String> {
     if additional > MAX_SYNTHETIC_EVENTS.saturating_sub(app.synthetic.len()) {
         return Err(format!("synthetic input queue limit ({MAX_SYNTHETIC_EVENTS} events); retry after pending input drains"));
     }
@@ -130,7 +130,7 @@ fn wrap(r: Result<Value, String>) -> Outcome {
     }
 }
 
-pub fn all_commands(app: &VectorcraftApp) -> Value {
+pub fn all_commands(app: &LiviPenApp) -> Value {
     let mut v: Vec<Value> = app.session.commands().into_iter().map(|c| serde_json::to_value(c).unwrap_or_default()).collect();
     for (id, label, sc, params) in crate::menus::UI_COMMANDS {
         v.push(json!({"id": id, "label": label, "shortcut": sc, "params": params, "enabled": crate::menus::enabled(app, id), "ui": true}));
@@ -138,7 +138,7 @@ pub fn all_commands(app: &VectorcraftApp) -> Value {
     Value::Array(v)
 }
 
-pub fn inspect(app: &VectorcraftApp, ctx: &egui::Context) -> Value {
+pub fn inspect(app: &LiviPenApp, ctx: &egui::Context) -> Value {
     let r = ctx.content_rect();
     json!({
         "tool": app.session.tool_id(),
@@ -201,7 +201,7 @@ fn modifiers(p: &Value) -> egui::Modifiers {
     egui::Modifiers { alt: b("alt"), ctrl: b("ctrl"), shift: b("shift"), mac_cmd: b("cmd") && cfg!(target_os = "macos"), command: b("cmd") }
 }
 
-pub fn handle(app: &mut VectorcraftApp, ctx: &egui::Context, req: &ControlRequest) -> Outcome {
+pub fn handle(app: &mut LiviPenApp, ctx: &egui::Context, req: &ControlRequest) -> Outcome {
     let p = &req.params;
     let s = |k: &str| p.get(k).and_then(Value::as_str);
     match req.method.as_str() {
@@ -221,7 +221,7 @@ pub fn handle(app: &mut VectorcraftApp, ctx: &egui::Context, req: &ControlReques
         "ui.menu.list" => ok(serde_json::to_value(crate::menus::menu_entries(app)).unwrap_or_default()),
         "ui.contextMenu.list" => ok(serde_json::to_value(crate::menus::context_entries(app)).unwrap_or_default()),
         "ui.tool.select" => wrap(app.run("tool.select", json!({"tool": s("tool").unwrap_or("")}))),
-        "ui.tool.list" => ok(serde_json::to_value(vectorcraft_tools::TOOL_GROUPS).unwrap_or_default()),
+        "ui.tool.list" => ok(serde_json::to_value(livipen_tools::TOOL_GROUPS).unwrap_or_default()),
         "ui.pointer" => {
             let Some(events) = p.get("events").and_then(Value::as_array) else { return err("missing `events`") };
             let base_mods: Mods = p.get("mods").and_then(|m| serde_json::from_value(m.clone()).ok()).unwrap_or_default();
@@ -244,7 +244,7 @@ pub fn handle(app: &mut VectorcraftApp, ctx: &egui::Context, req: &ControlReques
                         None => return err("no canvas yet"),
                     }
                 } else {
-                    vectorcraft_geom::Point::new(x, y)
+                    livipen_geom::Point::new(x, y)
                 };
                 let mods = e.get("mods").and_then(|m| serde_json::from_value(m.clone()).ok()).unwrap_or(base_mods);
                 crate::canvas::dispatch(app, &PointerEvent { kind, pos, mods, pressure: PointerEvent::json_pressure(e) }, view);
@@ -416,7 +416,7 @@ pub fn handle(app: &mut VectorcraftApp, ctx: &egui::Context, req: &ControlReques
         }
         "ui.screenshot" => {
             // Refused now rather than once the frame comes (it is checked again then).
-            if let Some(Err(e)) = s("path").map(vectorcraft_engine::file_access::check_write) {
+            if let Some(Err(e)) = s("path").map(livipen_engine::file_access::check_write) {
                 return err(e);
             }
             if p.get("focus").and_then(Value::as_bool).unwrap_or(true) {
@@ -432,7 +432,7 @@ pub fn handle(app: &mut VectorcraftApp, ctx: &egui::Context, req: &ControlReques
             let index = p.get("artboard").and_then(Value::as_u64).map_or(Some(0), |i| usize::try_from(i).ok());
             let Some(r) = index.and_then(|i| doc.artboards.get(i)).map(|a| a.rect) else { return err("no such artboard") };
             let scale = p.get("scale").and_then(Value::as_f64).unwrap_or(1.0);
-            if let Err(e) = vectorcraft_render::raster_size(r, scale) {
+            if let Err(e) = livipen_render::raster_size(r, scale) {
                 return err(e);
             }
             // Rendered with the options of a PNG export on white, so its pixels are the exported file's.
@@ -477,7 +477,7 @@ pub fn handle(app: &mut VectorcraftApp, ctx: &egui::Context, req: &ControlReques
 }
 
 /// `app.save` (`method`) or `app.export` with params `p`.
-fn save_or_export(app: &mut VectorcraftApp, method: &str, p: &Value) -> Result<Value, String> {
+fn save_or_export(app: &mut LiviPenApp, method: &str, p: &Value) -> Result<Value, String> {
     if method == "app.save" {
         return app.run("file.save", p.clone());
     }
@@ -492,20 +492,20 @@ fn save_or_export(app: &mut VectorcraftApp, method: &str, p: &Value) -> Result<V
 /// `result` with the PNG as `pngBase64` when there is one.
 fn with_data(mut result: Value, png: Option<&[u8]>) -> Value {
     if let Some(png) = png {
-        result["pngBase64"] = json!(vectorcraft_format::base64_encode(png));
+        result["pngBase64"] = json!(livipen_format::base64_encode(png));
     }
     result
 }
 
 /// The reply to `ui.screenshot`: the window capture `image` written to `path`, and sent back as
 /// `pngBase64` with `data`.
-pub fn save_screenshot(app: &mut VectorcraftApp, image: &egui::ColorImage, path: Option<&str>, data: bool) -> Value {
+pub fn save_screenshot(app: &mut LiviPenApp, image: &egui::ColorImage, path: Option<&str>, data: bool) -> Value {
     let [w, h] = image.size;
     if path.is_none() && !data {
         return json!({"ok": true, "result": {"width": w, "height": h}});
     }
     let rgba: Vec<u8> = image.pixels.iter().flat_map(|c| c.to_array()).collect();
-    let img = vectorcraft_render::Rendered { width: w as u32, height: h as u32, pixels: rgba };
+    let img = livipen_render::Rendered { width: w as u32, height: h as u32, pixels: rgba };
     let png = match img.to_png() {
         Ok(png) => png,
         Err(e) => return json!({"ok": false, "error": e}),
@@ -525,13 +525,13 @@ pub fn save_screenshot(app: &mut VectorcraftApp, image: &egui::ColorImage, path:
 
 #[cfg(test)]
 mod tests {
+    use livipen_engine::Session;
     use serde_json::{Value, json};
-    use vectorcraft_engine::Session;
 
     use super::{ControlRequest, Outcome, handle};
-    use crate::{Services, VectorcraftApp};
+    use crate::{LiviPenApp, Services};
 
-    fn input_request(app: &mut VectorcraftApp, method: &str, params: Value) -> Value {
+    fn input_request(app: &mut LiviPenApp, method: &str, params: Value) -> Value {
         let (req, _) = ControlRequest::new(method, params);
         let Outcome::Done(r) = handle(app, &egui::Context::default(), &req) else { panic!("expected immediate reply") };
         r
@@ -539,7 +539,7 @@ mod tests {
 
     #[test]
     fn ui_set_turns_the_image_trace_preview_off_and_on() {
-        let mut app = VectorcraftApp::new(Session::new(), Services::default());
+        let mut app = LiviPenApp::new(Session::new(), Services::default());
         assert!(app.ui.image_trace_preview);
         for on in [false, true] {
             let r = input_request(&mut app, "ui.set", json!({"imageTracePreview": on}));
@@ -554,7 +554,7 @@ mod tests {
         for (method, params) in
             [("ui.click", json!({"count": 17})), ("ui.drag", json!({"steps": 257})), ("ui.drag", json!({"steps": 2, "count": 17}))]
         {
-            let mut app = VectorcraftApp::new(Session::new(), Services::default());
+            let mut app = LiviPenApp::new(Session::new(), Services::default());
             app.synthetic.push(egui::Event::Text("already queued".into()));
             let before = format!("{:?}", app.synthetic);
             let r = input_request(&mut app, method, params);
@@ -565,7 +565,7 @@ mod tests {
 
     #[test]
     fn control_input_respects_existing_queue_budget() {
-        let mut app = VectorcraftApp::new(Session::new(), Services::default());
+        let mut app = LiviPenApp::new(Session::new(), Services::default());
         app.synthetic = vec![egui::Event::PointerMoved(egui::pos2(1.0, 2.0)); 1023];
         let before = format!("{:?}", app.synthetic);
         let r = input_request(&mut app, "ui.click", json!({}));
@@ -576,7 +576,7 @@ mod tests {
     #[test]
     fn control_input_yields_control_channel_after_frame_budget() {
         let (tx, rx) = std::sync::mpsc::channel();
-        let mut app = VectorcraftApp::new(Session::new(), Services::default()).with_control(rx);
+        let mut app = LiviPenApp::new(Session::new(), Services::default()).with_control(rx);
         let mut replies = vec![];
         for _ in 0..65 {
             let (req, reply) = ControlRequest::new("ui.move", json!({"x": 1, "y": 2}));
@@ -595,7 +595,7 @@ mod tests {
     fn control_input_rejects_invalid_and_extreme_counts() {
         for value in [json!(u64::MAX), json!(-1), json!(1.5), json!("2"), Value::Null] {
             for (method, key) in [("ui.click", "count"), ("ui.drag", "count"), ("ui.drag", "steps")] {
-                let mut app = VectorcraftApp::new(Session::new(), Services::default());
+                let mut app = LiviPenApp::new(Session::new(), Services::default());
                 app.synthetic.push(egui::Event::Text("pending".into()));
                 let before = format!("{:?}", app.synthetic);
                 let mut params = json!({});
@@ -610,7 +610,7 @@ mod tests {
 
     #[test]
     fn control_input_accepts_boundary_gestures_and_preserves_event_order() {
-        let mut app = VectorcraftApp::new(Session::new(), Services::default());
+        let mut app = LiviPenApp::new(Session::new(), Services::default());
         let r = input_request(
             &mut app,
             "ui.drag",
@@ -651,7 +651,7 @@ mod tests {
             ("ui.click", json!({})),
             ("ui.drag", json!({"steps": 1})),
         ] {
-            let mut app = VectorcraftApp::new(Session::new(), Services::default());
+            let mut app = LiviPenApp::new(Session::new(), Services::default());
             app.synthetic = vec![egui::Event::PointerMoved(egui::pos2(1.0, 2.0)); 1024];
             let before = format!("{:?}", app.synthetic);
             let r = input_request(&mut app, method, params);
@@ -667,7 +667,7 @@ mod tests {
     #[test]
     fn render_takes_the_artboard_asked_for() {
         let (tx, rx) = std::sync::mpsc::channel();
-        let mut app = VectorcraftApp::new(Session::new(), Services::default()).with_control(rx);
+        let mut app = LiviPenApp::new(Session::new(), Services::default()).with_control(rx);
         let mut request = |method: &str, params: Value| {
             let (req, reply) = ControlRequest::new(method, params);
             tx.send(req).unwrap();
@@ -696,14 +696,14 @@ mod tests {
     /// the key, and a click on the key again lets it go.
     #[test]
     fn pointer_replies_name_the_key_object() {
-        let mut app = VectorcraftApp::new(Session::new(), Services::default());
+        let mut app = LiviPenApp::new(Session::new(), Services::default());
         app.run("file.new", json!({"width": 200, "height": 200})).unwrap();
         let a = app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 20, "height": 20})).unwrap()["id"].clone();
         let b = app.run("shape.rectangle", json!({"x": 100, "y": 10, "width": 20, "height": 20})).unwrap()["id"].clone();
         app.run("select.set", json!({"ids": [a, b]})).unwrap();
         app.run("tool.select", json!({"tool": "selection"})).unwrap();
         let ctx = egui::Context::default();
-        let click = |app: &mut VectorcraftApp| {
+        let click = |app: &mut LiviPenApp| {
             let events = json!([{"kind": "down", "x": 110, "y": 20}, {"kind": "up", "x": 110, "y": 20}]);
             let (req, _) = ControlRequest::new("ui.pointer", json!({"events": events}));
             let Outcome::Done(r) = handle(app, &ctx, &req) else { panic!("not done") };

@@ -1,9 +1,9 @@
 //! Raster effects in PDF export: not written yet, so a fill's, a stroke's or the object's own
 //! raster effect is reported.
 
-use vectorcraft_color::{Color, Paint};
-use vectorcraft_doc::{Appearance, Document, Effect, Node, NodeId};
-use vectorcraft_geom::{Rect, shapes};
+use livipen_color::{Color, Paint};
+use livipen_doc::{Appearance, Document, Effect, Node, NodeId};
+use livipen_geom::{Rect, shapes};
 
 use crate::*;
 

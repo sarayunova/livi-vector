@@ -2,11 +2,11 @@
 //! and tool keys (Enter/Esc/↑/↓ while drawing).
 
 use egui::{Key, KeyboardShortcut, Modifiers};
+use livipen_engine::cmd::clipboard::{Flavour, TEXT};
+use livipen_tools::{Mods, ToolKey};
 use serde_json::json;
-use vectorcraft_engine::cmd::clipboard::{Flavour, TEXT};
-use vectorcraft_tools::{Mods, ToolKey};
 
-use crate::VectorcraftApp;
+use crate::LiviPenApp;
 
 /// Parse "Cmd+Shift+]" into an egui shortcut. `Cmd` is Command on macOS and Ctrl elsewhere.
 /// `+` and `=` name one chord key ([`Key::Equals`]): `+` is Shift+`=` on many layouts, so a
@@ -65,7 +65,7 @@ pub(crate) fn is_modifier(key: Key) -> bool {
 /// command's params: `{}`, or `{panel}` for the panel shortcuts (`window.panel`).
 pub(crate) fn all_shortcuts() -> Vec<(KeyboardShortcut, &'static str, serde_json::Value)> {
     let mut v = vec![];
-    for c in vectorcraft_engine::command_specs() {
+    for c in livipen_engine::command_specs() {
         if let Some(sc) = crate::menus::shortcut_of(c.id).and_then(parse) {
             v.push((sc, c.id, json!({})));
         }
@@ -231,7 +231,7 @@ impl PasteChord {
 
 /// End an IME composition outside the IME (a click away, the IME going away): the
 /// marked text stays as typed, and the system IME is told to drop it.
-pub(crate) fn keep_marked_text(app: &mut VectorcraftApp) {
+pub(crate) fn keep_marked_text(app: &mut LiviPenApp) {
     let Some(m) = app.ime_marked.take() else { return };
     app.ime_discard = true;
     if app.session.tool_composing() {
@@ -248,7 +248,7 @@ fn is_shortcut_chord(m: egui::Modifiers) -> bool {
 }
 
 /// Typed text and IME events, in the order they came, to the Type tool.
-fn type_text(app: &mut VectorcraftApp, ctx: &egui::Context) {
+fn type_text(app: &mut LiviPenApp, ctx: &egui::Context) {
     let view = app.view_info();
     // Switching apps mid-composition needs nothing: the macOS IME keeps its marked text and goes
     // on with it when the window comes back (measured with Kotoeri), as the tool does.
@@ -325,7 +325,7 @@ fn type_text(app: &mut VectorcraftApp, ctx: &egui::Context) {
     }
 }
 
-pub fn handle(app: &mut VectorcraftApp, ctx: &egui::Context) {
+pub fn handle(app: &mut LiviPenApp, ctx: &egui::Context) {
     // Taken before anything returns, so a press in a field or a dialog ends a pair of Escapes.
     let mut escape_pair = escape_press(ctx);
     // Followed before anything returns, so a key typed in a field isn't taken for a paste.
@@ -409,7 +409,7 @@ pub fn handle(app: &mut VectorcraftApp, ctx: &egui::Context) {
                 // Enter with a selection tool opens the Move dialog, as a double-click on its button
                 // does.
                 let tool = app.session.tool_id();
-                if app.ui.dialog.is_none() && vectorcraft_tools::catalog::is_selection_tool(tool) {
+                if app.ui.dialog.is_none() && livipen_tools::catalog::is_selection_tool(tool) {
                     // Nothing selected: it fails and nothing opens (the menu item is disabled then too).
                     let _ = crate::toolbar::open_options(app, tool);
                 }
@@ -637,13 +637,13 @@ pub fn handle(app: &mut VectorcraftApp, ctx: &egui::Context) {
         && app.session.active().is_some_and(|st| {
             st.selection.guides.is_empty()
                 && !st.selection.objects.is_empty()
-                && st.selection.objects.iter().all(|id| matches!(st.doc.node(*id).map(|n| &n.kind), Some(vectorcraft_doc::NodeKind::Text(_))))
+                && st.selection.objects.iter().all(|id| matches!(st.doc.node(*id).map(|n| &n.kind), Some(livipen_doc::NodeKind::Text(_))))
         })
     {
         let keys = [(Key::ArrowLeft, ToolKey::Left), (Key::ArrowRight, ToolKey::Right), (Key::ArrowUp, ToolKey::Up), (Key::ArrowDown, ToolKey::Down)];
         for (key, tool_key) in keys {
             if ctx.input_mut(|i| i.consume_key(m, key)) {
-                if let Some((attribute, by)) = vectorcraft_tools::text::step_key(tool_key, m.shift, false) {
+                if let Some((attribute, by)) = livipen_tools::text::step_key(tool_key, m.shift, false) {
                     let by = if m.command { by * 5.0 } else { by };
                     let _ = app.run("type.step", json!({"attribute": attribute, "by": by}));
                 }
@@ -737,7 +737,7 @@ fn escape_press(ctx: &egui::Context) -> Option<bool> {
 /// Does this Escape reset the view's rotation? It does when the view is rotated, no popup is open,
 /// the ruler origin is not being dragged, and the press is the second of a pair (`second`) or the
 /// Rotate View tool is chosen.
-fn escape_resets_rotation(app: &VectorcraftApp, ctx: &egui::Context, second: bool) -> bool {
+fn escape_resets_rotation(app: &LiviPenApp, ctx: &egui::Context, second: bool) -> bool {
     app.view().is_some_and(|v| v.rotation != 0.0)
         && (second || app.session.tool_id() == "rotateView")
         && !egui::Popup::is_any_open(ctx)
@@ -748,7 +748,7 @@ fn escape_resets_rotation(app: &VectorcraftApp, ctx: &egui::Context, second: boo
 /// the previous and the next artboard ([`presentation_step`]). Every other key press, the text it
 /// types and the clipboard keys are removed from the input, so no shortcut, tool or field acts on
 /// them. The macOS menu bar's key equivalents arrive as key presses too ([`crate::native_menu`]).
-fn presentation_keys(app: &mut VectorcraftApp, ctx: &egui::Context, escape_pair: Option<bool>) {
+fn presentation_keys(app: &mut LiviPenApp, ctx: &egui::Context, escape_pair: Option<bool>) {
     let (mut leave, mut steps) = (false, vec![]);
     ctx.input_mut(|i| {
         i.events.retain(|e| match e {
@@ -790,7 +790,7 @@ fn presentation_keys(app: &mut VectorcraftApp, ctx: &egui::Context, escape_pair:
 /// navigator's Next and Previous buttons do, for the arrow keys and a click in Presentation Mode.
 /// On the last artboard a step forward leaves the view as it is, and so does a step back on the
 /// first.
-pub(crate) fn presentation_step(app: &mut VectorcraftApp, next: bool) {
+pub(crate) fn presentation_step(app: &mut LiviPenApp, next: bool) {
     let n = app.session.active().map_or(0, |d| d.doc.artboards.len());
     let at = crate::panels::artboards::selected(app, n);
     let to = if next { (at + 1 < n).then_some("next") } else { (at > 0).then_some("previous") };
@@ -831,7 +831,7 @@ mod tests {
     use super::*;
 
     /// One headless frame delivering `events` to the shortcut handler.
-    fn frame(app: &mut VectorcraftApp, events: Vec<egui::Event>) -> egui::FullOutput {
+    fn frame(app: &mut LiviPenApp, events: Vec<egui::Event>) -> egui::FullOutput {
         let ctx = egui::Context::default();
         let mut out = ctx.run_ui(egui::RawInput { events, ..Default::default() }, |ui| {
             handle(app, ui.ctx());
@@ -863,7 +863,7 @@ mod tests {
     }
 
     /// The text of the type object `id`, and the document's layer count.
-    fn text_and_layers(app: &mut VectorcraftApp, id: u64) -> (String, usize) {
+    fn text_and_layers(app: &mut LiviPenApp, id: u64) -> (String, usize) {
         let r = app.session.execute("text.getRange", &json!({"id": id})).unwrap();
         let text = r["runs"].as_array().unwrap().iter().filter_map(|run| run["text"].as_str()).collect();
         (text, app.session.active().unwrap().doc.layers.len())
@@ -877,17 +877,17 @@ mod tests {
     fn altgr_characters_typed_in_text_run_no_command() {
         let mut wrong = vec![];
         for (key, typed) in [(Key::L, "ł"), (Key::Q, "@"), (Key::E, "€"), (Key::A, "ą"), (Key::Z, "ż")] {
-            let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+            let mut app = LiviPenApp::new(livipen_engine::Session::new(), Default::default());
             app.session.execute("file.new", &json!({"width": 200, "height": 200})).unwrap();
             app.session.execute("shape.rectangle", &json!({"x": 10, "y": 10, "width": 20, "height": 20})).unwrap();
             let id = app.session.execute("text.create", &json!({"x": 20, "y": 50, "text": "Hi"})).unwrap()["id"].as_u64().unwrap();
             app.session.execute("text.setRangeStyle", &json!({"id": id, "tracking": 200, "kerning": -40})).unwrap();
             app.select_tool("type");
-            app.session.apply_actions(vec![vectorcraft_tools::Action::Notify("text.editNew".into())]).unwrap();
+            app.session.apply_actions(vec![livipen_tools::Action::Notify("text.editNew".into())]).unwrap();
             app.session.set_tool_option("select", &json!({"start": 2, "end": 2}));
             assert!(app.session.tool_wants_text());
             let layers = text_and_layers(&mut app, id).1;
-            let selected = |app: &VectorcraftApp| app.session.active().unwrap().selection.objects.len();
+            let selected = |app: &LiviPenApp| app.session.active().unwrap().selection.objects.len();
             let before = selected(&app);
             frame(&mut app, ctrl_alt_press(key, Some(typed)));
             let r = app.session.execute("text.getRange", &json!({"id": id})).unwrap();
@@ -906,22 +906,22 @@ mod tests {
     /// Layer, and Ctrl+Alt+L is New Layer Options…, which opens Layer Options for a new layer.
     #[test]
     fn ctrl_alt_chords_without_typed_text_still_run() {
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let mut app = LiviPenApp::new(livipen_engine::Session::new(), Default::default());
         app.session.execute("file.new", &json!({"width": 200, "height": 200})).unwrap();
         let id = app.session.execute("text.create", &json!({"x": 20, "y": 50, "text": "Hi"})).unwrap()["id"].as_u64().unwrap();
         app.select_tool("type");
-        app.session.apply_actions(vec![vectorcraft_tools::Action::Notify("text.editNew".into())]).unwrap();
+        app.session.apply_actions(vec![livipen_tools::Action::Notify("text.editNew".into())]).unwrap();
         assert!(app.session.tool_wants_text());
         let layers = text_and_layers(&mut app, id).1;
         let new_layer_options =
-            |app: &VectorcraftApp| app.ui.dialog.as_ref().is_some_and(|d| d.kind == "layerOptions" && d.fields.get("mode") == Some(&json!("new")));
+            |app: &LiviPenApp| app.ui.dialog.as_ref().is_some_and(|d| d.kind == "layerOptions" && d.fields.get("mode") == Some(&json!("new")));
         let m = Modifiers::COMMAND | Modifiers::CTRL;
         let ctrl_l = egui::Event::Key { key: Key::L, physical_key: Some(Key::L), pressed: true, repeat: false, modifiers: m };
         frame(&mut app, vec![egui::Event::ModifiersChanged(m), ctrl_l]);
         assert_eq!(text_and_layers(&mut app, id), ("Hi".into(), layers + 1), "Ctrl+L while editing: New Layer");
         assert!(app.ui.dialog.is_none(), "Ctrl+L opens no dialog");
         app.select_tool("type");
-        app.session.apply_actions(vec![vectorcraft_tools::Action::Notify("text.editNew".into())]).unwrap();
+        app.session.apply_actions(vec![livipen_tools::Action::Notify("text.editNew".into())]).unwrap();
         assert!(app.session.tool_wants_text());
         frame(&mut app, ctrl_alt_press(Key::L, None));
         assert!(new_layer_options(&app), "Ctrl+Alt+L with no text typed while editing: New Layer Options…");
@@ -937,7 +937,7 @@ mod tests {
     /// tool's Shift+O), with the Selection tool or while the Type tool edits the text.
     #[test]
     fn cmd_shift_o_creates_outlines() {
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let mut app = LiviPenApp::new(livipen_engine::Session::new(), Default::default());
         app.session.execute("file.new", &json!({"width": 200, "height": 200})).unwrap();
         assert_eq!(crate::menus::shortcut_of("type.createOutlines"), Some("Cmd+Shift+O"));
         let open = parse("Cmd+O").unwrap();
@@ -946,13 +946,13 @@ mod tests {
         assert!(pos(outlines, "type.createOutlines").unwrap() < pos(open, "file.open").unwrap(), "more modifiers win so Open does not eat the chord");
         let cmd_shift = Modifiers::COMMAND | Modifiers::SHIFT;
         let chord = egui::Event::Key { key: Key::O, physical_key: None, pressed: true, repeat: false, modifiers: cmd_shift };
-        let is_text = |app: &VectorcraftApp, id: u64| {
-            matches!(app.session.doc().unwrap().doc.node(vectorcraft_doc::NodeId(id)).map(|n| &n.kind), Some(vectorcraft_doc::NodeKind::Text(_)))
+        let is_text = |app: &LiviPenApp, id: u64| {
+            matches!(app.session.doc().unwrap().doc.node(livipen_doc::NodeId(id)).map(|n| &n.kind), Some(livipen_doc::NodeKind::Text(_)))
         };
-        let group_kids = |app: &VectorcraftApp| -> usize {
+        let group_kids = |app: &LiviPenApp| -> usize {
             let id = app.session.active().unwrap().selection.objects.first().copied().unwrap();
             match &app.session.doc().unwrap().doc.node(id).unwrap().kind {
-                vectorcraft_doc::NodeKind::Group { children, .. } => children.len(),
+                livipen_doc::NodeKind::Group { children, .. } => children.len(),
                 _ => 0,
             }
         };
@@ -966,7 +966,7 @@ mod tests {
         // While the Type tool edits, the same chord outlines; a Text event with Cmd held must not type.
         let id = app.session.execute("text.create", &json!({"x": 20, "y": 80, "text": "Yo"})).unwrap()["id"].as_u64().unwrap();
         app.select_tool("type");
-        app.session.apply_actions(vec![vectorcraft_tools::Action::Notify("text.editNew".into())]).unwrap();
+        app.session.apply_actions(vec![livipen_tools::Action::Notify("text.editNew".into())]).unwrap();
         assert!(app.session.tool_wants_text());
         frame(&mut app, vec![egui::Event::ModifiersChanged(cmd_shift), chord, egui::Event::Text("o".into())]);
         assert!(!is_text(&app, id), "Type tool: the chord outlines the text being edited");
@@ -977,12 +977,12 @@ mod tests {
     /// Cmd+Shift+B while the Type tool edits text is Type › Bold, not Hide Bounding Box (#724).
     #[test]
     fn cmd_shift_b_while_typing_is_bold_not_the_bounding_box() {
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let mut app = LiviPenApp::new(livipen_engine::Session::new(), Default::default());
         app.session.execute("file.new", &json!({"width": 200, "height": 200})).unwrap();
         app.select_tool("type");
         let view = app.view_info();
-        for kind in [vectorcraft_tools::PointerKind::Down, vectorcraft_tools::PointerKind::Up] {
-            app.session.pointer(&vectorcraft_tools::PointerEvent::new(kind, 50.0, 50.0), view).unwrap();
+        for kind in [livipen_tools::PointerKind::Down, livipen_tools::PointerKind::Up] {
+            app.session.pointer(&livipen_tools::PointerEvent::new(kind, 50.0, 50.0), view).unwrap();
         }
         frame(&mut app, vec![egui::Event::Text("Bold".into())]);
         assert!(app.session.tool_wants_text());
@@ -1003,14 +1003,14 @@ mod tests {
     /// or while the Type tool edits text, those its selection touches.
     #[test]
     fn cmd_shift_letters_align_paragraphs() {
-        use vectorcraft_doc::Justify;
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        use livipen_doc::Justify;
+        let mut app = LiviPenApp::new(livipen_engine::Session::new(), Default::default());
         app.session.execute("file.new", &json!({"width": 200, "height": 200})).unwrap();
         let id = app.session.execute("text.create", &json!({"x": 20, "y": 50, "text": "One\nTwo"})).unwrap()["id"].as_u64().unwrap();
         let chord =
             |key| egui::Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::COMMAND | Modifiers::SHIFT };
-        let paras = |app: &VectorcraftApp| match &app.session.active().unwrap().doc.node(vectorcraft_doc::NodeId(id)).unwrap().kind {
-            vectorcraft_doc::NodeKind::Text(t) => (0..t.paragraph_count()).map(|i| t.para_at(i).justify).collect::<Vec<_>>(),
+        let paras = |app: &LiviPenApp| match &app.session.active().unwrap().doc.node(livipen_doc::NodeId(id)).unwrap().kind {
+            livipen_doc::NodeKind::Text(t) => (0..t.paragraph_count()).map(|i| t.para_at(i).justify).collect::<Vec<_>>(),
             _ => panic!("text"),
         };
         app.session.execute("select.set", &json!({"ids": [id]})).unwrap();
@@ -1026,7 +1026,7 @@ mod tests {
         }
         // With the Type tool, only the paragraph its selection touches.
         app.select_tool("type");
-        app.session.apply_actions(vec![vectorcraft_tools::Action::Notify("text.editNew".into())]).unwrap();
+        app.session.apply_actions(vec![livipen_tools::Action::Notify("text.editNew".into())]).unwrap();
         app.session.set_tool_option("select", &json!({"start": 5, "end": 6}));
         assert!(app.session.tool_wants_text());
         frame(&mut app, vec![chord(Key::R)]);
@@ -1041,12 +1041,11 @@ mod tests {
     /// and of the Type tool's selected text while it edits.
     #[test]
     fn cmd_alt_q_resets_tracking_and_kerning() {
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let mut app = LiviPenApp::new(livipen_engine::Session::new(), Default::default());
         app.session.execute("file.new", &json!({"width": 200, "height": 200})).unwrap();
         let id = app.session.execute("text.create", &json!({"x": 20, "y": 50, "text": "One Two"})).unwrap()["id"].as_u64().unwrap();
-        let spaced =
-            |app: &mut VectorcraftApp| app.session.execute("text.setRangeStyle", &json!({"id": id, "tracking": 200, "kerning": -40})).unwrap();
-        let spacing = |app: &mut VectorcraftApp| {
+        let spaced = |app: &mut LiviPenApp| app.session.execute("text.setRangeStyle", &json!({"id": id, "tracking": 200, "kerning": -40})).unwrap();
+        let spacing = |app: &mut LiviPenApp| {
             let r = app.session.execute("text.getRange", &json!({"id": id})).unwrap();
             r["runs"]
                 .as_array()
@@ -1064,7 +1063,7 @@ mod tests {
         // While the Type tool edits: only its selection.
         spaced(&mut app);
         app.select_tool("type");
-        app.session.apply_actions(vec![vectorcraft_tools::Action::Notify("text.editNew".into())]).unwrap();
+        app.session.apply_actions(vec![livipen_tools::Action::Notify("text.editNew".into())]).unwrap();
         app.session.set_tool_option("select", &json!({"start": 4, "end": 7}));
         assert!(app.session.tool_wants_text());
         frame(&mut app, vec![chord]);
@@ -1076,11 +1075,11 @@ mod tests {
     /// the type object is not cut.
     #[test]
     fn cmd_shift_x_resets_horizontal_scale() {
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let mut app = LiviPenApp::new(livipen_engine::Session::new(), Default::default());
         app.session.execute("file.new", &json!({"width": 200, "height": 200})).unwrap();
         let id = app.session.execute("text.create", &json!({"x": 20, "y": 50, "text": "One Two"})).unwrap()["id"].as_u64().unwrap();
-        let stretched = |app: &mut VectorcraftApp| app.session.execute("text.setRangeStyle", &json!({"id": id, "hScale": 150})).unwrap();
-        let scales = |app: &mut VectorcraftApp| {
+        let stretched = |app: &mut LiviPenApp| app.session.execute("text.setRangeStyle", &json!({"id": id, "hScale": 150})).unwrap();
+        let scales = |app: &mut LiviPenApp| {
             let r = app.session.execute("text.getRange", &json!({"id": id})).unwrap();
             r["runs"].as_array().unwrap().iter().map(|run| (run["text"].clone(), run["style"]["h_scale"].clone())).collect::<Vec<_>>()
         };
@@ -1092,7 +1091,7 @@ mod tests {
         // While the Type tool edits: only its selection, and the text stays.
         stretched(&mut app);
         app.select_tool("type");
-        app.session.apply_actions(vec![vectorcraft_tools::Action::Notify("text.editNew".into())]).unwrap();
+        app.session.apply_actions(vec![livipen_tools::Action::Notify("text.editNew".into())]).unwrap();
         app.session.set_tool_option("select", &json!({"start": 4, "end": 7}));
         assert!(app.session.tool_wants_text());
         frame(&mut app, chord);
@@ -1104,11 +1103,11 @@ mod tests {
     /// work.
     #[test]
     fn tab_leaves_the_keyboard_to_the_shortcuts_and_the_type_tool() {
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let mut app = LiviPenApp::new(livipen_engine::Session::new(), Default::default());
         app.session.execute("file.new", &json!({"width": 200, "height": 200})).unwrap();
         let ctx = egui::Context::default();
         let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1600.0, 850.0));
-        let run = |app: &mut VectorcraftApp, events: Vec<egui::Event>| {
+        let run = |app: &mut LiviPenApp, events: Vec<egui::Event>| {
             let mut out = ctx.run_ui(egui::RawInput { events, screen_rect: Some(screen), ..Default::default() }, |ui| {
                 app.logic(ui.ctx());
                 app.ui(ui);
@@ -1131,8 +1130,8 @@ mod tests {
         // The Type tool: a, Tab, b is one text.
         app.select_tool("type");
         let view = app.view_info();
-        for kind in [vectorcraft_tools::PointerKind::Down, vectorcraft_tools::PointerKind::Up] {
-            app.session.pointer(&vectorcraft_tools::PointerEvent::new(kind, 50.0, 50.0), view).unwrap();
+        for kind in [livipen_tools::PointerKind::Down, livipen_tools::PointerKind::Up] {
+            app.session.pointer(&livipen_tools::PointerEvent::new(kind, 50.0, 50.0), view).unwrap();
         }
         run(&mut app, vec![egui::Event::Text("a".into())]);
         run(&mut app, vec![press(Key::Tab)]);
@@ -1146,11 +1145,11 @@ mod tests {
     /// In a focused field neither key shows or hides anything.
     #[test]
     fn shift_tab_hides_the_panels_but_not_the_toolbar_or_the_control_bar() {
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let mut app = LiviPenApp::new(livipen_engine::Session::new(), Default::default());
         app.session.execute("file.new", &json!({"width": 200, "height": 200})).unwrap();
         let ctx = egui::Context::default();
         let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1600.0, 850.0));
-        let run = |app: &mut VectorcraftApp, events: Vec<egui::Event>| {
+        let run = |app: &mut LiviPenApp, events: Vec<egui::Event>| {
             let mut out = ctx.run_ui(egui::RawInput { events, screen_rect: Some(screen), ..Default::default() }, |ui| {
                 app.logic(ui.ctx());
                 app.ui(ui);
@@ -1158,7 +1157,7 @@ mod tests {
             out.textures_delta.clear();
         };
         let press = |modifiers| egui::Event::Key { key: Key::Tab, physical_key: None, pressed: true, repeat: false, modifiers };
-        let shown = |app: &VectorcraftApp| (app.ui.dock, app.ui.toolbar, app.ui.control_bar);
+        let shown = |app: &LiviPenApp| (app.ui.dock, app.ui.toolbar, app.ui.control_bar);
         app.ui.control_bar = true;
         for _ in 0..3 {
             run(&mut app, vec![]);
@@ -1209,11 +1208,11 @@ mod tests {
     /// After a switch of workspace, Tab hides and shows that workspace's bars.
     #[test]
     fn tab_shows_again_only_the_bars_it_hid() {
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let mut app = LiviPenApp::new(livipen_engine::Session::new(), Default::default());
         app.session.execute("file.new", &json!({"width": 200, "height": 200})).unwrap();
         let ctx = egui::Context::default();
         let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1600.0, 850.0));
-        let run = |app: &mut VectorcraftApp, events: Vec<egui::Event>| {
+        let run = |app: &mut LiviPenApp, events: Vec<egui::Event>| {
             let mut out = ctx.run_ui(egui::RawInput { events, screen_rect: Some(screen), ..Default::default() }, |ui| {
                 app.logic(ui.ctx());
                 app.ui(ui);
@@ -1221,7 +1220,7 @@ mod tests {
             out.textures_delta.clear();
         };
         let press = |modifiers| egui::Event::Key { key: Key::Tab, physical_key: None, pressed: true, repeat: false, modifiers };
-        let tab = |app: &mut VectorcraftApp, modifiers| {
+        let tab = |app: &mut LiviPenApp, modifiers| {
             run(app, vec![press(modifiers)]);
             run(app, vec![]);
             (app.ui.dock, app.ui.toolbar, app.ui.control_bar)
@@ -1278,7 +1277,7 @@ mod tests {
 
     #[test]
     fn copy_and_paste_events_use_the_system_clipboard() {
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let mut app = LiviPenApp::new(livipen_engine::Session::new(), Default::default());
         app.session.execute("file.new", &json!({"width": 200, "height": 200})).unwrap();
         let id = app.session.execute("shape.rectangle", &json!({"x": 0, "y": 0, "width": 10, "height": 10})).unwrap()["id"].clone();
         app.session.execute("select.set", &json!({"ids": [id]})).unwrap();
@@ -1304,13 +1303,13 @@ mod tests {
     /// While a grid is dragged out, ↑/↓ change its rows and ←/→ its columns.
     #[test]
     fn arrows_while_dragging_a_grid_change_its_rows_and_columns() {
-        use vectorcraft_tools::{PointerEvent, PointerKind};
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        use livipen_tools::{PointerEvent, PointerKind};
+        let mut app = LiviPenApp::new(livipen_engine::Session::new(), Default::default());
         app.session.execute("file.new", &json!({"width": 400, "height": 300})).unwrap();
         app.select_tool("rectangularGrid");
         let view = app.view_info();
         // Drag a grid out, pressing `keys` on the way: its (horizontal, vertical) dividers.
-        let grid = |app: &mut VectorcraftApp, keys: &[Key]| {
+        let grid = |app: &mut LiviPenApp, keys: &[Key]| {
             app.session.pointer(&PointerEvent::new(PointerKind::Down, 100.0, 80.0), view).unwrap();
             app.session.pointer(&PointerEvent::new(PointerKind::Drag, 300.0, 220.0), view).unwrap();
             for &key in keys {
@@ -1320,7 +1319,7 @@ mod tests {
             app.session.pointer(&PointerEvent::new(PointerKind::Up, 300.0, 220.0), view).unwrap();
             let d = &app.session.doc().unwrap().doc;
             let g = d.layers[0].children().unwrap().last().unwrap().clone();
-            let vectorcraft_doc::NodeKind::Group { children, .. } = &g.kind else { panic!("not a grid: {:?}", g.kind) };
+            let livipen_doc::NodeKind::Group { children, .. } = &g.kind else { panic!("not a grid: {:?}", g.kind) };
             let bounds: Vec<_> = children.iter().filter_map(|c| c.geometric_bounds()).collect();
             (bounds.iter().filter(|b| b.height() < 0.5).count(), bounds.iter().filter(|b| b.width() < 0.5).count())
         };
@@ -1335,15 +1334,15 @@ mod tests {
     }
 
     /// Binds Show Grid to `chord`, or with `None` leaves every command its default shortcut.
-    fn bind_grid(app: &mut VectorcraftApp, chord: Option<&str>) {
+    fn bind_grid(app: &mut LiviPenApp, chord: Option<&str>) {
         app.ui.shortcut_overrides.clear();
         app.ui.shortcut_overrides.extend(chord.map(|c| ("view.grid".to_string(), c.to_string())));
         crate::shortcut_editor::sync(&app.ui);
     }
 
     /// Clicks the active tool at (`x`, 200) and returns how many objects the first layer holds.
-    fn click_at(app: &mut VectorcraftApp, x: f64) -> usize {
-        use vectorcraft_tools::{PointerEvent, PointerKind};
+    fn click_at(app: &mut LiviPenApp, x: f64) -> usize {
+        use livipen_tools::{PointerEvent, PointerKind};
         let view = app.view_info();
         for kind in [PointerKind::Down, PointerKind::Up] {
             app.session.pointer(&PointerEvent::new(kind, x, 200.0), view).unwrap();
@@ -1356,10 +1355,10 @@ mod tests {
     /// nothing bound to it, Cmd+Enter goes to the tool as Enter does.
     #[test]
     fn a_command_on_cmd_enter_runs_without_the_tools_enter() {
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let mut app = LiviPenApp::new(livipen_engine::Session::new(), Default::default());
         app.session.execute("file.new", &json!({"width": 400, "height": 300})).unwrap();
         let id = app.session.execute("shape.rectangle", &json!({"x": 10, "y": 10, "width": 50, "height": 30})).unwrap()["id"].clone();
-        let kind = |app: &VectorcraftApp| app.ui.dialog.as_ref().map(|d| d.kind.clone());
+        let kind = |app: &LiviPenApp| app.ui.dialog.as_ref().map(|d| d.kind.clone());
         let grid = app.ui.view.grid;
         app.select_tool("selection");
         app.session.execute("select.set", &json!({"ids": [id]})).unwrap();
@@ -1374,7 +1373,7 @@ mod tests {
         app.ui.dialog = None;
         let text = app.session.execute("text.create", &json!({"x": 20, "y": 250, "text": "Hi"})).unwrap()["id"].as_u64().unwrap();
         app.select_tool("type");
-        app.session.apply_actions(vec![vectorcraft_tools::Action::Notify("text.editNew".into())]).unwrap();
+        app.session.apply_actions(vec![livipen_tools::Action::Notify("text.editNew".into())]).unwrap();
         assert!(app.session.tool_wants_text());
         frame(&mut app, press(Key::Enter, Modifiers::COMMAND));
         let typed = text_and_layers(&mut app, text).0;
@@ -1395,7 +1394,7 @@ mod tests {
     /// bound to it, Cmd+Escape goes to the tool as Escape does.
     #[test]
     fn a_command_on_cmd_escape_runs_without_the_tools_escape() {
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let mut app = LiviPenApp::new(livipen_engine::Session::new(), Default::default());
         app.session.execute("file.new", &json!({"width": 400, "height": 300})).unwrap();
         let id = app.session.execute("shape.rectangle", &json!({"x": 10, "y": 10, "width": 50, "height": 30})).unwrap()["id"].clone();
         let grid = app.ui.view.grid;
@@ -1407,10 +1406,10 @@ mod tests {
         frame(&mut app, cmd_escape());
         assert_eq!((click_at(&mut app, 200.0), app.ui.view.grid), (objects, !grid), "Cmd+Escape runs Show Grid and the path stays open");
         let text = app.session.execute("text.create", &json!({"x": 20, "y": 250, "text": "Hi"})).unwrap()["id"].clone();
-        let edit = |app: &mut VectorcraftApp| {
+        let edit = |app: &mut LiviPenApp| {
             app.session.execute("select.set", &json!({"ids": [text]})).unwrap();
             app.select_tool("type");
-            app.session.apply_actions(vec![vectorcraft_tools::Action::Notify("text.editNew".into())]).unwrap();
+            app.session.apply_actions(vec![livipen_tools::Action::Notify("text.editNew".into())]).unwrap();
             assert!(app.session.tool_wants_text());
         };
         edit(&mut app);
@@ -1418,7 +1417,7 @@ mod tests {
         assert_eq!((app.session.tool_wants_text(), app.ui.view.grid), (true, grid), "Cmd+Escape runs Show Grid and the Type tool goes on editing");
         app.select_tool("selection");
         app.session.execute("object.isolate", &json!({"id": id})).unwrap();
-        let isolated = |app: &VectorcraftApp| app.session.active().unwrap().isolation.is_some();
+        let isolated = |app: &LiviPenApp| app.session.active().unwrap().isolation.is_some();
         frame(&mut app, cmd_escape());
         assert_eq!((isolated(&app), app.ui.view.grid), (true, !grid), "Cmd+Escape runs Show Grid and isolation mode stays on");
         bind_grid(&mut app, None);
@@ -1438,12 +1437,12 @@ mod tests {
     /// Rotate, Scale, Reflect and Shear. The Enter that opens it isn't also its OK.
     #[test]
     fn enter_opens_the_tools_dialog_and_leaves_it_open() {
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let mut app = LiviPenApp::new(livipen_engine::Session::new(), Default::default());
         app.session.execute("file.new", &json!({"width": 400, "height": 300})).unwrap();
         let ctx = egui::Context::default();
         let enter = || egui::Event::Key { key: Key::Enter, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::NONE };
         // A whole app frame: the shortcuts first, then the UI, where a dialog takes its Enter.
-        let frame = |app: &mut VectorcraftApp, events: Vec<egui::Event>| {
+        let frame = |app: &mut LiviPenApp, events: Vec<egui::Event>| {
             let screen_rect = Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280.0, 800.0)));
             let mut out = ctx.run_ui(egui::RawInput { events, screen_rect, ..Default::default() }, |ui| {
                 app.logic(ui.ctx());
@@ -1451,9 +1450,9 @@ mod tests {
             });
             out.textures_delta.clear();
         };
-        let kind = |app: &VectorcraftApp| app.ui.dialog.as_ref().map(|d| d.kind.clone());
+        let kind = |app: &LiviPenApp| app.ui.dialog.as_ref().map(|d| d.kind.clone());
         // The undo steps and the journal entries (the dialog's OK runs its command, which the journal records).
-        let steps = |app: &VectorcraftApp| (app.session.active().unwrap().history.undo.len(), app.session.journal.len());
+        let steps = |app: &LiviPenApp| (app.session.active().unwrap().history.undo.len(), app.session.journal.len());
         app.select_tool("selection");
         frame(&mut app, vec![enter()]);
         assert_eq!(kind(&app), None, "nothing is selected");
@@ -1490,13 +1489,13 @@ mod tests {
     /// the same spacing.
     #[test]
     fn enter_after_a_drag_repeats_its_offset() {
-        use vectorcraft_tools::{PointerEvent, PointerKind};
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        use livipen_tools::{PointerEvent, PointerKind};
+        let mut app = LiviPenApp::new(livipen_engine::Session::new(), Default::default());
         app.session.execute("file.new", &json!({"width": 800, "height": 300})).unwrap();
         app.session.execute("shape.rectangle", &json!({"x": 10, "y": 10, "width": 20, "height": 20})).unwrap();
         let ctx = egui::Context::default();
         let enter = || egui::Event::Key { key: Key::Enter, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::NONE };
-        let frame = |app: &mut VectorcraftApp, events: Vec<egui::Event>| {
+        let frame = |app: &mut LiviPenApp, events: Vec<egui::Event>| {
             let screen_rect = Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280.0, 800.0)));
             let mut out = ctx.run_ui(egui::RawInput { events, screen_rect, ..Default::default() }, |ui| {
                 app.logic(ui.ctx());
@@ -1504,7 +1503,7 @@ mod tests {
             });
             out.textures_delta.clear();
         };
-        let lefts = |app: &VectorcraftApp| {
+        let lefts = |app: &LiviPenApp| {
             let kids = app.session.doc().unwrap().doc.layers[0].children().unwrap();
             kids.iter().map(|n| n.geometric_bounds().unwrap().x0.round()).collect::<Vec<_>>()
         };
@@ -1551,10 +1550,10 @@ mod tests {
     /// alone.
     #[test]
     fn brackets_size_the_blob_brush_and_the_eraser() {
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let mut app = LiviPenApp::new(livipen_engine::Session::new(), Default::default());
         app.session.execute("file.new", &json!({"width": 200, "height": 200})).unwrap();
         app.session.execute("stroke.set", &json!({"weight": 3})).unwrap();
-        let size = |app: &mut VectorcraftApp| app.session.tool_options()["size"].as_f64().unwrap();
+        let size = |app: &mut LiviPenApp| app.session.tool_options()["size"].as_f64().unwrap();
         let text = |t: &str| egui::Event::Text(t.into());
         for tool in ["blobBrush", "eraser"] {
             app.select_tool(tool);
@@ -1575,27 +1574,26 @@ mod tests {
 
     #[test]
     fn comma_and_period_reapply_the_last_colour_and_gradient() {
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let mut app = LiviPenApp::new(livipen_engine::Session::new(), Default::default());
         app.session.execute("file.new", &json!({"width": 200, "height": 200})).unwrap();
         app.session.execute("shape.rectangle", &json!({"x": 0, "y": 0, "width": 10, "height": 10})).unwrap();
         app.session.execute("paint.setFill", &json!({"gradient": {"kind": "linear"}})).unwrap();
         app.session.execute("paint.setFill", &json!({"color": "#336699"})).unwrap();
-        let fill = |app: &VectorcraftApp| crate::panels::current_paints(app).0;
+        let fill = |app: &LiviPenApp| crate::panels::current_paints(app).0;
         frame(&mut app, vec![egui::Event::Text(".".into())]);
-        assert!(matches!(fill(&app), vectorcraft_color::Paint::Gradient(_)), "`.` applies the last gradient");
+        assert!(matches!(fill(&app), livipen_color::Paint::Gradient(_)), "`.` applies the last gradient");
         frame(&mut app, vec![egui::Event::Text(",".into())]);
         assert_eq!(fill(&app).color().unwrap().to_hex(), "#336699", "`,` applies the last colour");
     }
 
     #[test]
     fn shifted_punctuation_shortcuts_work_as_typed() {
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let mut app = LiviPenApp::new(livipen_engine::Session::new(), Default::default());
         app.session.execute("file.new", &json!({"width": 200, "height": 200})).unwrap();
         let a = app.session.execute("shape.rectangle", &json!({"x": 0, "y": 0, "width": 50, "height": 50})).unwrap()["id"].clone();
         let b = app.session.execute("shape.ellipse", &json!({"x": 20, "y": 20, "width": 50, "height": 50})).unwrap()["id"].clone();
         app.session.execute("select.set", &json!({"ids": [a]})).unwrap();
-        let order =
-            |app: &VectorcraftApp| -> Vec<u64> { app.session.doc().unwrap().doc.layers[0].children().unwrap().iter().map(|n| n.id.0).collect() };
+        let order = |app: &LiviPenApp| -> Vec<u64> { app.session.doc().unwrap().doc.layers[0].children().unwrap().iter().map(|n| n.id.0).collect() };
         let (a, b) = (a.as_u64().unwrap(), b.as_u64().unwrap());
         assert_eq!(order(&app), [a, b]);
         let press = |key, modifiers| egui::Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers };
@@ -1622,10 +1620,10 @@ mod tests {
     /// command.
     #[test]
     fn cmd_alt_shift_period_and_comma_step_the_font_size_by_five() {
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let mut app = LiviPenApp::new(livipen_engine::Session::new(), Default::default());
         app.session.execute("file.new", &json!({"width": 200, "height": 200})).unwrap();
         let id = app.session.execute("text.create", &json!({"x": 20, "y": 50, "text": "One Two", "size": 12})).unwrap()["id"].as_u64().unwrap();
-        let sizes = |app: &mut VectorcraftApp| {
+        let sizes = |app: &mut LiviPenApp| {
             let r = app.session.execute("text.getRange", &json!({"id": id})).unwrap();
             r["runs"].as_array().unwrap().iter().map(|run| (run["text"].clone(), run["style"]["size"].clone())).collect::<Vec<_>>()
         };
@@ -1640,7 +1638,7 @@ mod tests {
         assert_eq!(sizes(&mut app), [(json!("One Two"), json!(14.0))]);
         // While the Type tool edits: only its selection.
         app.select_tool("type");
-        app.session.apply_actions(vec![vectorcraft_tools::Action::Notify("text.editNew".into())]).unwrap();
+        app.session.apply_actions(vec![livipen_tools::Action::Notify("text.editNew".into())]).unwrap();
         app.session.set_tool_option("select", &json!({"start": 4, "end": 7}));
         assert!(app.session.tool_wants_text());
         frame(&mut app, vec![press(Key::Period, five)]);
@@ -1650,7 +1648,7 @@ mod tests {
     /// #3786: Alt+arrows step a selected text object's spacing instead of copying and nudging it.
     #[test]
     fn alt_arrows_step_selected_type_object() {
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let mut app = LiviPenApp::new(livipen_engine::Session::new(), Default::default());
         app.session.execute("file.new", &json!({"width": 200, "height": 200})).unwrap();
         let id = app.session.execute("text.create", &json!({"x": 20, "y": 50, "text": "One Two", "size": 20})).unwrap()["id"].as_u64().unwrap();
         app.select_tool("selection");
@@ -1660,7 +1658,7 @@ mod tests {
         frame(&mut app, vec![egui::Event::ModifiersChanged(Modifiers::ALT), press(Key::ArrowRight, Modifiers::ALT)]);
         let r = app.session.execute("text.getRange", &json!({"id": id})).unwrap();
         assert_eq!(r["runs"][0]["style"]["tracking"], json!(20.0));
-        assert_eq!(app.session.active().unwrap().selection.objects, [vectorcraft_doc::NodeId(id)]);
+        assert_eq!(app.session.active().unwrap().selection.objects, [livipen_doc::NodeId(id)]);
 
         frame(&mut app, vec![egui::Event::ModifiersChanged(Modifiers::ALT), press(Key::ArrowDown, Modifiers::ALT)]);
         let r = app.session.execute("text.getRange", &json!({"id": id})).unwrap();
@@ -1675,7 +1673,7 @@ mod tests {
         // falling through to Alt+arrow's copy-and-nudge behaviour.
         for key in [Key::ArrowLeft, Key::ArrowRight] {
             frame(&mut app, vec![egui::Event::ModifiersChanged(alt_shift), press(key, alt_shift)]);
-            assert_eq!(app.session.active().unwrap().selection.objects, [vectorcraft_doc::NodeId(id)]);
+            assert_eq!(app.session.active().unwrap().selection.objects, [livipen_doc::NodeId(id)]);
         }
 
         // Other objects keep Alt+arrow's copy-and-nudge shortcut.
@@ -1684,7 +1682,7 @@ mod tests {
         frame(&mut app, vec![egui::Event::ModifiersChanged(Modifiers::ALT), press(Key::ArrowRight, Modifiers::ALT)]);
         let selected = &app.session.active().unwrap().selection.objects;
         assert_eq!(selected.len(), 1);
-        assert_ne!(selected[0], vectorcraft_doc::NodeId(rect), "a non-type object is still copied by Alt+arrow");
+        assert_ne!(selected[0], livipen_doc::NodeId(rect), "a non-type object is still copied by Alt+arrow");
     }
 
     /// #793: with a layout without Latin letters the one-key shortcuts go by the key's position:
@@ -1692,7 +1690,7 @@ mod tests {
     /// tool. A Latin layout keeps the letter typed: AZERTY's A (the Q key's place) is A.
     #[test]
     fn one_key_shortcuts_follow_the_key_on_layouts_without_latin_letters() {
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let mut app = LiviPenApp::new(livipen_engine::Session::new(), Default::default());
         app.session.execute("file.new", &json!({"width": 200, "height": 200})).unwrap();
         let typed = |key, physical, text: &str| {
             vec![
@@ -1712,9 +1710,9 @@ mod tests {
     fn plus_typed_any_way_zooms_in() {
         assert_eq!(parse("Cmd++"), parse("Cmd+="), "`+` and `=` are one chord key");
         assert_eq!(crate::shortcut_editor::chord_from_event(Key::Plus, Modifiers::COMMAND).as_deref(), Some("Cmd+="), "a recorded `+` too");
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let mut app = LiviPenApp::new(livipen_engine::Session::new(), Default::default());
         app.session.execute("file.new", &json!({"width": 200, "height": 200})).unwrap();
-        let zoom = |app: &mut VectorcraftApp| app.view_mut().unwrap().zoom;
+        let zoom = |app: &mut LiviPenApp| app.view_mut().unwrap().zoom;
         let press = |key, modifiers| egui::Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers };
         let cmd_shift = Modifiers::COMMAND | Modifiers::SHIFT;
         // `=`, Shift+`=` (reported as `=` or as `+`), and the numpad `+` / a layout's own `+` key.
@@ -1734,7 +1732,7 @@ mod tests {
     fn plus_selects_the_add_anchor_point_tool() {
         assert_eq!(parse("+"), parse("="), "a bare `+` is the `=` key");
         assert_eq!(crate::shortcut_editor::tool_for_key("+"), Some("addAnchor"));
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let mut app = LiviPenApp::new(livipen_engine::Session::new(), Default::default());
         app.session.execute("file.new", &json!({"width": 200, "height": 200})).unwrap();
         for m in [Modifiers::SHIFT, Modifiers::NONE] {
             app.select_tool("selection");
@@ -1747,16 +1745,15 @@ mod tests {
 
     #[test]
     fn digit_keys_reach_a_dragging_tool_once_per_press() {
-        use vectorcraft_tools::{PointerEvent, PointerKind};
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        use livipen_tools::{PointerEvent, PointerKind};
+        let mut app = LiviPenApp::new(livipen_engine::Session::new(), Default::default());
         app.session.execute("file.new", &json!({"width": 800, "height": 600})).unwrap();
         app.session.execute("perspective.grid.preset", &json!({"kind": 2})).unwrap();
         let id = app.session.execute("shape.rectangle", &json!({"x": 450, "y": 380, "width": 60, "height": 60})).unwrap()["id"].clone();
         app.session.execute("perspective.attach", &json!({"ids": [id], "plane": "right"})).unwrap();
         app.select_tool("perspectiveSelection");
         let v = app.view_info();
-        let c =
-            app.session.doc().unwrap().doc.node(vectorcraft_engine::doc::NodeId(id.as_u64().unwrap())).unwrap().geometric_bounds().unwrap().center();
+        let c = app.session.doc().unwrap().doc.node(livipen_engine::doc::NodeId(id.as_u64().unwrap())).unwrap().geometric_bounds().unwrap().center();
         app.session.pointer(&PointerEvent::new(PointerKind::Down, c.x, c.y), v).unwrap();
         app.session.pointer(&PointerEvent::new(PointerKind::Drag, c.x + 30.0, c.y), v).unwrap();
         let key = |repeat| egui::Event::Key { key: Key::Num5, physical_key: None, pressed: true, repeat, modifiers: Modifiers::NONE };
@@ -1773,8 +1770,8 @@ mod tests {
     /// letters.
     #[test]
     fn e_reaches_a_dragged_marquee_once_per_press() {
-        use vectorcraft_tools::{PointerEvent, PointerKind};
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        use livipen_tools::{PointerEvent, PointerKind};
+        let mut app = LiviPenApp::new(livipen_engine::Session::new(), Default::default());
         app.session.execute("file.new", &json!({"width": 800, "height": 600})).unwrap();
         let inside = app.session.execute("shape.rectangle", &json!({"x": 100, "y": 100, "width": 100, "height": 100})).unwrap()["id"].clone();
         let touched = app.session.execute("shape.rectangle", &json!({"x": 300, "y": 100, "width": 100, "height": 100})).unwrap()["id"].clone();
@@ -1835,7 +1832,7 @@ mod tests {
 
     #[test]
     fn all_registered_shortcuts_parse() {
-        for c in vectorcraft_engine::command_specs() {
+        for c in livipen_engine::command_specs() {
             if let Some(s) = c.shortcut
                 && s != "D"
                 && s != "X"

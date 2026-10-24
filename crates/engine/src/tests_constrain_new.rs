@@ -3,10 +3,10 @@
 //! size dialogs, and the Line Segment tool's Shift steps. 0° and whole turns draw exactly as
 //! before; quarter turns are exact.
 
+use livipen_doc::{LiveShape, NodeKind, TextKind};
+use livipen_geom::{PathData, Point, Rect};
+use livipen_tools::{Mods, PointerEvent, PointerKind};
 use serde_json::{Value, json};
-use vectorcraft_doc::{LiveShape, NodeKind, TextKind};
-use vectorcraft_geom::{PathData, Point, Rect};
-use vectorcraft_tools::{Mods, PointerEvent, PointerKind};
 
 use super::*;
 

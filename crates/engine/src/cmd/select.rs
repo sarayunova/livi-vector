@@ -2,9 +2,9 @@
 
 use std::collections::BTreeSet;
 
+use livipen_color::Paint;
+use livipen_doc::{Document, Node, NodeId, NodeKind};
 use serde_json::{Value, json};
-use vectorcraft_color::Paint;
-use vectorcraft_doc::{Document, Node, NodeId, NodeKind};
 
 use super::wand::{fill_of, stroke_of};
 use super::*;
@@ -277,7 +277,7 @@ fn all_on_artboard(s: &mut Session, p: &Value) -> Result<Value> {
             st.doc
                 .node(*id)
                 .and_then(|n| n.geometric_bounds_with(&symbols))
-                .is_some_and(|b| b.intersect(r).area() > 0.0 || vectorcraft_doc::artboard_holds(r, b.center()))
+                .is_some_and(|b| b.intersect(r).area() > 0.0 || livipen_doc::artboard_holds(r, b.center()))
         })
         .collect();
     s.select(|_, sel| sel.set(ids.iter().copied()))?;
@@ -635,7 +635,7 @@ pub(crate) fn same_paint(a: &Paint, b: &Paint, tint: bool) -> bool {
 }
 
 /// Select › Same › Stroke Weight: an unpainted stroke weighs nothing, as
-/// [`vectorcraft_doc::Appearance::stroke_width`] has it.
+/// [`livipen_doc::Appearance::stroke_width`] has it.
 fn stroke_weight(n: &Node) -> f64 {
     let (paint, width) = stroke_of(n);
     if paint.is_none() { 0.0 } else { width }
@@ -717,8 +717,8 @@ fn same_graphic_style(s: &mut Session, _: &Value) -> Result<Value> {
 
 /// An appearance attribute Select > Same > Appearance Attribute matches.
 enum Attribute {
-    Item(vectorcraft_doc::AppearanceItem),
-    Effect(vectorcraft_doc::Effect),
+    Item(livipen_doc::AppearanceItem),
+    Effect(livipen_doc::Effect),
 }
 
 fn same_attribute(s: &mut Session, p: &Value) -> Result<Value> {

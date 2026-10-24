@@ -2,8 +2,8 @@
 
 use std::sync::Arc;
 
-use vectorcraft_color::{Color, Paint};
-use vectorcraft_doc::{AppearanceItem, Node, NodeKind};
+use livipen_color::{Color, Paint};
+use livipen_doc::{AppearanceItem, Node, NodeKind};
 
 use crate::Colorization;
 
@@ -115,7 +115,7 @@ pub fn tint_node(n: &mut Node, color: &Color, amount: f32) {
             *p = Paint::solid(c.lerp(color, amount));
         }
     }
-    if let vectorcraft_doc::NodeKind::Text(t) = &mut n.kind {
+    if let livipen_doc::NodeKind::Text(t) = &mut n.kind {
         for r in &mut t.runs {
             for p in [&mut r.style.fill, &mut r.style.stroke] {
                 if let Paint::Solid { color: c, .. } = p {

@@ -2,8 +2,8 @@ use super::*;
 use egui::{Event, Modifiers, PointerButton, Pos2, pos2, vec2};
 use egui_kittest::{Harness, kittest::Queryable};
 
-fn app() -> VectorcraftApp {
-    VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default())
+fn app() -> LiviPenApp {
+    LiviPenApp::new(livipen_engine::Session::new(), Default::default())
 }
 
 #[test]
@@ -49,10 +49,10 @@ fn invalid_panel_requests_are_atomic_and_do_not_enter_a_custom_workspace() {
     }
 }
 
-fn harness(app: VectorcraftApp, size: egui::Vec2) -> Harness<'static, VectorcraftApp> {
+fn harness(app: LiviPenApp, size: egui::Vec2) -> Harness<'static, LiviPenApp> {
     let mut ready = false;
     let mut harness = Harness::builder().with_size(size).with_step_dt(1.0 / 60.0).build_ui_state(
-        move |ui, app: &mut VectorcraftApp| {
+        move |ui, app: &mut LiviPenApp| {
             if !ready {
                 crate::theme::install_fonts(ui.ctx());
                 egui_extras::install_image_loaders(ui.ctx());
@@ -71,7 +71,7 @@ fn harness(app: VectorcraftApp, size: egui::Vec2) -> Harness<'static, Vectorcraf
     harness
 }
 
-fn drag(h: &mut Harness<'static, VectorcraftApp>, from: Pos2, to: Pos2) {
+fn drag(h: &mut Harness<'static, LiviPenApp>, from: Pos2, to: Pos2) {
     h.event(Event::PointerMoved(from));
     h.run_steps(1);
     h.event(Event::PointerButton { pos: from, button: PointerButton::Primary, pressed: true, modifiers: Modifiers::NONE });
@@ -91,8 +91,8 @@ fn ordinary_panel_tab_drag_enters_shared_docking_and_can_redock_into_another_tab
     drag(&mut h, source, egui::pos2(160.0, 140.0));
     let layout = h.state().ui.docking.as_ref().expect("ordinary tab drag starts shared docking");
     assert!(layout.floating.iter().any(|g| g.panels.contains(&"layers".into())), "{layout:?}");
-    let source = h.ctx.read_response(egui::Id::new("vectorcraft-panel-docking").with(("tab", &"layers".to_string()))).unwrap().rect.center();
-    let destination = h.ctx.read_response(egui::Id::new("vectorcraft-panel-docking").with(("tab", &"properties".to_string()))).unwrap().rect.center();
+    let source = h.ctx.read_response(egui::Id::new("livipen-panel-docking").with(("tab", &"layers".to_string()))).unwrap().rect.center();
+    let destination = h.ctx.read_response(egui::Id::new("livipen-panel-docking").with(("tab", &"properties".to_string()))).unwrap().rect.center();
     drag(&mut h, source, destination);
     let layout = h.state().ui.docking.as_ref().unwrap();
     assert!(!layout.floating.iter().any(|g| g.panels.contains(&"layers".into())));
@@ -147,7 +147,7 @@ fn capture_custom_panel_docking_visual_fixtures() {
                 app.run("window.panel.float", json!({"panel":"properties","x":30,"y":90,"width":300,"height":440})).unwrap();
                 let mut ready = false;
                 let mut harness = Harness::builder().with_size(vec2(width, 800.0)).with_pixels_per_point(scale).wgpu().build_ui_state(
-                    move |ui, app: &mut VectorcraftApp| {
+                    move |ui, app: &mut LiviPenApp| {
                         if !ready {
                             egui_extras::install_image_loaders(ui.ctx());
                             crate::theme::install_fonts(ui.ctx());
@@ -165,7 +165,7 @@ fn capture_custom_panel_docking_visual_fixtures() {
                 harness.input_mut().max_texture_side = Some(8192);
                 harness.run_steps(5);
                 assert!(valid(harness.state().ui.docking.as_ref().unwrap()));
-                harness.render().unwrap().save(directory.join(format!("vectorcraft-shared-docking-{}-{width}-{scale}x.png", theme.id()))).unwrap();
+                harness.render().unwrap().save(directory.join(format!("livipen-shared-docking-{}-{width}-{scale}x.png", theme.id()))).unwrap();
             }
         }
     }
@@ -255,7 +255,7 @@ fn populated_canvas_keeps_a_real_stroke_edit_after_floating_and_redocking() {
     let builder = Harness::builder().with_size(vec2(1280.0, 800.0));
     let builder = if directory.is_some() { builder.wgpu() } else { builder };
     let mut h = builder.build_ui_state(
-        |ui, app: &mut VectorcraftApp| {
+        |ui, app: &mut LiviPenApp| {
             app.logic(ui.ctx());
             app.ui(ui);
         },
@@ -287,15 +287,15 @@ fn populated_canvas_keeps_a_real_stroke_edit_after_floating_and_redocking() {
     assert_eq!(dash.pattern, [12.0, 12.0]);
     if let Some(directory) = &directory {
         std::fs::create_dir_all(directory).unwrap();
-        h.render().unwrap().save(directory.join("vectorcraft-populated-stroke-floating.png")).unwrap();
+        h.render().unwrap().save(directory.join("livipen-populated-stroke-floating.png")).unwrap();
     }
-    let from = h.ctx.read_response(egui::Id::new("vectorcraft-panel-docking").with(("tab", &"stroke".to_string()))).unwrap().rect.center();
-    let to = h.ctx.read_response(egui::Id::new("vectorcraft-panel-docking").with(("tab", &"properties".to_string()))).unwrap().rect.center();
+    let from = h.ctx.read_response(egui::Id::new("livipen-panel-docking").with(("tab", &"stroke".to_string()))).unwrap().rect.center();
+    let to = h.ctx.read_response(egui::Id::new("livipen-panel-docking").with(("tab", &"properties".to_string()))).unwrap().rect.center();
     drag(&mut h, from, to);
     assert!(h.state().ui.docking.as_ref().unwrap().floating.is_empty());
     assert_eq!(crate::panels::current_stroke(h.state()).unwrap().dash.unwrap(), dash);
     if let Some(directory) = &directory {
-        h.render().unwrap().save(directory.join("vectorcraft-populated-stroke-redocked.png")).unwrap();
+        h.render().unwrap().save(directory.join("livipen-populated-stroke-redocked.png")).unwrap();
     }
 }
 
@@ -468,7 +468,7 @@ fn native_set_close_pointer_restores_shared_split_ownership() {
     if let Some(directory) = std::env::var_os("CRAFT_UI_DOCKING_SNAPSHOT_DIR") {
         let directory = std::path::PathBuf::from(directory);
         std::fs::create_dir_all(&directory).unwrap();
-        h.render().unwrap().save(directory.join("vectorcraft-native-set-shared-split.png")).unwrap();
+        h.render().unwrap().save(directory.join("livipen-native-set-shared-split.png")).unwrap();
     }
     let area = h.ctx.memory(|m| m.area_rect(crate::floating::area_id("stroke"))).unwrap();
     let at = egui::pos2(area.right() - 10.0, area.top() + 1.0 + crate::floating::TITLE / 2.0);
@@ -585,8 +585,8 @@ fn the_window_menu_item_hides_a_shown_panel_and_shows_it_again() {
         .find(|e| e.path == ["Window"] && e.command.as_deref() == Some("window.panel") && e.params["panel"] == "properties")
         .expect("Window › Properties");
     let params = item.params;
-    let shown = |app: &VectorcraftApp| crate::menus::checked(app, "window.panel", &params) == Some(true);
-    let in_layout = |app: &VectorcraftApp| app.ui.docking.as_ref().is_some_and(|layout| layout.contains(&"properties".into()));
+    let shown = |app: &LiviPenApp| crate::menus::checked(app, "window.panel", &params) == Some(true);
+    let in_layout = |app: &LiviPenApp| app.ui.docking.as_ref().is_some_and(|layout| layout.contains(&"properties".into()));
 
     let mut app = app();
     assert!(app.ui.docking.is_none() && shown(&app), "the default dock shows Properties");
@@ -677,7 +677,7 @@ fn library_panels_float_with_their_names_and_a_persistent_menu_item() {
     for name in ["Pastels", "Brights"] {
         assert!(h.query_all_by_label(name).next().is_some(), "the {name} tab");
     }
-    let click = |h: &mut Harness<'static, VectorcraftApp>, at: Pos2| {
+    let click = |h: &mut Harness<'static, LiviPenApp>, at: Pos2| {
         h.hover_at(at);
         h.run_steps(1);
         for pressed in [true, false] {
@@ -695,12 +695,12 @@ fn library_panels_float_with_their_names_and_a_persistent_menu_item() {
 }
 
 /// The dock groups the last frame registered as drop targets.
-fn root_groups(h: &Harness<'static, VectorcraftApp>) -> Vec<crate::floating::RootGroup> {
+fn root_groups(h: &Harness<'static, LiviPenApp>) -> Vec<crate::floating::RootGroup> {
     h.ctx.data(|d| d.get_temp::<Vec<crate::floating::RootGroup>>(crate::floating::root_groups_id())).unwrap_or_default()
 }
 
 /// The dock's group holding `panel`, as panel ids.
-fn root_group_of(app: &VectorcraftApp, panel: &str) -> Vec<String> {
+fn root_group_of(app: &LiviPenApp, panel: &str) -> Vec<String> {
     let layout = app.ui.docking.as_ref().unwrap();
     assert!(Layout { root: layout.root.clone(), floating: Vec::new() }.contains(&panel.to_string()), "{panel} is in the dock: {layout:?}");
     group_members(layout, panel)
@@ -708,7 +708,7 @@ fn root_group_of(app: &VectorcraftApp, panel: &str) -> Vec<String> {
 
 /// A legacy (native) floating group holding `panel`, as the Window menu or an icon tear leaves it
 /// before the shared layout takes over, and a point on its title bar.
-fn native_float(h: &mut Harness<'static, VectorcraftApp>, panel: &'static str) -> Pos2 {
+fn native_float(h: &mut Harness<'static, LiviPenApp>, panel: &'static str) -> Pos2 {
     crate::floating::float(&mut h.state_mut().ui, &[panel], panel, egui::pos2(300.0, 300.0));
     h.run_steps(3);
     assert!(h.state().ui.docking.is_none(), "still the legacy dock");
@@ -756,9 +756,8 @@ fn a_floating_group_dropped_on_the_lower_half_of_the_dock_splits_it() {
     let lower = groups[1].rect;
     h.state_mut().run("window.panel.float", json!({"panel":"align","x":300,"y":300})).unwrap();
     h.run_steps(3);
-    let title =
-        h.ctx.memory(|m| m.area_rect(egui::Id::new("vectorcraft-panel-docking").with(("floating", &"align".to_string())))).unwrap().left_top()
-            + vec2(6.0, 16.0);
+    let title = h.ctx.memory(|m| m.area_rect(egui::Id::new("livipen-panel-docking").with(("floating", &"align".to_string())))).unwrap().left_top()
+        + vec2(6.0, 16.0);
     drag(&mut h, title, egui::pos2(lower.center().x, lower.top() + 50.0));
     assert!(h.state().ui.docking.as_ref().unwrap().floating.is_empty());
     h.run_steps(3);
@@ -772,9 +771,8 @@ fn a_floating_group_dropped_on_the_icon_column_becomes_icons() {
     let mut h = harness(app(), vec2(1280.0, 1400.0));
     h.state_mut().run("window.panel.float", json!({"panel":"layers","x":300,"y":300})).unwrap();
     h.run_steps(3);
-    let title =
-        h.ctx.memory(|m| m.area_rect(egui::Id::new("vectorcraft-panel-docking").with(("floating", &"layers".to_string())))).unwrap().left_top()
-            + vec2(6.0, 16.0);
+    let title = h.ctx.memory(|m| m.area_rect(egui::Id::new("livipen-panel-docking").with(("floating", &"layers".to_string())))).unwrap().left_top()
+        + vec2(6.0, 16.0);
     let column = h.ctx.data(|d| d.get_temp::<egui::Rect>(crate::floating::icons_rect_id())).unwrap();
     drag(&mut h, title, column.center());
     let ui = &h.state().ui;
@@ -829,7 +827,7 @@ fn a_dock_tab_context_menu_closes_its_panel_and_the_window_menu_brings_it_back()
     assert!(!layout.contains(&"libraries".to_string()));
     assert_eq!(root_group_of(h.state(), "layers"), ["properties", "layers"]);
     // In the shared dock the tabs' context menu closes them too.
-    let tab = h.ctx.read_response(egui::Id::new("vectorcraft-panel-docking").with(("tab", &"layers".to_string()))).unwrap().rect.center();
+    let tab = h.ctx.read_response(egui::Id::new("livipen-panel-docking").with(("tab", &"layers".to_string()))).unwrap().rect.center();
     h.event(Event::PointerMoved(tab));
     h.event(Event::PointerButton { pos: tab, button: PointerButton::Secondary, pressed: true, modifiers: Modifiers::NONE });
     h.event(Event::PointerButton { pos: tab, button: PointerButton::Secondary, pressed: false, modifiers: Modifiers::NONE });
@@ -909,7 +907,7 @@ fn a_panel_the_icon_column_has_no_place_for_still_shows_there_once_dropped_on_it
     h.state_mut().run("window.panel.float", json!({"panel":"charStyles","x":300,"y":300})).unwrap();
     h.run_steps(3);
     let title =
-        h.ctx.memory(|m| m.area_rect(egui::Id::new("vectorcraft-panel-docking").with(("floating", &"charStyles".to_string())))).unwrap().left_top()
+        h.ctx.memory(|m| m.area_rect(egui::Id::new("livipen-panel-docking").with(("floating", &"charStyles".to_string())))).unwrap().left_top()
             + vec2(6.0, 16.0);
     let column = h.ctx.data(|d| d.get_temp::<egui::Rect>(crate::floating::icons_rect_id())).unwrap();
     drag(&mut h, title, column.center());
@@ -921,7 +919,7 @@ fn a_panel_the_icon_column_has_no_place_for_still_shows_there_once_dropped_on_it
 }
 
 /// Double-clicks at `at`, then waits out the double-click time.
-fn double_click(h: &mut Harness<'static, VectorcraftApp>, at: Pos2) {
+fn double_click(h: &mut Harness<'static, LiviPenApp>, at: Pos2) {
     h.event(Event::PointerMoved(at));
     h.run_steps(1);
     for _ in 0..2 {
@@ -935,12 +933,12 @@ fn double_click(h: &mut Harness<'static, VectorcraftApp>, at: Pos2) {
 }
 
 /// The Layers panel's body is drawn (its search field).
-fn layers_drawn(h: &Harness<'static, VectorcraftApp>) -> bool {
+fn layers_drawn(h: &Harness<'static, LiviPenApp>) -> bool {
     h.ctx.read_response(egui::Id::new("layers-search").with("edit")).is_some()
 }
 
 /// Clicks at `at`.
-fn click(h: &mut Harness<'static, VectorcraftApp>, at: Pos2) {
+fn click(h: &mut Harness<'static, LiviPenApp>, at: Pos2) {
     h.event(Event::PointerMoved(at));
     h.run_steps(1);
     h.event(Event::PointerButton { pos: at, button: PointerButton::Primary, pressed: true, modifiers: Modifiers::NONE });
@@ -966,8 +964,8 @@ fn two_stacked_groups_both_collapsed_are_both_as_short_as_their_tabs() {
     }
 }
 
-fn tab_center(h: &Harness<'static, VectorcraftApp>, panel: &str) -> Pos2 {
-    h.ctx.read_response(egui::Id::new("vectorcraft-panel-docking").with(("tab", &panel.to_string()))).unwrap().rect.center()
+fn tab_center(h: &Harness<'static, LiviPenApp>, panel: &str) -> Pos2 {
+    h.ctx.read_response(egui::Id::new("livipen-panel-docking").with(("tab", &panel.to_string()))).unwrap().rect.center()
 }
 
 /// A double-click on a tab of the shared dock collapses its group to its tabs; another tab expands it.
@@ -1086,7 +1084,7 @@ fn a_double_click_on_the_shared_dock_strip_right_of_the_tabs_collapses_its_group
     let saved = app.ui.docking.clone();
     let mut h = harness(app, vec2(1280.0, 800.0));
     let strip = root_groups(&h)[0].strip;
-    let tab = h.ctx.read_response(egui::Id::new("vectorcraft-panel-docking").with(("tab", &"swatches".to_string()))).unwrap().rect;
+    let tab = h.ctx.read_response(egui::Id::new("livipen-panel-docking").with(("tab", &"swatches".to_string()))).unwrap().rect;
     // Between the tab and the group's header (80 wide), and on the header's grip.
     let gap = pos2(tab.right() + 10.0, strip.center().y);
     assert!(gap.x < strip.right() - 80.0, "{tab:?} {strip:?}");
@@ -1212,7 +1210,7 @@ fn a_double_click_on_the_strip_of_a_group_beside_another_does_nothing() {
     let mut h = harness(app, vec2(1280.0, 800.0));
     let status = h.state().ui.status.clone();
     let strip = root_groups(&h).into_iter().find(|g| g.shown == "swatches").unwrap().strip;
-    let tab = h.ctx.read_response(egui::Id::new("vectorcraft-panel-docking").with(("tab", &"swatches".to_string()))).unwrap().rect;
+    let tab = h.ctx.read_response(egui::Id::new("livipen-panel-docking").with(("tab", &"swatches".to_string()))).unwrap().rect;
     let gap = pos2(tab.right() + 4.0, strip.center().y);
     assert!(gap.x < strip.right() - 24.0, "{tab:?} {strip:?}");
     double_click(&mut h, gap);

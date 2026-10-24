@@ -1,23 +1,23 @@
 [package]
-name = "vectorcraft-effects"
+name = "livipen-effects"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "VectorCraft live effects evaluated to geometry"
+description = "Livi Pen live effects evaluated to geometry"
 
 [lints]
 workspace = true
 
 [dependencies]
-vectorcraft-geom = { workspace = true }
-vectorcraft-three-d = { workspace = true }
-vectorcraft-doc = { workspace = true }
-vectorcraft-pathops = { workspace = true }
-vectorcraft-text = { workspace = true }
-vectorcraft-plugins = { workspace = true }
+livipen-geom = { workspace = true }
+livipen-three-d = { workspace = true }
+livipen-doc = { workspace = true }
+livipen-pathops = { workspace = true }
+livipen-text = { workspace = true }
+livipen-plugins = { workspace = true }
 image = { workspace = true }
 kurbo = { workspace = true }
 serde_json = { workspace = true }
 
 [dev-dependencies]
-vectorcraft-color = { workspace = true }
+livipen-color = { workspace = true }

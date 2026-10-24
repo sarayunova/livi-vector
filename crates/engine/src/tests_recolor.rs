@@ -1,8 +1,8 @@
 //! Recolor Artwork (M3.78): colour reduction, preserve rules, recolour methods, Limit to Library,
 //! randomize; Edit Color Group (M3.79).
 
+use livipen_color::Color;
 use serde_json::{Value, json};
-use vectorcraft_color::Color;
 
 use super::*;
 use crate::cmd::color_value;
@@ -392,7 +392,7 @@ fn apply_with_a_group_keeps_art_linked_to_its_global_swatches() {
     run(&mut s, "paint.setFill", json!({"ids": [full.0], "swatch": name}));
     run(&mut s, "paint.setFill", json!({"ids": [tint.0], "swatch": name, "tint": 50}));
     let link = |s: &Session, id: NodeId| match s.doc().unwrap().doc.node(id).unwrap().appearance.fill_paint() {
-        vectorcraft_color::Paint::Solid { color, swatch, tint } => (color, swatch, tint),
+        livipen_color::Paint::Solid { color, swatch, tint } => (color, swatch, tint),
         p => panic!("{p:?}"),
     };
     let swatch_hex = |s: &Session| s.doc().unwrap().doc.swatch(&name).unwrap().paint.color().unwrap().to_hex();
@@ -418,7 +418,7 @@ fn apply_with_a_group_keeps_art_linked_to_its_global_swatches() {
     assert_eq!(link(&s, full), (Color::from_hex("#2878f0").unwrap(), Some(name.clone()), 1.0), "undo restores the art");
     // A row holding the tint too (as recolor.reduce gives it): the tint keeps its tint and its link.
     select_all(&mut s);
-    let tint_key = vectorcraft_color::recolor::ColorKey::of(&fill(&s, tint)).to_string();
+    let tint_key = livipen_color::recolor::ColorKey::of(&fill(&s, tint)).to_string();
     let rows = json!([{"from": ["rgb 40 120 240", tint_key], "to": "#ff6a00"}]);
     run(&mut s, "recolor.apply", json!({"map": rows, "method": "scaleTints", "group": "Brand"}));
     let (c, w, t) = link(&s, tint);
@@ -461,16 +461,16 @@ fn edit_group_refuses_to_change_built_in_swatches() {
     run(&mut s, "swatch.newGroup", json!({"name": "Marks", "colors": ["#ff0000"]}));
     // A group holding the built-in Registration swatch (as an older file might).
     s.edit("test", |d, _| {
-        d.swatch_groups.iter_mut().find(|g| g.name == "Marks").unwrap().swatches.insert(0, vectorcraft_color::swatch::registration().clone());
+        d.swatch_groups.iter_mut().find(|g| g.name == "Marks").unwrap().swatches.insert(0, livipen_color::swatch::registration().clone());
         Ok(())
     })
     .unwrap();
-    let reg = vectorcraft_color::swatch::registration().paint.color().unwrap();
+    let reg = livipen_color::swatch::registration().paint.color().unwrap();
     assert!(s.execute("swatch.editGroup", &json!({"group": "Marks", "colors": ["#00ff00", "#0000ff"]})).is_err(), "changed");
     assert!(s.execute("swatch.editGroup", &json!({"group": "Marks", "colors": []})).is_err(), "removed");
-    let key = vectorcraft_color::recolor::ColorKey::of(&reg).to_string();
+    let key = livipen_color::recolor::ColorKey::of(&reg).to_string();
     let ok = run(&mut s, "swatch.editGroup", json!({"group": "Marks", "colors": [key, "#0000ff"]}));
-    assert_eq!(ok["swatches"][0], vectorcraft_color::swatch::REGISTRATION, "kept as it is");
+    assert_eq!(ok["swatches"][0], livipen_color::swatch::REGISTRATION, "kept as it is");
 }
 
 /// A `{c, m, y, k}` object takes one scale for the whole colour: percent as soon as any component is
@@ -513,7 +513,7 @@ fn recolor_to_a_library_spot_colour_links_it_and_adds_the_swatch() {
     assert!(ink.spot && ink.global, "the spot colour joined the document's swatches");
     let paint = |id: NodeId| d.node(id).unwrap().appearance.fill_paint();
     match paint(red) {
-        vectorcraft_color::Paint::Solid { color, swatch, tint } => {
+        livipen_color::Paint::Solid { color, swatch, tint } => {
             assert_eq!(swatch.as_deref(), Some("Ink 101"), "linked to the spot colour");
             assert_eq!(tint, 1.0);
             assert_eq!(color, Color::lab(50.0, 70.0, 40.0), "in the spot colour's own model");
@@ -521,13 +521,13 @@ fn recolor_to_a_library_spot_colour_links_it_and_adds_the_swatch() {
         p => panic!("{p:?}"),
     }
     match paint(pink) {
-        vectorcraft_color::Paint::Solid { swatch, tint, .. } => {
+        livipen_color::Paint::Solid { swatch, tint, .. } => {
             assert_eq!(swatch.as_deref(), Some("Ink 101"));
             assert!(tint > 0.1 && tint < 0.9, "a tint of the spot colour: {tint}");
         }
         p => panic!("{p:?}"),
     }
-    assert_eq!(paint(green), vectorcraft_color::Paint::solid(Color::cmyk(0.6, 0.0, 1.0, 0.1)), "a process swatch's colour, in CMYK");
+    assert_eq!(paint(green), livipen_color::Paint::solid(Color::cmyk(0.6, 0.0, 1.0, 0.1)), "a process swatch's colour, in CMYK");
     // Again: the document's swatch is used, not added twice.
     run(&mut s, "edit.undo", json!({}));
     select_all(&mut s);
@@ -544,11 +544,11 @@ fn model_param_chooses_the_model_of_the_new_colour() {
     run(&mut s, "file.new", json!({"width": 400, "height": 200, "colorMode": "cmyk"}));
     let art = NodeId(run(&mut s, "shape.rectangle", json!({"x": 10, "y": 10, "width": 15, "height": 15}))["id"].as_u64().unwrap());
     run(&mut s, "paint.setFill", json!({"ids": [art.0], "color": "#1a1a1a", "keepModel": true}));
-    assert_eq!(fill(&s, art).model(), vectorcraft_color::cms::Model::Rgb);
+    assert_eq!(fill(&s, art).model(), livipen_color::cms::Model::Rgb);
     select_all(&mut s);
     let map = json!({"#1a1a1a": {"c": 0, "m": 0, "y": 0, "k": 100}});
     let r = run(&mut s, "recolor.apply", json!({"map": map}));
-    assert_eq!(fill(&s, art).model(), vectorcraft_color::cms::Model::Rgb, "kept RGB");
+    assert_eq!(fill(&s, art).model(), livipen_color::cms::Model::Rgb, "kept RGB");
     assert!(r["note"].as_str().is_some_and(|n| n.contains("model")), "warns the model was kept: {r}");
     run(&mut s, "edit.undo", json!({}));
     let r = run(&mut s, "recolor.apply", json!({"map": map, "model": "new"}));
@@ -557,7 +557,7 @@ fn model_param_chooses_the_model_of_the_new_colour() {
     run(&mut s, "edit.undo", json!({}));
     // "document" converts a new RGB colour into the document's CMYK.
     run(&mut s, "recolor.apply", json!({"map": {"#1a1a1a": "#ff0000"}, "model": "document"}));
-    assert_eq!(fill(&s, art).model(), vectorcraft_color::cms::Model::Cmyk);
+    assert_eq!(fill(&s, art).model(), livipen_color::cms::Model::Cmyk);
     assert!(s.execute("recolor.apply", &json!({"map": map, "model": "nope"})).is_err());
 }
 
@@ -583,7 +583,7 @@ fn document_model_converts_the_colours_of_a_group_too() {
     };
     // Group-only edit from the rows, and with explicit group colours.
     run(&mut s, "recolor.apply", json!({"map": {"cmyk 0 0 0 50": "#ff0000"}, "group": "Theme", "model": "document"}));
-    assert!(group(&s).iter().all(|c| c.model() == vectorcraft_color::cms::Model::Cmyk), "{:?}", group(&s));
+    assert!(group(&s).iter().all(|c| c.model() == livipen_color::cms::Model::Cmyk), "{:?}", group(&s));
     run(&mut s, "recolor.apply", json!({"map": [], "group": "Theme", "groupColors": ["#00ff00"], "model": "document"}));
-    assert!(group(&s).iter().all(|c| c.model() == vectorcraft_color::cms::Model::Cmyk), "{:?}", group(&s));
+    assert!(group(&s).iter().all(|c| c.model() == livipen_color::cms::Model::Cmyk), "{:?}", group(&s));
 }

@@ -1,9 +1,9 @@
 //! Drawing / path-editing tools driven through the session (tools → actions → `path.*` commands).
 
+use livipen_doc::{NodeId, NodeKind};
+use livipen_geom::{FillRule, PathData, Point};
+use livipen_tools::{Mods, PointerEvent, PointerKind, ToolKey};
 use serde_json::json;
-use vectorcraft_doc::{NodeId, NodeKind};
-use vectorcraft_geom::{FillRule, PathData, Point};
-use vectorcraft_tools::{Mods, PointerEvent, PointerKind, ToolKey};
 
 use super::*;
 use crate::tooling::{UiRequest, ViewInfo};
@@ -82,7 +82,7 @@ fn near(a: Point, b: Point) -> bool {
 }
 
 fn area(pd: &PathData) -> f64 {
-    vectorcraft_pathops::area(pd, FillRule::NonZero)
+    livipen_pathops::area(pd, FillRule::NonZero)
 }
 
 #[test]
@@ -356,7 +356,7 @@ fn path_curvature_with_three_points_saves_end_handles() {
     let (first, mid, last) = (sp.anchors[0], sp.anchors[1], sp.anchors[2]);
     assert!(first.has_out() && !first.has_in(), "{first:?}");
     assert!(last.has_in() && !last.has_out(), "{last:?}");
-    assert_eq!(mid.kind, vectorcraft_geom::AnchorKind::Smooth);
+    assert_eq!(mid.kind, livipen_geom::AnchorKind::Smooth);
     assert!(!sp.segment_is_line(0) && !sp.segment_is_line(1));
     // Two points stay a straight line.
     let two = json!([{"x": 0, "y": 0}, {"x": 100, "y": -100}]);
@@ -369,9 +369,9 @@ fn path_curvature_with_three_points_saves_end_handles() {
 #[test]
 fn curvature_rubber_band_is_the_path_the_click_makes() {
     let band = |s: &mut Session| {
-        s.overlays(view()).into_iter().find_map(|o| if let vectorcraft_tools::Overlay::Path { path, .. } = o { Some(path) } else { None }).unwrap()
+        s.overlays(view()).into_iter().find_map(|o| if let livipen_tools::Overlay::Path { path, .. } = o { Some(path) } else { None }).unwrap()
     };
-    let bez = |sp: &vectorcraft_geom::SubPath| {
+    let bez = |sp: &livipen_geom::SubPath| {
         let mut bp = kurbo::BezPath::new();
         sp.to_bezpath_into(&mut bp);
         bp
@@ -403,7 +403,7 @@ fn curvature_rubber_band_is_the_path_the_click_makes() {
     s.pointer(&PointerEvent::new(PointerKind::Up, 450.0, 400.0), v).unwrap();
     let made = path(&s, id).subpaths[0].clone();
     assert_eq!(made.anchors.len(), 4);
-    let tail = vectorcraft_geom::SubPath::new(made.anchors[1..].to_vec(), false);
+    let tail = livipen_geom::SubPath::new(made.anchors[1..].to_vec(), false);
     assert_eq!(preview, bez(&tail));
 }
 
@@ -416,7 +416,7 @@ fn convert_anchor_to_smooth_uses_the_curvature_rule() {
     let id = NodeId(s.execute("path.create", &json!({ "anchors": anchors })).unwrap()["id"].as_u64().unwrap());
     s.execute("path.convertAnchor", &json!({"id": id.0, "subpath": 0, "anchor": 1, "to": "smooth"})).unwrap();
     let a = path(&s, id).subpaths[0].anchors[1];
-    assert_eq!(a.kind, vectorcraft_geom::AnchorKind::Smooth);
+    assert_eq!(a.kind, livipen_geom::AnchorKind::Smooth);
     // Along the circle through it and its neighbours, each between a third and two thirds of
     // its own chord; the shorter side's handle is the shorter.
     let (prev, next) = (Point::new(0.0, 0.0), Point::new(200.0, 100.0));
@@ -446,7 +446,7 @@ fn curvature_clicks_build_smooth_path() {
     assert_eq!(ps.len(), 1);
     let sp = &ps[0].1.subpaths[0];
     assert_eq!(sp.anchors.len(), 3);
-    assert_eq!(sp.anchors[1].kind, vectorcraft_geom::AnchorKind::Smooth);
+    assert_eq!(sp.anchors[1].kind, livipen_geom::AnchorKind::Smooth);
     // Alt-click the middle point → corner.
     s.pointer(&PointerEvent::new(PointerKind::Down, 200.0, 200.0).with_mods(Mods { alt: true, ..Default::default() }), v).unwrap();
     s.pointer(&PointerEvent::new(PointerKind::Up, 200.0, 200.0), v).unwrap();
@@ -575,7 +575,7 @@ fn anchor_point_tool_converts() {
     let id = rect(&mut s, 100.0, 100.0, 100.0, 100.0);
     drag(&mut s, "anchorPoint", &[(100.0, 100.0), (130.0, 80.0)], Mods::default());
     let a = path(&s, id).subpaths[0].anchors[0];
-    assert_eq!(a.kind, vectorcraft_geom::AnchorKind::Smooth);
+    assert_eq!(a.kind, livipen_geom::AnchorKind::Smooth);
     assert_eq!(a.h_out, Point::new(130.0, 80.0));
     assert_eq!(a.h_in, Point::new(70.0, 120.0));
     // Click the smooth anchor → corner again.
@@ -602,7 +602,7 @@ fn anchor_point_tool_click_on_a_handle_retracts_it() {
     click(&mut s, "anchorPoint", 130.0, 80.0);
     let a = path(&s, id).subpaths[0].anchors[0];
     assert!(!a.has_out());
-    assert_eq!((a.p, a.h_in, a.kind), (smooth.p, smooth.h_in, vectorcraft_geom::AnchorKind::Corner));
+    assert_eq!((a.p, a.h_in, a.kind), (smooth.p, smooth.h_in, livipen_geom::AnchorKind::Corner));
     assert_eq!(undo_steps(&s), undo + 1);
     s.execute("edit.undo", &json!({})).unwrap();
     assert_eq!(path(&s, id).subpaths[0].anchors[0], smooth);
@@ -765,7 +765,7 @@ fn line_family_tools_draw_and_click_asks_dialog() {
 }
 
 /// The children of the grid a `shape.rectangularGrid` / `shape.polarGrid` call made, bottom first.
-fn grid(s: &mut Session, cmd: &str, p: serde_json::Value) -> Vec<std::sync::Arc<vectorcraft_doc::Node>> {
+fn grid(s: &mut Session, cmd: &str, p: serde_json::Value) -> Vec<std::sync::Arc<livipen_doc::Node>> {
     let id = NodeId(s.execute(cmd, &p).unwrap()["id"].as_u64().unwrap());
     s.doc().unwrap().doc.node(id).unwrap().children().unwrap().to_vec()
 }
@@ -777,8 +777,8 @@ fn with(base: &serde_json::Value, extra: serde_json::Value) -> serde_json::Value
     p
 }
 
-fn is_filled(n: &vectorcraft_doc::Node) -> bool {
-    n.appearance.fill().is_some_and(|f| f.paint != vectorcraft_color::Paint::None)
+fn is_filled(n: &livipen_doc::Node) -> bool {
+    n.appearance.fill().is_some_and(|f| f.paint != livipen_color::Paint::None)
 }
 
 /// #1377: the Rectangular Grid options. By default the frame is one rectangle under evenly spaced
@@ -791,7 +791,7 @@ fn rectangular_grid_options_frame_fill_and_skew() {
     s.execute("paint.setFill", &json!({"color": "#ff0000"})).unwrap();
     let base = json!({"x": 0, "y": 0, "width": 100, "height": 100, "rows": 3, "columns": 3});
     // The y of the three horizontal dividers and the x of the three vertical ones (the last six children).
-    let dividers = |g: &[std::sync::Arc<vectorcraft_doc::Node>]| {
+    let dividers = |g: &[std::sync::Arc<livipen_doc::Node>]| {
         let starts: Vec<Point> = g[g.len() - 6..].iter().map(|n| n.path_data().unwrap().subpaths[0].anchors[0].p).collect();
         starts[..3].iter().map(|p| p.y).chain(starts[3..].iter().map(|p| p.x)).collect::<Vec<_>>()
     };
@@ -831,9 +831,8 @@ fn polar_grid_options_compound_fill_and_skew() {
     let mut s = session();
     s.execute("paint.setFill", &json!({"color": "#00ff00"})).unwrap();
     let base = json!({"x": 0, "y": 0, "width": 100, "height": 100, "concentric": 3, "radial": 4});
-    let width = |n: &vectorcraft_doc::Node| n.geometric_bounds().unwrap().width();
-    let tips =
-        |g: &[std::sync::Arc<vectorcraft_doc::Node>]| g[4..].iter().map(|n| n.path_data().unwrap().subpaths[0].anchors[1].p).collect::<Vec<_>>();
+    let width = |n: &livipen_doc::Node| n.geometric_bounds().unwrap().width();
+    let tips = |g: &[std::sync::Arc<livipen_doc::Node>]| g[4..].iter().map(|n| n.path_data().unwrap().subpaths[0].anchors[1].p).collect::<Vec<_>>();
     let plain = grid(&mut s, CMD, base.clone());
     assert_eq!(plain.len(), 8);
     assert_eq!(plain[..4].iter().map(|n| width(n).round()).collect::<Vec<_>>(), [100.0, 75.0, 50.0, 25.0], "largest at the bottom");
@@ -1184,7 +1183,7 @@ fn move_anchor_takes_its_handles_along_and_refuses_a_subpath_that_is_not_a_whole
     let a = path(&s, id).subpaths[0].anchors[0];
     s.execute("path.moveAnchor", &json!({"id": id.0, "anchor": 0, "x": a.p.x + 15.0, "y": a.p.y - 5.0})).unwrap();
     let b = path(&s, id).subpaths[0].anchors[0];
-    assert_eq!(b.p, a.p + vectorcraft_geom::Vec2::new(15.0, -5.0));
+    assert_eq!(b.p, a.p + livipen_geom::Vec2::new(15.0, -5.0));
     assert_eq!(b.h_out - b.p, a.h_out - a.p);
     assert_eq!(b.h_in - b.p, a.h_in - a.p);
     assert!(s.execute("path.moveAnchor", &json!({"id": id.0, "anchor": 99, "x": 0, "y": 0})).is_err());
@@ -1633,7 +1632,7 @@ fn convert_anchors_turns_the_selected_anchors_corner_or_smooth() {
     s.execute("path.convertAnchors", &json!({"to": "smooth"})).unwrap();
     let a = path(&s, id).subpaths[0].anchors.clone();
     assert_eq!(undo_steps(&s), undo + 1);
-    assert_eq!(a[1].kind, vectorcraft_geom::AnchorKind::Smooth);
+    assert_eq!(a[1].kind, livipen_geom::AnchorKind::Smooth);
     let r = 100.0 * 2f64.sqrt() / 3.0;
     assert!(near(a[1].h_in, Point::new(200.0 - r, 100.0)) && near(a[1].h_out, Point::new(200.0 + r, 100.0)), "{:?}", a[1]);
     assert!(!a[0].has_out() && !a[2].has_in(), "the neighbours keep theirs");
@@ -1859,7 +1858,7 @@ fn pen_with_alt_moves_one_handle_and_converts_anchors() {
 }
 
 /// The anchor's handles point opposite ways.
-fn smooth(a: vectorcraft_geom::Anchor) -> bool {
+fn smooth(a: livipen_geom::Anchor) -> bool {
     let (i, o) = (a.h_in - a.p, a.h_out - a.p);
     (i.x * o.y - i.y * o.x).abs() < 1e-6 && i.x * o.x + i.y * o.y < 0.0
 }
@@ -1876,8 +1875,8 @@ fn pen_with_cmd_borrows_direct_selection_and_goes_on_drawing() {
     gesture(&mut s, &[(100.0, 300.0)], none);
     gesture(&mut s, &[(200.0, 300.0), (250.0, 300.0)], none);
     let id = s.doc().unwrap().selection.objects[0];
-    assert_eq!(s.cursor(Point::new(250.0, 300.0), none, v), vectorcraft_tools::Cursor::PenDrawing);
-    assert_eq!(s.cursor(Point::new(250.0, 300.0), cmd, v), vectorcraft_tools::Cursor::ArrowHollow, "Direct Selection's");
+    assert_eq!(s.cursor(Point::new(250.0, 300.0), none, v), livipen_tools::Cursor::PenDrawing);
+    assert_eq!(s.cursor(Point::new(250.0, 300.0), cmd, v), livipen_tools::Cursor::ArrowHollow, "Direct Selection's");
     // The new anchor's outgoing handle: it moves, its incoming one turning with it.
     s.pointer(&PointerEvent::new(PointerKind::Down, 250.0, 300.0).with_mods(cmd), v).unwrap();
     assert_eq!(s.tool_id(), "directSelection");
@@ -1949,7 +1948,7 @@ fn the_pen_drops_the_new_path_asterisk_once_a_path_is_started() {
     // The Pen's asterisk means a click starts a new path: it shows until the first anchor is
     // placed, the pen has no badge while the path is drawn, and the asterisk comes back once the
     // path is finished (Enter, or a click on the first anchor that closes it).
-    use vectorcraft_tools::Cursor;
+    use livipen_tools::Cursor;
     let (none, v) = (Mods::default(), view());
     let empty = Point::new(500.0, 500.0);
     let mut s = session();
@@ -1987,7 +1986,7 @@ fn reshaping_a_segment_keeps_smooth_anchors_smooth() {
 /// Both handles of segment `seg` stand at right angles to the line between its anchors, at one
 /// length: that length, positive on the right of the line as it runs from the first anchor (y
 /// down).
-fn perpendicular_handles(sp: &vectorcraft_geom::SubPath, seg: usize) -> f64 {
+fn perpendicular_handles(sp: &livipen_geom::SubPath, seg: usize) -> f64 {
     let n = sp.anchors.len();
     let (a, b) = (sp.anchors[seg], sp.anchors[(seg + 1) % n]);
     let chord = b.p - a.p;
@@ -2109,7 +2108,7 @@ fn pen_with_alt_converts_the_anchors_of_the_path_being_drawn() {
 /// finishes it.
 #[test]
 fn the_pen_continues_any_open_path_and_joins_another() {
-    use vectorcraft_tools::Cursor;
+    use livipen_tools::Cursor;
     let (v, none) = (view(), Mods::default());
     let mut s = session();
     let a = line(&mut s, 100.0, 100.0, 200.0, 100.0);
@@ -2197,19 +2196,19 @@ fn join_to_corner_or_smooth_sets_the_merged_anchor() {
     s.execute("path.average", &json!({"axis": "both"})).unwrap();
     s.execute("path.join", &json!({"to": "corner"})).unwrap();
     let a = &path(&s, r).subpaths[0].anchors[0];
-    assert_eq!(a.kind, vectorcraft_geom::AnchorKind::Corner);
+    assert_eq!(a.kind, livipen_geom::AnchorKind::Corner);
     assert_eq!((a.h_in, a.h_out), (a.p, a.p));
     s.execute("edit.undo", &json!({})).unwrap();
     s.execute("edit.undo", &json!({})).unwrap();
     s.execute("path.average", &json!({"axis": "both"})).unwrap();
     s.execute("path.join", &json!({"to": "smooth"})).unwrap();
     let a = &path(&s, r).subpaths[0].anchors[0];
-    assert_eq!(a.kind, vectorcraft_geom::AnchorKind::Smooth);
+    assert_eq!(a.kind, livipen_geom::AnchorKind::Smooth);
     let a = line(&mut s, 0.0, 0.0, 100.0, 0.0);
     let b = line(&mut s, 100.0, 0.0, 200.0, 0.0);
     s.execute("path.join", &json!({"ids": [a.0, b.0], "to": "smooth"})).unwrap();
     let j = &path(&s, a).subpaths[0].anchors[1];
-    assert_eq!(j.kind, vectorcraft_geom::AnchorKind::Smooth);
+    assert_eq!(j.kind, livipen_geom::AnchorKind::Smooth);
 }
 
 #[test]
@@ -2393,7 +2392,7 @@ fn open_anchor_delete_does_not_change_explicit_remove_anchors() {
 
 #[test]
 fn open_anchor_delete_after_transform_keeps_mixed_selection_atomic() {
-    use vectorcraft_geom::Affine;
+    use livipen_geom::Affine;
     for xf in [
         Affine::IDENTITY,
         Affine::translate((23.0, -17.0)),

@@ -1,10 +1,10 @@
 //! Strokes on type: character strokes take their join, cap and dashes, and object strokes on type
 //! take every stroke option, as path strokes do.
 
-use vectorcraft_color::{Color, Paint};
-use vectorcraft_doc::text::{CharStyle, TextObject};
-use vectorcraft_doc::{AppearanceItem, Dash, LineJoin, Node, NodeKind};
-use vectorcraft_geom::Point;
+use livipen_color::{Color, Paint};
+use livipen_doc::text::{CharStyle, TextObject};
+use livipen_doc::{AppearanceItem, Dash, LineJoin, Node, NodeKind};
+use livipen_geom::Point;
 
 use super::*;
 use crate::tests_fontchange::fonts_steady;
@@ -70,7 +70,7 @@ fn character_and_object_strokes_on_type_are_dashed() {
     assert!(transitions(&render_text("I", solid.clone(), vec![])) <= 2, "a solid stroke is continuous");
     let chars = CharStyle { stroke_dash: dash.clone(), ..solid };
     assert!(transitions(&render_text("I", chars, vec![])) >= 6, "character dashes");
-    let mut st = vectorcraft_doc::StrokeLayer::new(Paint::solid(Color::BLACK), 3.0);
+    let mut st = livipen_doc::StrokeLayer::new(Paint::solid(Color::BLACK), 3.0);
     st.dash = dash;
     let object = render_text("I", none, vec![AppearanceItem::Stroke(st.clone())]);
     assert!(transitions(&object) >= 6, "object dashes");
@@ -87,7 +87,7 @@ fn character_and_object_strokes_on_type_are_dashed() {
 /// glyphs and leaves them unpainted, an inside one stays within them, as on paths.
 #[test]
 fn aligned_character_strokes_keep_to_their_side_of_the_glyphs() {
-    use vectorcraft_doc::StrokeAlign;
+    use livipen_doc::StrokeAlign;
     let glyph = ink(&render_text("I", CharStyle::default(), vec![]));
     let reach = |b: (u32, u32, u32, u32)| {
         let d = |a: u32, b: u32| a as i64 - b as i64;

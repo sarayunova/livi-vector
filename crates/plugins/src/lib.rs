@@ -1,6 +1,6 @@
-//! Sandboxed WebAssembly plug-ins for VectorCraft.
+//! Sandboxed WebAssembly plug-ins for Livi Pen.
 //!
-//! A plug-in is a WebAssembly module that implements the VectorCraft plug-in ABI (v1, documented
+//! A plug-in is a WebAssembly module that implements the Livi Pen plug-in ABI (v1, documented
 //! in `docs/plugins.md`). It runs in [`wasmi`], a pure-Rust interpreter, with:
 //!
 //! - **no host imports**: no WASI, file system, network, clock or randomness. A module that
@@ -62,7 +62,7 @@ pub enum Error {
     Failed(String),
     #[error("no plug-in {0:?} is installed")]
     NotFound(String),
-    /// The caller asked the run to stop ([`vectorcraft_doc::cancel`]), between two slices of
+    /// The caller asked the run to stop ([`livipen_doc::cancel`]), between two slices of
     /// its instruction budget.
     #[error("cancelled")]
     Cancelled,

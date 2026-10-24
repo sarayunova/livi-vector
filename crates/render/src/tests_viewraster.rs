@@ -2,10 +2,10 @@
 //! stays as it is: dragging other art over an object whose effects reach far past the view (a wide
 //! blur, or any blur zoomed in) draws its raster from the last frame.
 
+use livipen_doc::color::{Color, Paint};
+use livipen_doc::{Appearance, Document, Effect, Node, NodeId};
+use livipen_geom::{Affine, Rect, shapes};
 use serde_json::json;
-use vectorcraft_doc::color::{Color, Paint};
-use vectorcraft_doc::{Appearance, Document, Effect, Node, NodeId};
-use vectorcraft_geom::{Affine, Rect, shapes};
 
 use crate::{RenderOptions, Renderer};
 
@@ -114,7 +114,7 @@ fn rasters_cropped_to_the_view_follow_a_pan_and_a_zoom() {
 /// before a drag, the next eight as a drag's frames (`interacting` and `dragging`, as the canvas
 /// renders them), then the frame after the drag. The hashes of that frame and of a fresh renderer's
 /// frame compare builds.
-/// Run with `cargo test --release -p vectorcraft-render backdrop_drag_perf -- --ignored --nocapture`.
+/// Run with `cargo test --release -p livipen-render backdrop_drag_perf -- --ignored --nocapture`.
 #[test]
 #[ignore = "manual timing probe; wall-clock performance depends on machine load"]
 fn backdrop_drag_perf() {

@@ -1,20 +1,20 @@
 //! File I/O through the injected services (pick, read, write, download, reveal); the engine's
 //! `fileio` decodes, encodes and saves every format.
 
+use livipen_doc::SavedView;
+use livipen_doc::cancel;
+use livipen_engine::EngineError;
+use livipen_engine::cmd::fileio::progress::{self, Progress};
+use livipen_engine::cmd::fileio::{self, Format, SAVE_FORMATS, SaveMode, SavePlan, TEMPLATE_FORMATS};
 use serde_json::{Value, json};
-use vectorcraft_doc::SavedView;
-use vectorcraft_doc::cancel;
-use vectorcraft_engine::EngineError;
-use vectorcraft_engine::cmd::fileio::progress::{self, Progress};
-use vectorcraft_engine::cmd::fileio::{self, Format, SAVE_FORMATS, SaveMode, SavePlan, TEMPLATE_FORMATS};
 
 use crate::background::{self, Writer};
 use crate::dialogs::svg_options;
 use crate::state::Dialog;
-use crate::{FilePick, Services, VectorcraftApp, dialogs};
+use crate::{FilePick, LiviPenApp, Services, dialogs};
 
 /// Template extensions New from Template's open dialog lists first.
-const TEMPLATE_EXTS: &[&str] = &["vctemplate", "ait", "vectorcraft", "drawcraft"];
+const TEMPLATE_EXTS: &[&str] = &["vctemplate", "ait", "livipen", "drawcraft"];
 
 /// Open bytes of any readable format as a new document (templates open untitled); swatch and
 /// graphic style library files open in the library panel, Libraries panel files are added to it,
@@ -22,11 +22,11 @@ const TEMPLATE_EXTS: &[&str] = &["vctemplate", "ait", "vectorcraft", "drawcraft"
 /// app saved (`.kys`) opens Import Shortcut Set, and a script written for the reference app
 /// (`.jsx`, `.jsxinc`, `.jsxbin`) shows its check (Check Script…). → `document.open`'s result for
 /// a document opened now (its `warnings` say what didn't come in as it was), else null.
-pub fn open_bytes(app: &mut VectorcraftApp, name: &str, bytes: &[u8], path: Option<String>) -> Result<Value, String> {
+pub fn open_bytes(app: &mut LiviPenApp, name: &str, bytes: &[u8], path: Option<String>) -> Result<Value, String> {
     let opens = opens_as(name);
     // A WebAssembly plug-in is installed.
     if opens == Some(OpensAs::Plugin) {
-        let module = json!({"dataBase64": vectorcraft_format::base64_encode(bytes), "name": path.as_deref().unwrap_or(name)});
+        let module = json!({"dataBase64": livipen_format::base64_encode(bytes), "name": path.as_deref().unwrap_or(name)});
         return install_module(app, module).map(|_| Value::Null);
     }
     if opens == Some(OpensAs::ShortcutSet) {
@@ -35,7 +35,7 @@ pub fn open_bytes(app: &mut VectorcraftApp, name: &str, bytes: &[u8], path: Opti
     if opens == Some(OpensAs::Script) {
         let p = match path {
             Some(path) => json!({ "path": path }),
-            None => json!({"name": name, "dataBase64": vectorcraft_format::base64_encode(bytes)}),
+            None => json!({"name": name, "dataBase64": livipen_format::base64_encode(bytes)}),
         };
         return dialogs::script_check::command(app, &p).map(|_| Value::Null);
     }
@@ -53,7 +53,7 @@ pub fn open_bytes(app: &mut VectorcraftApp, name: &str, bytes: &[u8], path: Opti
         let p = match path {
             Some(path) => serde_json::json!({ "path": path }),
             // `.ase` swatch libraries are binary.
-            None if swatches => serde_json::json!({"name": name, "dataBase64": vectorcraft_format::base64_encode(bytes)}),
+            None if swatches => serde_json::json!({"name": name, "dataBase64": livipen_format::base64_encode(bytes)}),
             None => serde_json::json!({"name": name, "data": String::from_utf8_lossy(bytes)}),
         };
         let load = if swatches { crate::panels::swatches::load_library } else { crate::panels::graphic_styles::load_library };
@@ -93,28 +93,28 @@ pub enum OpensAs {
 /// The kind of file named `name` (by its extension) that File → Open installs, imports, checks,
 /// shows in the library panel or the Libraries panel, or reviews in Import Shortcut Set
 /// ([`open_bytes`]), else `None`. A drop opens these files the same way, wherever they are dropped
-/// ([`VectorcraftApp::drop_target`]).
+/// ([`LiviPenApp::drop_target`]).
 pub fn opens_as(name: &str) -> Option<OpensAs> {
     let ext = fileio::extension(name);
     let presets = [
-        (vectorcraft_engine::cmd::flatten::PRESET_EXTS, "flattener.presets.import", "flattener presets"),
-        (vectorcraft_engine::cmd::pdfcmds::PRESET_EXTS, "pdf.preset.import", "PDF presets"),
-        (vectorcraft_engine::cmd::printpresets::PRESET_EXTS, "print.presets.import", "print presets"),
-        (vectorcraft_engine::cmd::perspgrid::PRESET_EXTS, "perspective.presets.import", "perspective grid presets"),
+        (livipen_engine::cmd::flatten::PRESET_EXTS, "flattener.presets.import", "flattener presets"),
+        (livipen_engine::cmd::pdfcmds::PRESET_EXTS, "pdf.preset.import", "PDF presets"),
+        (livipen_engine::cmd::printpresets::PRESET_EXTS, "print.presets.import", "print presets"),
+        (livipen_engine::cmd::perspgrid::PRESET_EXTS, "perspective.presets.import", "perspective grid presets"),
     ];
-    if vectorcraft_engine::cmd::plugin::EXTS.contains(&ext.as_str()) {
+    if livipen_engine::cmd::plugin::EXTS.contains(&ext.as_str()) {
         Some(OpensAs::Plugin)
-    } else if vectorcraft_engine::cmd::shortcutset::EXTS.contains(&ext.as_str()) {
+    } else if livipen_engine::cmd::shortcutset::EXTS.contains(&ext.as_str()) {
         Some(OpensAs::ShortcutSet)
-    } else if vectorcraft_engine::cmd::scripts::EXTS.contains(&ext.as_str()) {
+    } else if livipen_engine::cmd::scripts::EXTS.contains(&ext.as_str()) {
         Some(OpensAs::Script)
     } else if let Some(&(_, import, what)) = presets.iter().find(|(exts, ..)| exts.contains(&ext.as_str())) {
         Some(OpensAs::Presets { import, what })
-    } else if vectorcraft_engine::cmd::library::LIBRARY_EXTS.contains(&ext.as_str()) {
+    } else if livipen_engine::cmd::library::LIBRARY_EXTS.contains(&ext.as_str()) {
         Some(OpensAs::Library)
-    } else if vectorcraft_engine::cmd::swatchlib::LIBRARY_EXTS.contains(&ext.as_str()) {
+    } else if livipen_engine::cmd::swatchlib::LIBRARY_EXTS.contains(&ext.as_str()) {
         Some(OpensAs::SwatchLibrary)
-    } else if ext == vectorcraft_doc::style_libs::STYLES_EXT {
+    } else if ext == livipen_doc::style_libs::STYLES_EXT {
         Some(OpensAs::StyleLibrary)
     } else {
         None
@@ -123,7 +123,7 @@ pub fn opens_as(name: &str) -> Option<OpensAs> {
 
 /// Open a document through the engine loader with the `document.open` options in `p` →
 /// `document.open`'s result.
-pub fn open_document(app: &mut VectorcraftApp, name: &str, bytes: &[u8], path: Option<String>, p: &Value) -> Result<Value, String> {
+pub fn open_document(app: &mut LiviPenApp, name: &str, bytes: &[u8], path: Option<String>, p: &Value) -> Result<Value, String> {
     let r = fileio::open_bytes_with(&mut app.session, name, bytes, path, p).map_err(|e| e.to_string())?;
     opened(app, &r);
     Ok(r)
@@ -131,7 +131,7 @@ pub fn open_document(app: &mut VectorcraftApp, name: &str, bytes: &[u8], path: O
 
 /// A document just opened (`r`: `document.open`'s result): the views follow, the status bar says
 /// what didn't come in as it was, and missing links are asked about.
-pub(crate) fn opened(app: &mut VectorcraftApp, r: &Value) {
+pub(crate) fn opened(app: &mut LiviPenApp, r: &Value) {
     app.sync_views();
     if let Some(w) = r["warnings"].as_array().filter(|w| !w.is_empty()) {
         app.status(format!("Opened with {} note(s): {}", w.len(), w[0].as_str().unwrap_or_default()));
@@ -140,14 +140,14 @@ pub(crate) fn opened(app: &mut VectorcraftApp, r: &Value) {
 }
 
 /// A path from the open dialog, or "cancelled".
-fn pick_open(app: &mut VectorcraftApp, pick: &FilePick) -> Result<String, String> {
+fn pick_open(app: &mut LiviPenApp, pick: &FilePick) -> Result<String, String> {
     crate::picks::open(app, pick).ok_or_else(|| "cancelled".into())
 }
 
 /// Object › Plug-ins › Install Plug-in…: installs the module `p` gives (`path`, or `dataBase64`
 /// with `name`), else a picked `.wasm` (the web's file picker hands the file to [`open_bytes`],
 /// which installs it) → [`install_module`]'s result.
-pub fn install_plugin(app: &mut VectorcraftApp, p: &Value) -> Result<Value, String> {
+pub fn install_plugin(app: &mut LiviPenApp, p: &Value) -> Result<Value, String> {
     let given = |k: &str| p.get(k).and_then(Value::as_str).is_some_and(|v| !v.is_empty());
     if given("path") || given("dataBase64") {
         return install_module(app, p.clone());
@@ -155,22 +155,21 @@ pub fn install_plugin(app: &mut VectorcraftApp, p: &Value) -> Result<Value, Stri
     if app.services.open_async.is_some() {
         return open_dialog(app).map(|_| Value::Null);
     }
-    let path =
-        pick_open(app, &FilePick { filters: vec![FilePick::filter("Plug-ins", vectorcraft_engine::cmd::plugin::EXTS)], ..Default::default() })?;
+    let path = pick_open(app, &FilePick { filters: vec![FilePick::filter("Plug-ins", livipen_engine::cmd::plugin::EXTS)], ..Default::default() })?;
     install_module(app, json!({ "path": path }))
 }
 
 /// Installs the plug-in module that `module` names (`plugin.install`'s `path`, or `dataBase64`
 /// with `name`) → `plugin.install`'s result. A filter that asks for a heavy budget the user hasn't
 /// allowed yet (`allowHeavy`) asks them first, and OK installs it → `{pending}` while it asks.
-pub fn install_module(app: &mut VectorcraftApp, module: Value) -> Result<Value, String> {
+pub fn install_module(app: &mut LiviPenApp, module: Value) -> Result<Value, String> {
     if module.get("allowHeavy").and_then(Value::as_bool) != Some(true) {
         let given = |k: &str| module.get(k).map(|v| (k.to_string(), v.clone()));
         let source = Value::Object(["path", "dataBase64", "name"].into_iter().filter_map(given).collect());
         let info = app.run("plugin.inspect", source.clone())?;
         if info["budget"] == "heavy" {
             let name = info["name"].as_str().unwrap_or_default();
-            let (minutes, times) = vectorcraft_plugins::heavy_terms();
+            let (minutes, times) = livipen_plugins::heavy_terms();
             let message = crate::i18n::fmt(tl!("Install “{name}”, which asks for a heavy budget?"), &[("name", name)]);
             let detail = crate::i18n::fmt(
                 tl!(
@@ -190,7 +189,7 @@ pub fn install_module(app: &mut VectorcraftApp, module: Value) -> Result<Value, 
 }
 
 /// File → Open…
-pub fn open_dialog(app: &mut VectorcraftApp) -> Result<(), String> {
+pub fn open_dialog(app: &mut LiviPenApp) -> Result<(), String> {
     if let Some(f) = app.services.open_async.as_mut() {
         f();
         return Ok(());
@@ -201,7 +200,7 @@ pub fn open_dialog(app: &mut VectorcraftApp) -> Result<(), String> {
 
 /// A file the user asked to open (File › Open, Open Recent, the Home screen, a drop, the Finder)
 /// couldn't be: say so in a dialog as well as the status bar, which is easily missed (#861).
-pub fn report_open_error(app: &mut VectorcraftApp, name: &str, e: &str) {
+pub fn report_open_error(app: &mut LiviPenApp, name: &str, e: &str) {
     app.status(format!("Couldn't open {name}: {e}"));
     let message = crate::i18n::fmt(tl!("Can't open “{name}”."), &[("name", name)]);
     dialogs::confirm::tell(app, &message, &crate::i18n::message(crate::i18n::current(), e));
@@ -212,7 +211,7 @@ pub fn report_open_error(app: &mut VectorcraftApp, name: &str, e: &str) {
 /// the caller's error becomes, is replaced by the next message, and a document that wasn't saved
 /// must not look saved: it stays modified, and what was at `path` is as it was. Not for a request
 /// an agent sent and waits on: the error is its reply.
-pub(crate) fn report_write_error(app: &mut VectorcraftApp, export: bool, path: &str, e: &str) {
+pub(crate) fn report_write_error(app: &mut LiviPenApp, export: bool, path: &str, e: &str) {
     if app.ui.answering_control {
         return;
     }
@@ -222,7 +221,7 @@ pub(crate) fn report_write_error(app: &mut VectorcraftApp, export: bool, path: &
 }
 
 /// [`write_to`], a failure reported ([`report_write_error`]).
-pub(crate) fn write_reporting(app: &mut VectorcraftApp, path: &str, bytes: &[u8]) -> Result<(), String> {
+pub(crate) fn write_reporting(app: &mut LiviPenApp, path: &str, bytes: &[u8]) -> Result<(), String> {
     let r = write_to(&mut app.services, path, bytes);
     if let Err(e) = &r {
         report_write_error(app, false, path, e);
@@ -234,7 +233,7 @@ pub(crate) fn write_reporting(app: &mut VectorcraftApp, path: &str, bytes: &[u8]
 /// the desktop a document is decoded off the UI thread ([`crate::opening`]): the result is then
 /// `{background: true, status}`, and the document opens in its tab (or the failure is reported)
 /// once it is ready.
-pub fn open_reporting(app: &mut VectorcraftApp, path: &str) -> Result<Value, String> {
+pub fn open_reporting(app: &mut LiviPenApp, path: &str) -> Result<Value, String> {
     let r = open_file(app, path, crate::opening::available());
     if let Err(e) = &r {
         report_open_error(app, &fileio::file_name(path), e);
@@ -244,14 +243,14 @@ pub fn open_reporting(app: &mut VectorcraftApp, path: &str) -> Result<Value, Str
 
 /// Home › Recent Files and File › Open Recent: focus an already-open tab for that path instead of
 /// calling `document.open` again (#3455).
-pub fn open_recent_reporting(app: &mut VectorcraftApp, path: &str) -> Result<Value, String> {
+pub fn open_recent_reporting(app: &mut LiviPenApp, path: &str) -> Result<Value, String> {
     if let Some(r) = try_activate_open_document(app, path)? {
         return Ok(r);
     }
     open_reporting(app, path)
 }
 
-fn try_activate_open_document(app: &mut VectorcraftApp, path: &str) -> Result<Option<Value>, String> {
+fn try_activate_open_document(app: &mut LiviPenApp, path: &str) -> Result<Option<Value>, String> {
     let Some(index) = document_index_for_path(app, path) else {
         return Ok(None);
     };
@@ -269,7 +268,7 @@ fn try_activate_open_document(app: &mut VectorcraftApp, path: &str) -> Result<Op
     Ok(Some(r))
 }
 
-fn document_index_for_path(app: &VectorcraftApp, path: &str) -> Option<usize> {
+fn document_index_for_path(app: &LiviPenApp, path: &str) -> Option<usize> {
     app.session.documents().iter().position(|st| st.path.as_deref().is_some_and(|p| same_open_path(p, path)))
 }
 
@@ -280,18 +279,18 @@ fn same_open_path(a: &str, b: &str) -> bool {
     }
 }
 
-fn read(app: &VectorcraftApp, path: &str) -> Result<Vec<u8>, String> {
+fn read(app: &LiviPenApp, path: &str) -> Result<Vec<u8>, String> {
     app.services.read.as_ref().ok_or("no file reader")?(path)
 }
 
 /// Open the file at `path` (see [`open_bytes`]) → `document.open`'s result, or null.
-pub fn open_path(app: &mut VectorcraftApp, path: &str) -> Result<Value, String> {
+pub fn open_path(app: &mut LiviPenApp, path: &str) -> Result<Value, String> {
     open_file(app, path, false)
 }
 
 /// [`open_path`]; with `background`, a document (not a file that installs, imports or asks
 /// first) is decoded off the UI thread ([`crate::opening::start`]).
-pub(crate) fn open_file(app: &mut VectorcraftApp, path: &str, background: bool) -> Result<Value, String> {
+pub(crate) fn open_file(app: &mut LiviPenApp, path: &str, background: bool) -> Result<Value, String> {
     // A shortcut set is read by Import Shortcut Set, up to its reader's cap.
     if dialogs::shortcut_import::is_kys(path) {
         dialogs::shortcut_import::command(app, &json!({ "path": path }))?;
@@ -327,7 +326,7 @@ pub(crate) fn open_file(app: &mut VectorcraftApp, path: &str, background: bool) 
 /// File → New from Template…: a template (or any readable file) as a new untitled document. Without
 /// a path the open dialog starts in the Templates folder. On the web the browser's file picker
 /// opens it (`.vctemplate`, `.ait` and template files open untitled there too).
-pub fn new_from_template(app: &mut VectorcraftApp, path: Option<String>) -> Result<Value, String> {
+pub fn new_from_template(app: &mut LiviPenApp, path: Option<String>) -> Result<Value, String> {
     let path = match path {
         Some(p) => p,
         None if app.services.open_async.is_some() => return open_dialog(app).map(|_| Value::Null),
@@ -352,14 +351,14 @@ pub(crate) fn write_to(services: &mut Services, path: &str, bytes: &[u8]) -> Res
 }
 
 /// The web saves by downloading: no save panel, no folders.
-pub(crate) fn is_web(app: &VectorcraftApp) -> bool {
+pub(crate) fn is_web(app: &LiviPenApp) -> bool {
     app.services.download.is_some()
 }
 
 /// Write `bytes` to `path`, else to a file picked in a save panel that suggests `name` next to the
 /// document and shows its file type, [`file_types`] (the web downloads them as `name`) → where
 /// they went.
-pub(crate) fn write_named(app: &mut VectorcraftApp, path: Option<String>, name: &str, bytes: &[u8]) -> Result<String, String> {
+pub(crate) fn write_named(app: &mut LiviPenApp, path: Option<String>, name: &str, bytes: &[u8]) -> Result<String, String> {
     let path = match path {
         Some(p) => p,
         None => {
@@ -375,7 +374,7 @@ pub(crate) fn write_named(app: &mut VectorcraftApp, path: Option<String>, name: 
 /// Where a file goes when no path was given: the suggested name on the web (a download), else the
 /// save panel's choice with the suggested name's extension, [`with_written_extension`]: a name
 /// typed with the extension of a format `keeps` takes stays as typed too.
-fn pick_path(app: &mut VectorcraftApp, pick: &FilePick, keeps: impl Fn(&Format) -> bool) -> Result<String, String> {
+fn pick_path(app: &mut LiviPenApp, pick: &FilePick, keeps: impl Fn(&Format) -> bool) -> Result<String, String> {
     let ext = fileio::extension(&pick.name);
     pick_finished(app, pick, |picked, _| with_written_extension(picked, &ext, &keeps))
 }
@@ -399,7 +398,7 @@ fn with_written_extension(path: &str, ext: &str, keeps: impl Fn(&Format) -> bool
 /// replaced) and a file is there, which the panel did not ask about, a question asks before
 /// replacing it ([`crate::picks::ask_to_replace`]) and this answers "cancelled"; the question's OK
 /// runs what asked again.
-fn pick_finished(app: &mut VectorcraftApp, pick: &FilePick, finish: impl Fn(&str, Option<&str>) -> String) -> Result<String, String> {
+fn pick_finished(app: &mut LiviPenApp, pick: &FilePick, finish: impl Fn(&str, Option<&str>) -> String) -> Result<String, String> {
     if is_web(app) {
         return Ok(finish(&pick.name, None));
     }
@@ -423,7 +422,7 @@ fn with_extension(path: &str, ext: &str, keeps: impl Fn(&Format) -> bool) -> Str
 }
 
 /// The active document's file name with extension `ext`, and its folder.
-fn suggested(app: &VectorcraftApp, ext: &str) -> (String, Option<String>) {
+fn suggested(app: &LiviPenApp, ext: &str) -> (String, Option<String>) {
     let st = app.session.active();
     let t = st.map(|d| d.path.clone().unwrap_or_else(|| d.doc.title.clone())).unwrap_or_else(|| "Untitled".into());
     let folder = st.and_then(|d| d.path.as_deref()).and_then(|p| std::path::Path::new(p).parent()).map(|p| p.to_string_lossy().to_string());
@@ -436,12 +435,12 @@ const FILE_TYPES: &[(&str, &[&str])] = &[
     ("Swatch libraries", &["vcswatches"]),
     ("Swatch libraries", &["gpl"]),
     ("Swatch libraries", &["ase"]),
-    ("Graphic Style Libraries", &[vectorcraft_doc::style_libs::STYLES_EXT]),
-    ("Libraries", vectorcraft_engine::cmd::library::LIBRARY_EXTS),
-    ("Flattener presets", vectorcraft_engine::cmd::flatten::PRESET_EXTS),
-    ("PDF presets", vectorcraft_engine::cmd::pdfcmds::PRESET_EXTS),
-    ("Perspective grid presets", vectorcraft_engine::cmd::perspgrid::PRESET_EXTS),
-    ("Print presets", vectorcraft_engine::cmd::printpresets::PRESET_EXTS),
+    ("Graphic Style Libraries", &[livipen_doc::style_libs::STYLES_EXT]),
+    ("Libraries", livipen_engine::cmd::library::LIBRARY_EXTS),
+    ("Flattener presets", livipen_engine::cmd::flatten::PRESET_EXTS),
+    ("PDF presets", livipen_engine::cmd::pdfcmds::PRESET_EXTS),
+    ("Perspective grid presets", livipen_engine::cmd::perspgrid::PRESET_EXTS),
+    ("Print presets", livipen_engine::cmd::printpresets::PRESET_EXTS),
     ("CSS", &["css"]),
     ("PostScript", &["ps"]),
 ];
@@ -459,18 +458,18 @@ fn file_types(ext: &str) -> Vec<crate::FileFilter> {
 /// `path`, else one picked in a save panel (the web: the suggested name) for the active document
 /// with extension `ext`, filtered to its file type when it has one ([`file_types`]). A name typed
 /// with another format's extension gets `ext` instead ([`with_written_extension`]).
-pub(crate) fn target_path(app: &mut VectorcraftApp, path: Option<String>, ext: &str) -> Result<String, String> {
+pub(crate) fn target_path(app: &mut LiviPenApp, path: Option<String>, ext: &str) -> Result<String, String> {
     target_path_keeping(app, path, ext, |_| false)
 }
 
 /// [`target_path`] for an export in format `f` (Export As's OK and [`export`]): a name typed with
 /// `.svgz` for an SVG stays as typed, and [`export`] writes it compressed.
-pub(crate) fn export_path(app: &mut VectorcraftApp, path: Option<String>, f: &Format) -> Result<String, String> {
+pub(crate) fn export_path(app: &mut LiviPenApp, path: Option<String>, f: &Format) -> Result<String, String> {
     target_path_keeping(app, path, f.extensions[0], |g| f.id == "svg" && g.id == "svgz")
 }
 
 /// [`target_path`], keeping a typed extension of a format `keeps` takes.
-fn target_path_keeping(app: &mut VectorcraftApp, path: Option<String>, ext: &str, keeps: impl Fn(&Format) -> bool) -> Result<String, String> {
+fn target_path_keeping(app: &mut LiviPenApp, path: Option<String>, ext: &str, keeps: impl Fn(&Format) -> bool) -> Result<String, String> {
     if let Some(p) = path {
         return Ok(p);
     }
@@ -480,7 +479,7 @@ fn target_path_keeping(app: &mut VectorcraftApp, path: Option<String>, ext: &str
 }
 
 /// Keep the active document's saved view current before a save (native files reopen at it).
-pub fn remember_view(app: &mut VectorcraftApp) {
+pub fn remember_view(app: &mut LiviPenApp) {
     let Some(v) = app.view().copied().filter(|v| v.fitted) else { return };
     if let Some(st) = app.session.active_mut() {
         st.view = Some(SavedView { name: String::new(), center: v.center, zoom: v.zoom, rotation: v.rotation });
@@ -490,7 +489,7 @@ pub fn remember_view(app: &mut VectorcraftApp) {
 /// A path typed in a save panel: kept when its extension names one of the panel's file types (a
 /// save format, or a template format for Save as Template, `mode`). An extension that names
 /// another format (`card.png`, or `card.ait` in Save As) is replaced with `f`'s, and `f`'s is
-/// added to any other path (`notes.v2` becomes `notes.v2.vectorcraft`).
+/// added to any other path (`notes.v2` becomes `notes.v2.livipen`).
 fn with_save_extension(path: &str, f: &Format, mode: SaveMode) -> String {
     let formats = if mode == SaveMode::Template { TEMPLATE_FORMATS } else { SAVE_FORMATS };
     if fileio::format_for_name(path).is_some_and(|g| !formats.contains(&g.id)) {
@@ -519,7 +518,7 @@ fn with_picked_type(path: &str, suggested: &str, picked: Option<&str>, f: &Forma
 
 /// Write every file of an export (one per artboard, linked images) for the destination `path`.
 /// → the export's own files (without the linked images).
-fn write_encoded(write: Writer, doc: &vectorcraft_doc::Document, path: &str, enc: &fileio::Encoded) -> Result<Vec<String>, String> {
+fn write_encoded(write: Writer, doc: &livipen_doc::Document, path: &str, enc: &fileio::Encoded) -> Result<Vec<String>, String> {
     let named = enc.named(doc, path);
     for (p, bytes) in &named {
         write(p, bytes)?;
@@ -527,7 +526,7 @@ fn write_encoded(write: Writer, doc: &vectorcraft_doc::Document, path: &str, enc
     Ok(named.into_iter().take(enc.files.len()).map(|(p, _)| p).collect())
 }
 
-fn plan(app: &VectorcraftApp, mode: SaveMode, p: &Value) -> Result<SavePlan, String> {
+fn plan(app: &LiviPenApp, mode: SaveMode, p: &Value) -> Result<SavePlan, String> {
     fileio::save_plan(&app.session, mode, p).map_err(|e| e.to_string())
 }
 
@@ -542,7 +541,7 @@ fn plan(app: &VectorcraftApp, mode: SaveMode, p: &Value) -> Result<SavePlan, Str
 /// files on Save As and Save a Copy), and so does Save As or Save a Copy to a given SVG path.
 /// → `{path, format, warnings…}` once written, or `{pending: <dialog kind>,
 /// path?}` while a dialog is open.
-pub fn save(app: &mut VectorcraftApp, mode: SaveMode, p: &Value, ask_options: bool) -> Result<Value, String> {
+pub fn save(app: &mut LiviPenApp, mode: SaveMode, p: &Value, ask_options: bool) -> Result<Value, String> {
     remember_view(app);
     // Writing over the file the document was read from is asked about here, not refused.
     let first = plan(app, mode, &acknowledged(p))?;
@@ -602,14 +601,14 @@ fn acknowledged(p: &Value) -> Value {
 }
 
 /// Writing `path` over the file the active document was read from, when reading it left things
-/// out (hidden text, art or layers VectorCraft can't read yet): asks first, and OK runs `command`
+/// out (hidden text, art or layers Livi Pen can't read yet): asks first, and OK runs `command`
 /// with `params` and `acknowledgeLoss` → `{pending}` while it asks, `None` when nothing is lost.
-fn ask_before_losing(app: &mut VectorcraftApp, path: &str, command: &str, params: &Value) -> Option<Value> {
+fn ask_before_losing(app: &mut LiviPenApp, path: &str, command: &str, params: &Value) -> Option<Value> {
     let what = fileio::losses_summary(fileio::overwrite_losses(app.session.active()?, path, params)?);
     let name = fileio::file_name(path);
     let message = crate::i18n::fmt(tl!("Replace “{name}”, the file this document was opened from?"), &[("name", &name)]);
     let detail = crate::i18n::fmt(
-        tl!("Opening it left out what VectorCraft can't read yet ({what}), so replacing it loses that for good. Save under another name to keep it."),
+        tl!("Opening it left out what Livi Pen can't read yet ({what}), so replacing it loses that for good. Save under another name to keep it."),
         &[("what", &what)],
     );
     let mut params = acknowledged(params);
@@ -627,7 +626,7 @@ fn ask_before_losing(app: &mut VectorcraftApp, path: &str, command: &str, params
 fn asks_options(mode: SaveMode, f: &Format) -> bool {
     !f.options.is_empty()
         && match f.id {
-            "vectorcraft" => mode == SaveMode::SaveAs,
+            "livipen" => mode == SaveMode::SaveAs,
             "ai" => matches!(mode, SaveMode::SaveAs | SaveMode::Copy),
             "template" | "ait" => false,
             _ => true,
@@ -641,7 +640,7 @@ fn has_options(p: &Value) -> bool {
 
 /// Ask for format `f`'s options before a save (`mode`) to `path`: SVG Options for SVG, the Save
 /// PDF dialog for PDF, else the save options dialog. OK finishes the save.
-pub fn ask_format_options(app: &mut VectorcraftApp, mode: SaveMode, f: &Format, path: &str) -> Result<Value, String> {
+pub fn ask_format_options(app: &mut LiviPenApp, mode: SaveMode, f: &Format, path: &str) -> Result<Value, String> {
     match f.id {
         "pdf" => ask_pdf_options(app, mode, path),
         "svg" | "svgz" => {
@@ -655,7 +654,7 @@ pub fn ask_format_options(app: &mut VectorcraftApp, mode: SaveMode, f: &Format, 
 
 /// A save as PDF asks with the Save PDF dialog, filled with the PDF options the document was last
 /// saved with; its OK finishes the save ([`save_pdf`]).
-pub fn ask_pdf_options(app: &mut VectorcraftApp, mode: SaveMode, path: &str) -> Result<Value, String> {
+pub fn ask_pdf_options(app: &mut LiviPenApp, mode: SaveMode, path: &str) -> Result<Value, String> {
     let mut p = Value::Object(plan(app, mode, &json!({ "path": path, "format": "pdf" }))?.options);
     p["path"] = json!(path);
     dialogs::open_save_pdf(app, &p)?;
@@ -666,7 +665,7 @@ pub fn ask_pdf_options(app: &mut VectorcraftApp, mode: SaveMode, path: &str) -> 
 
 /// The Save PDF dialog's OK during a save (`mode`): `params` are its `document.exportPdf` options
 /// and `path`.
-pub fn save_pdf(app: &mut VectorcraftApp, mode: SaveMode, mut params: Value) -> Result<Value, String> {
+pub fn save_pdf(app: &mut LiviPenApp, mode: SaveMode, mut params: Value) -> Result<Value, String> {
     let path = params.as_object_mut().and_then(|o| o.remove("path"));
     let view = params.get("viewAfterSaving").and_then(Value::as_bool).unwrap_or(false);
     let r = save(app, mode, &json!({ "path": path, "format": "pdf", "options": params }), false)?;
@@ -677,14 +676,14 @@ pub fn save_pdf(app: &mut VectorcraftApp, mode: SaveMode, mut params: Value) -> 
 }
 
 /// Open a written file in the system viewer (not on the web, which downloads it).
-fn view_file(app: &mut VectorcraftApp, path: &str) {
+fn view_file(app: &mut LiviPenApp, path: &str) {
     if !is_web(app) {
         app.open_url(&file_url(path));
     }
 }
 
 /// "Saved <path>", with the first of the result's warnings.
-pub(crate) fn report_saved(app: &mut VectorcraftApp, path: &str, r: &Value) {
+pub(crate) fn report_saved(app: &mut LiviPenApp, path: &str, r: &Value) {
     app.status(saved_status(path, r));
 }
 
@@ -702,7 +701,7 @@ fn saved_status(path: &str, r: &Value) -> String {
 /// ([`background`]): this returns `{path, background: true, status, format, warnings}` at once
 /// (`warnings`: what the format loses, then the save's notes on its params, such as an option the format
 /// doesn't read), and the document takes the file (and counts as saved, as of the snapshot) once it is written.
-fn write_plan(app: &mut VectorcraftApp, plan: SavePlan) -> Result<Value, String> {
+fn write_plan(app: &mut LiviPenApp, plan: SavePlan) -> Result<Value, String> {
     let uid = app.session.active().ok_or("no document")?.uid;
     // Saves of one document finish in order.
     if app.background.busy_with(uid) {
@@ -729,7 +728,7 @@ fn write_plan(app: &mut VectorcraftApp, plan: SavePlan) -> Result<Value, String>
         .map_err(|e| e.to_string())
     };
     let failed = target.clone().unwrap_or_default();
-    let then = move |app: &mut VectorcraftApp, r: Result<Value, String>| {
+    let then = move |app: &mut LiviPenApp, r: Result<Value, String>| {
         // Not written: the document keeps its file, format and modified state, and the user is told.
         let r = r.inspect_err(|e| report_write_error(app, false, &failed, e))?;
         // The document may have closed meanwhile: the file is written all the same.
@@ -754,7 +753,7 @@ fn write_plan(app: &mut VectorcraftApp, plan: SavePlan) -> Result<Value, String>
 
 /// Open the save options dialog of format `f` before writing `path`: `action` is the save command
 /// it finishes, and `pick` (the web's Save As) also names the file and chooses the format.
-fn open_options(app: &mut VectorcraftApp, action: &str, f: &Format, path: &str, pick: bool) -> Value {
+fn open_options(app: &mut LiviPenApp, action: &str, f: &Format, path: &str, pick: bool) -> Value {
     let mut fields = dialogs::save_options::option_values(app, f);
     fields.insert("__action".into(), json!(action));
     fields.insert("__pick".into(), json!(pick));
@@ -769,7 +768,7 @@ fn open_options(app: &mut VectorcraftApp, action: &str, f: &Format, path: &str, 
 pub const MAX_RECENT_FILES: usize = 30;
 
 /// Put `path` at the top of File → Open Recent Files.
-pub fn note_recent(app: &mut VectorcraftApp, path: &str) {
+pub fn note_recent(app: &mut LiviPenApp, path: &str) {
     let r = &mut app.ui.recent_files;
     r.retain(|p| p != path);
     r.insert(0, path.to_string());
@@ -777,7 +776,7 @@ pub fn note_recent(app: &mut VectorcraftApp, path: &str) {
 }
 
 /// The recent files File → Open Recent Files lists.
-pub fn recent_files(app: &VectorcraftApp) -> &[String] {
+pub fn recent_files(app: &LiviPenApp) -> &[String] {
     let r = &app.ui.recent_files;
     &r[..r.len().min(app.session.prefs.recent_files_count as usize)]
 }
@@ -787,7 +786,7 @@ pub const EXPORT_CANCELLED: &str = "Export cancelled";
 
 /// File → Cancel Export (the progress dialog's Cancel): every export running in the background
 /// stops and writes nothing more → `{cancelled: n}`.
-pub fn cancel_exports(app: &mut VectorcraftApp) -> Value {
+pub fn cancel_exports(app: &mut LiviPenApp) -> Value {
     let n = app.background.cancel_exports();
     if n > 0 {
         app.status(EXPORT_CANCELLED);
@@ -797,7 +796,7 @@ pub fn cancel_exports(app: &mut VectorcraftApp) -> Value {
 
 /// The progress dialog's Continue in Background: the exports go on, shown in the status bar only
 /// → `{hidden: n}`.
-pub fn hide_exports(app: &mut VectorcraftApp) -> Value {
+pub fn hide_exports(app: &mut LiviPenApp) -> Value {
     json!({ "hidden": app.background.hide_exports() })
 }
 
@@ -806,7 +805,7 @@ pub fn hide_exports(app: &mut VectorcraftApp) -> Value {
 /// options…): every file it writes (one per artboard, linked images) goes next to `path`. The
 /// document keeps its path. → `{path, warnings, files?}` (`files`: every file when there are
 /// several).
-pub fn export(app: &mut VectorcraftApp, format: Option<&str>, path: Option<String>, params: &Value) -> Result<Value, String> {
+pub fn export(app: &mut LiviPenApp, format: Option<&str>, path: Option<String>, params: &Value) -> Result<Value, String> {
     // Options given as anything but an object are none: the path and format still reach the
     // encoder (an exporter plug-in is told the file it writes).
     let params = &if params.is_object() { params.clone() } else { json!({}) };
@@ -883,7 +882,7 @@ pub fn export(app: &mut VectorcraftApp, format: Option<&str>, path: Option<Strin
 /// Run an engine command that returns `{dataBase64}` and write the bytes to a picked path
 /// (Export Selection, Save for Office Documents, Text Export Options and the presets dialogs'
 /// Export…), reported with the first of the command's warnings ([`report_saved`]).
-pub fn save_command_output(app: &mut VectorcraftApp, id: &str, ext: &str, params: Value) -> Result<String, String> {
+pub fn save_command_output(app: &mut LiviPenApp, id: &str, ext: &str, params: Value) -> Result<String, String> {
     let (path, v) = run_to_file(app, id, ext, params)?;
     report_saved(app, &path, &v);
     Ok(path)
@@ -892,7 +891,7 @@ pub fn save_command_output(app: &mut VectorcraftApp, id: &str, ext: &str, params
 /// Run an engine command that returns `{data}` or `{dataBase64}` and write the bytes to a file
 /// picked with file name `name` suggested next to the document (the web downloads them as `name`)
 /// → where they went.
-pub(crate) fn save_command_output_named(app: &mut VectorcraftApp, id: &str, name: &str, params: Value) -> Result<String, String> {
+pub(crate) fn save_command_output_named(app: &mut LiviPenApp, id: &str, name: &str, params: Value) -> Result<String, String> {
     let mut v = app.session.execute(id, &params).map_err(|e| e.to_string())?;
     let bytes = take_output(&mut v)?;
     let path = write_named(app, None, name, &bytes)?;
@@ -905,7 +904,7 @@ pub(crate) fn save_command_output_named(app: &mut VectorcraftApp, id: &str, name
 fn take_output(v: &mut Value) -> Result<Vec<u8>, String> {
     let o = v.as_object_mut().ok_or("no data")?;
     let bytes = match (o.remove("dataBase64"), o.remove("data")) {
-        (Some(Value::String(b64)), _) => vectorcraft_format::base64_decode(&b64),
+        (Some(Value::String(b64)), _) => livipen_format::base64_decode(&b64),
         (_, Some(Value::String(text))) => Some(text.into_bytes()),
         _ => None,
     };
@@ -917,7 +916,7 @@ fn take_output(v: &mut Value) -> Result<Vec<u8>, String> {
 /// The command runs before a path is asked for, so bad params never open a save dialog, except
 /// for Export Selection without a `format`, which takes it from the picked path. Export Selection
 /// with a `format` picks a file with that format's extension in place of `ext`.
-pub(crate) fn run_to_file(app: &mut VectorcraftApp, id: &str, ext: &str, mut params: Value) -> Result<(String, Value), String> {
+pub(crate) fn run_to_file(app: &mut LiviPenApp, id: &str, ext: &str, mut params: Value) -> Result<(String, Value), String> {
     let mut path = params.as_object_mut().and_then(|o| o.remove("path")).and_then(|p| p.as_str().map(str::to_string));
     let selection = id == "document.exportSelection";
     let given = params.get("format").and_then(Value::as_str).and_then(fileio::format).filter(|_| selection);
@@ -945,7 +944,7 @@ pub(crate) fn run_to_file(app: &mut VectorcraftApp, id: &str, ext: &str, mut par
 /// to `path` (else a picked or suggested name) → `{path, bytes, warnings}`. With
 /// `viewAfterSaving`, the written file opens in the system viewer (not on the web, which
 /// downloads it).
-pub fn export_pdf(app: &mut VectorcraftApp, params: Value) -> Result<Value, String> {
+pub fn export_pdf(app: &mut LiviPenApp, params: Value) -> Result<Value, String> {
     let view = params.get("viewAfterSaving").and_then(Value::as_bool).unwrap_or(false);
     let (path, mut v) = run_to_file(app, "document.exportPdf", "pdf", params)?;
     if view {
@@ -973,8 +972,8 @@ pub(crate) fn file_url(path: &str) -> String {
 }
 
 /// File → Revert: ask first; OK runs `file.revert` with `confirmed`, which goes to the engine.
-pub fn ask_revert(app: &mut VectorcraftApp) -> Result<Value, String> {
-    let c = vectorcraft_engine::find_command("file.revert").ok_or("no revert command")?;
+pub fn ask_revert(app: &mut LiviPenApp) -> Result<Value, String> {
+    let c = livipen_engine::find_command("file.revert").ok_or("no revert command")?;
     (c.enabled)(&app.session)?;
     let name = app.session.active().map(|d| d.title()).unwrap_or_default();
     let message = crate::i18n::fmt(tl!("Revert to the saved version of “{name}”?"), &[("name", &name)]);
@@ -983,19 +982,19 @@ pub fn ask_revert(app: &mut VectorcraftApp) -> Result<Value, String> {
 }
 
 /// File → Show in Folder: the document's file in the system file manager.
-pub fn reveal(app: &mut VectorcraftApp) -> Result<Value, String> {
+pub fn reveal(app: &mut LiviPenApp) -> Result<Value, String> {
     let path = app.session.active().and_then(|d| d.path.clone()).ok_or("the document has never been saved")?;
     reveal_path(app, &path)?;
     Ok(json!({ "path": path }))
 }
 
 /// Show the file at `path` in the system file manager (desktop).
-pub(crate) fn reveal_path(app: &mut VectorcraftApp, path: &str) -> Result<(), String> {
+pub(crate) fn reveal_path(app: &mut LiviPenApp, path: &str) -> Result<(), String> {
     app.services.reveal.as_mut().ok_or("no file manager here")?(path)
 }
 
 /// Open `path` (a file or a folder) in the system's default app for it (desktop).
-pub(crate) fn open_in_app(app: &mut VectorcraftApp, path: &str) -> Result<(), String> {
+pub(crate) fn open_in_app(app: &mut LiviPenApp, path: &str) -> Result<(), String> {
     app.services.open_file.as_mut().ok_or("no app to open files here")?(path)
 }
 
@@ -1004,7 +1003,7 @@ pub(crate) fn open_in_app(app: &mut VectorcraftApp, path: &str) -> Result<(), St
 /// back as base64. With `openLocation`, the file manager shows the first file written. When an
 /// export into a folder or a download has warnings, the status bar shows the first as
 /// [`report_saved`] shows a save's notes: "Saved <folder, ZIP or first download> with n note(s): …".
-pub fn export_for_screens(app: &mut VectorcraftApp, params: Value) -> Result<Value, String> {
+pub fn export_for_screens(app: &mut LiviPenApp, params: Value) -> Result<Value, String> {
     export_files(app, "document.exportForScreens", params)
 }
 
@@ -1013,7 +1012,7 @@ pub fn export_for_screens(app: &mut VectorcraftApp, params: Value) -> Result<Val
 /// prepared from the document as it is now, and the files are encoded and written on the
 /// background thread ([`background`]): this returns `{background: true, status}` at once, with the
 /// progress dialog's Cancel, and the status bar reports the files once they are written.
-pub(crate) fn export_files(app: &mut VectorcraftApp, id: &str, params: Value) -> Result<Value, String> {
+pub(crate) fn export_files(app: &mut LiviPenApp, id: &str, params: Value) -> Result<Value, String> {
     let open_location = params.get("openLocation").and_then(Value::as_bool).unwrap_or(false);
     let folder = params.get("folder").and_then(Value::as_str).unwrap_or_default().to_string();
     // Without a folder the files come back in the reply, which the caller waits for.
@@ -1049,7 +1048,7 @@ pub(crate) fn export_files(app: &mut VectorcraftApp, id: &str, params: Value) ->
 /// Report the files `r` (the reply of `document.exportForScreens`) in the status bar: the count
 /// written into `folder`, else the ZIP or the files downloaded (the web); with `open_location`,
 /// the file manager shows the first file written.
-fn report_exported(app: &mut VectorcraftApp, r: Value, folder: &str, open_location: bool) -> Result<Value, String> {
+fn report_exported(app: &mut LiviPenApp, r: Value, folder: &str, open_location: bool) -> Result<Value, String> {
     let count = r["files"].as_array().map_or(0, Vec::len);
     let warned = r["warnings"].as_array().is_some_and(|w| !w.is_empty());
     // Files that came back as bytes: (name, base64).
@@ -1074,7 +1073,7 @@ fn report_exported(app: &mut VectorcraftApp, r: Value, folder: &str, open_locati
         app.status(status);
     } else if let Some(download) = app.services.download.as_mut() {
         for (name, data) in &returned {
-            let bytes = vectorcraft_format::base64_decode(data).ok_or("the export returned unreadable data")?;
+            let bytes = livipen_format::base64_decode(data).ok_or("the export returned unreadable data")?;
             download(name, &bytes)?;
         }
         let what = match returned.as_slice() {
@@ -1091,8 +1090,8 @@ fn report_exported(app: &mut VectorcraftApp, r: Value, folder: &str, open_locati
 
 /// Place a file's bytes (no path, so embedded) centered in the view: `file.place`, read off the UI
 /// thread on the desktop ([`crate::place::run_for_user`]).
-pub fn place_bytes(app: &mut VectorcraftApp, name: &str, bytes: &[u8]) -> Result<(), String> {
-    crate::place::run_for_user(app, &serde_json::json!({ "name": name, "dataBase64": vectorcraft_format::base64_encode(bytes) })).map(|_| ())
+pub fn place_bytes(app: &mut LiviPenApp, name: &str, bytes: &[u8]) -> Result<(), String> {
+    crate::place::run_for_user(app, &serde_json::json!({ "name": name, "dataBase64": livipen_format::base64_encode(bytes) })).map(|_| ())
 }
 
 #[cfg(test)]
@@ -1100,17 +1099,17 @@ mod tests {
     use std::cell::RefCell;
     use std::rc::Rc;
 
+    use livipen_engine::Session;
     use serde_json::json;
-    use vectorcraft_engine::Session;
 
     use super::*;
     use crate::Services;
-    use vectorcraft_doc::NodeKind;
+    use livipen_doc::NodeKind;
 
     type Written = Rc<RefCell<Vec<(String, Vec<u8>)>>>;
 
     /// An app whose writer records what it is given.
-    fn app() -> (VectorcraftApp, Written) {
+    fn app() -> (LiviPenApp, Written) {
         let written = Written::default();
         let w = written.clone();
         let services = Services {
@@ -1120,7 +1119,7 @@ mod tests {
             })),
             ..Default::default()
         };
-        (VectorcraftApp::new(Session::new(), services), written)
+        (LiviPenApp::new(Session::new(), services), written)
     }
 
     /// #861: a file the user opens that can't be opened is reported in a dialog they close, not
@@ -1148,17 +1147,17 @@ mod tests {
     #[test]
     fn a_save_that_cannot_write_is_reported_in_a_dialog_that_stays() {
         let refuse: crate::WriteFn = Box::new(|p: &str, _: &[u8]| Err(format!("{p}: Access is denied. (os error 5)")));
-        let mut app = VectorcraftApp::new(Session::new(), Services { write: Some(refuse), ..Default::default() });
+        let mut app = LiviPenApp::new(Session::new(), Services { write: Some(refuse), ..Default::default() });
         app.run("file.new", json!({"width": 100, "height": 80})).unwrap();
         app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 30, "height": 20})).unwrap();
-        let unsaved = |app: &VectorcraftApp| {
+        let unsaved = |app: &LiviPenApp| {
             let st = app.session.doc().unwrap();
             (st.is_dirty(), st.path.clone())
         };
         for (command, path, message) in [
-            ("file.save", "/docs/Poster.vectorcraft", "Can't save “Poster.vectorcraft”."),
-            ("file.saveAs", "/docs/Poster.vectorcraft", "Can't save “Poster.vectorcraft”."),
-            ("file.saveCopy", "/docs/Copy.vectorcraft", "Can't save “Copy.vectorcraft”."),
+            ("file.save", "/docs/Poster.livipen", "Can't save “Poster.livipen”."),
+            ("file.saveAs", "/docs/Poster.livipen", "Can't save “Poster.livipen”."),
+            ("file.saveCopy", "/docs/Copy.livipen", "Can't save “Copy.livipen”."),
             ("file.exportAs", "/docs/Poster.png", "Can't export “Poster.png”."),
             ("file.export.pdf", "/docs/Poster.pdf", "Can't save “Poster.pdf”."),
         ] {
@@ -1171,14 +1170,14 @@ mod tests {
         }
         // An agent waiting on its request gets the error as its reply, and no dialog.
         app.ui.answering_control = true;
-        assert!(app.run("file.save", json!({"path": "/docs/Poster.vectorcraft"})).is_err());
+        assert!(app.run("file.save", json!({"path": "/docs/Poster.livipen"})).is_err());
         app.ui.answering_control = false;
         assert!(app.ui.dialog.is_none() && app.ui.told.is_empty());
         // Under another dialog (a background save that fails later) the message waits its turn,
         // once, and is drawn when that dialog is closed.
         dialogs::confirm::ask(&mut app, "Delete the swatch?", "", "edit.undo", json!({}));
         for _ in 0..2 {
-            report_write_error(&mut app, false, "/docs/Poster.vectorcraft", "the disk is full");
+            report_write_error(&mut app, false, "/docs/Poster.livipen", "the disk is full");
         }
         assert_eq!((app.ui.dialog.as_ref().map(|d| d.kind.as_str()), app.ui.told.len()), (Some(dialogs::confirm::KIND), 1));
         app.ui.dialog = None;
@@ -1191,7 +1190,7 @@ mod tests {
         let d = app.ui.dialog.as_ref().expect("the message is shown, and stays");
         assert_eq!(
             (d.kind.as_str(), d.str("message").as_str(), d.str("detail").as_str()),
-            (dialogs::confirm::MESSAGE, "Can't save “Poster.vectorcraft”.", "the disk is full")
+            (dialogs::confirm::MESSAGE, "Can't save “Poster.livipen”.", "the disk is full")
         );
         assert!(app.ui.told.is_empty());
     }
@@ -1204,20 +1203,20 @@ mod tests {
         let ok = started.clone();
         let download: crate::DownloadFn =
             Box::new(move |_: &str, _: &[u8]| if *ok.borrow() { Ok(()) } else { Err("the browser refused the download".into()) });
-        let mut app = VectorcraftApp::new(Session::new(), Services { download: Some(download), ..Default::default() });
+        let mut app = LiviPenApp::new(Session::new(), Services { download: Some(download), ..Default::default() });
         app.run("file.new", json!({"width": 100, "height": 80})).unwrap();
         app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 30, "height": 20})).unwrap();
-        let unsaved = |app: &VectorcraftApp| {
+        let unsaved = |app: &LiviPenApp| {
             let st = app.session.doc().unwrap();
             (st.is_dirty(), st.path.clone())
         };
-        let e = save(&mut app, SaveMode::Save, &json!({"path": "Poster.vectorcraft"}), false).unwrap_err();
+        let e = save(&mut app, SaveMode::Save, &json!({"path": "Poster.livipen"}), false).unwrap_err();
         assert!(e.contains("the browser refused the download"), "{e}");
         assert_eq!(unsaved(&app), (true, None));
         // Save Changes › Save: not saved, so not closed.
         let (i, uid) = (app.session.active_index().unwrap(), app.session.doc().unwrap().uid);
         app.ui.dialog = Some(crate::state::Dialog::new(crate::unsaved::KIND, json!({"index": i, "uid": uid, "name": "Poster", "then": "close"})));
-        app.session.doc_mut().unwrap().path = Some("Poster.vectorcraft".into());
+        app.session.doc_mut().unwrap().path = Some("Poster.livipen".into());
         assert!(crate::unsaved::confirm(&mut app).is_err());
         assert_eq!((app.session.documents().len(), app.session.doc().unwrap().is_dirty()), (1, true));
         // Once the download starts, the save counts.
@@ -1226,12 +1225,12 @@ mod tests {
         assert!(!app.session.doc().unwrap().is_dirty());
     }
 
-    fn bytes_of(app: &mut VectorcraftApp, cmd: &str, p: Value) -> Vec<u8> {
+    fn bytes_of(app: &mut LiviPenApp, cmd: &str, p: Value) -> Vec<u8> {
         let v = app.session.execute(cmd, &p).unwrap();
-        vectorcraft_format::base64_decode(v["dataBase64"].as_str().unwrap()).unwrap()
+        livipen_format::base64_decode(v["dataBase64"].as_str().unwrap()).unwrap()
     }
 
-    fn image_size(app: &VectorcraftApp, id: vectorcraft_doc::NodeId) -> (u32, u32) {
+    fn image_size(app: &LiviPenApp, id: livipen_doc::NodeId) -> (u32, u32) {
         match &app.session.doc().unwrap().doc.node(id).unwrap().kind {
             NodeKind::Image(im) => (im.width, im.height),
             other => panic!("{other:?}"),
@@ -1271,13 +1270,13 @@ mod tests {
         let (mut app, written) = app();
         app.session.execute("file.new", &json!({"width": 100, "height": 50, "artboards": 2})).unwrap();
         app.session.execute("artboard.setProps", &json!({"index": 1, "width": 40})).unwrap();
-        app.session.doc_mut().unwrap().path = Some("/tmp/doc.vectorcraft".into());
+        app.session.doc_mut().unwrap().path = Some("/tmp/doc.livipen".into());
         export(&mut app, None, Some("/tmp/b.png".into()), &json!({"artboard": 1, "scale": 2})).unwrap();
-        export(&mut app, None, Some("/tmp/copy.vectorcraft".into()), &Value::Null).unwrap();
+        export(&mut app, None, Some("/tmp/copy.livipen".into()), &Value::Null).unwrap();
         let w = written.borrow();
         assert_eq!(&w[0].1[16..20], 80u32.to_be_bytes(), "artboard 1 (40 pt) at scale 2");
-        assert!(vectorcraft_format::sniff(&w[1].1));
-        assert_eq!(app.session.active().unwrap().path.as_deref(), Some("/tmp/doc.vectorcraft"));
+        assert!(livipen_format::sniff(&w[1].1));
+        assert_eq!(app.session.active().unwrap().path.as_deref(), Some("/tmp/doc.livipen"));
         drop(w);
         assert!(export(&mut app, None, Some("/tmp/x.dwg".into()), &Value::Null).is_err(), "DWG can't be written");
     }
@@ -1322,7 +1321,7 @@ mod tests {
         let (req, _) = crate::control::ControlRequest::new("app.export", json!({"format": "png", "scale": 2}));
         let crate::control::Outcome::Done(r) = crate::control::handle(&mut app, &egui::Context::default(), &req) else { panic!("not done") };
         assert_eq!(r["ok"], true, "{r}");
-        let png = vectorcraft_format::base64_decode(r["result"]["dataBase64"].as_str().unwrap()).unwrap();
+        let png = livipen_format::base64_decode(r["result"]["dataBase64"].as_str().unwrap()).unwrap();
         assert_eq!(&png[16..20], 60u32.to_be_bytes(), "30 pt at scale 2");
         assert!(written.borrow().is_empty(), "no file and no save dialog");
     }

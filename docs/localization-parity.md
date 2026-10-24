@@ -2,7 +2,7 @@
 
 > **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-23 · **Change:** patch (missing translations never fail; `cargo xtask ci` prints the untranslated report)
 
-Per-language status of VectorCraft's interface. How the catalogs work and how to add a language:
+Per-language status of Livi Pen's interface. How the catalogs work and how to add a language:
 [`development.md` › Localisation](development.md#localisation). Part of
 [target-app-parity.md](target-app-parity.md).
 

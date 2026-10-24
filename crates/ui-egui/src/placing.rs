@@ -6,16 +6,16 @@
 //! their thumbnails made, the same way, and so is the file each click or drag of the place cursor
 //! places. Files are read and placed in the order they were started. `file.place` and
 //! `file.place.queue` from MCP and scripts run at once, and so does every place on wasm (no
-//! threads), with `VECTORCRAFT_SYNC_OPEN` set, and in unit tests that do not set
+//! threads), with `LIVIPEN_SYNC_OPEN` set, and in unit tests that do not set
 //! `off_the_ui_thread` ([`available`]).
 
 use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
 
+use livipen_engine::cmd::place::{PlaceRead, QueueRead};
+use livipen_engine::file_access::ScopeHandle;
 use serde_json::{Value, json};
-use vectorcraft_engine::cmd::place::{PlaceRead, QueueRead};
-use vectorcraft_engine::file_access::ScopeHandle;
 
-use crate::VectorcraftApp;
+use crate::LiviPenApp;
 
 /// What was read: one file to place, or the files to load the place cursor with.
 enum Read {
@@ -29,7 +29,7 @@ pub struct Pending {
     pub(crate) name: String,
     /// What the status bar shows ("Placing photo.tif").
     pub label: String,
-    /// The document they are placed in ([`vectorcraft_engine::DocState::uid`]).
+    /// The document they are placed in ([`livipen_engine::DocState::uid`]).
     doc: u64,
     /// Whether the file was dropped on the canvas (its messages say so, as
     /// [`crate::place::drop_files`]'s do).
@@ -56,16 +56,16 @@ pub struct Placing {
 
 /// Does `app` read a file the user places off the UI thread? Where documents open off it
 /// ([`crate::opening::available`]), and in the unit tests that set `off_the_ui_thread`.
-pub fn available(app: &VectorcraftApp) -> bool {
+pub fn available(app: &LiviPenApp) -> bool {
     app.placing.off_the_ui_thread || crate::opening::available()
 }
 
 /// `file.place` with `p` for the active document, its file read and decoded off the UI thread
-/// ([`vectorcraft_engine::Session::prepare_place`], [`vectorcraft_engine::cmd::place::PlaceJob::read`])
+/// ([`livipen_engine::Session::prepare_place`], [`livipen_engine::cmd::place::PlaceJob::read`])
 /// → `{background: true, status}`; `dropped` when it was dropped on the canvas. The params are
 /// checked here first, so a bad one is an error at once. When no thread could start, the file is
 /// placed at once → `file.place`'s reply.
-pub fn start(app: &mut VectorcraftApp, p: &Value, dropped: bool) -> Result<Value, String> {
+pub fn start(app: &mut LiviPenApp, p: &Value, dropped: bool) -> Result<Value, String> {
     let job = app.session.prepare_place(p).map_err(|e| e.to_string())?;
     let name = job.name();
     let started = spawn(app, name.clone(), name, dropped, move || job.read().map(|r| Read::Place(Box::new(r))).map_err(|e| e.to_string()))?;
@@ -81,7 +81,7 @@ pub fn start(app: &mut VectorcraftApp, p: &Value, dropped: bool) -> Result<Value
 
 /// `file.place.queue` with `p` for the active document, its files read and their thumbnails made off
 /// the UI thread → `{background: true, status}`; the place cursor is loaded once they are ready. When no thread could start, the cursor is loaded at once → `file.place.queue`'s reply.
-pub fn start_queue(app: &mut VectorcraftApp, p: &Value) -> Result<Value, String> {
+pub fn start_queue(app: &mut LiviPenApp, p: &Value) -> Result<Value, String> {
     let job = app.session.prepare_place_queue(p).map_err(|e| e.to_string())?;
     let names = job.names().join(", ");
     let started = spawn(app, names.clone(), names, false, move || job.read().map(Read::Queue).map_err(|e| e.to_string()))?;
@@ -101,7 +101,7 @@ pub fn start_queue(app: &mut VectorcraftApp, p: &Value) -> Result<Value, String>
 /// before it (so a batch of large pictures is decoded one at a time, as at once) →
 /// `{background: true, status}`, or `None` when that thread could not start.
 fn spawn(
-    app: &mut VectorcraftApp,
+    app: &mut LiviPenApp,
     name: String,
     shown: String,
     dropped: bool,
@@ -120,7 +120,7 @@ fn spawn(
             reading[1].fetch_max(now, std::sync::atomic::Ordering::SeqCst);
         }
         let r = scope
-            .run(|| vectorcraft_engine::guard::catch_panic(read))
+            .run(|| livipen_engine::guard::catch_panic(read))
             .unwrap_or_else(|msg| Err(format!("internal error: {msg} (please report this bug)")));
         #[cfg(test)]
         reading[0].fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
@@ -134,7 +134,7 @@ fn spawn(
     };
     if let Some(job) = job {
         let (reader, jobs) = channel::<Job>();
-        let started = std::thread::Builder::new().name("vectorcraft-place".into()).spawn(move || {
+        let started = std::thread::Builder::new().name("livipen-place".into()).spawn(move || {
             for job in jobs {
                 job();
             }
@@ -161,7 +161,7 @@ fn spawn(
 /// the document as it was before it began, without the placed art. A tool that is busy while the
 /// button is not held is waiting between its clicks (the Dimension tool after its first point):
 /// the file is placed unless the tool has a preview open (the Flare tool after its center drag).
-pub fn poll(app: &mut VectorcraftApp) {
+pub fn poll(app: &mut LiviPenApp) {
     while app.ui.dialog.is_none()
         && !app.session.in_interaction()
         && !(app.session.tool_busy() && app.session.pointer_held())
@@ -184,7 +184,7 @@ pub fn poll(app: &mut VectorcraftApp) {
 /// Place files read off the UI thread in their document, which becomes the active one again, as
 /// [`crate::place::run`] and [`crate::place::queue`] place files read at once; an error shows in
 /// the status bar as it does then.
-fn finish(app: &mut VectorcraftApp, p: &Pending, r: Result<Read, String>) {
+fn finish(app: &mut LiviPenApp, p: &Pending, r: Result<Read, String>) {
     let Some(i) = app.session.documents().iter().position(|st| st.uid == p.doc) else {
         let name = &p.name;
         if p.dropped {
@@ -212,8 +212,8 @@ fn finish(app: &mut VectorcraftApp, p: &Pending, r: Result<Read, String>) {
 #[cfg(test)]
 mod tests {
     use image::ImageFormat::{Bmp, Png, Tiff};
-    use vectorcraft_doc::{Document, NodeId};
-    use vectorcraft_engine::Session;
+    use livipen_doc::{Document, NodeId};
+    use livipen_engine::Session;
 
     use super::*;
     use crate::Services;
@@ -221,9 +221,9 @@ mod tests {
 
     /// An app reading files from disk, with a 400 × 300 pt document, that reads the files the user
     /// places off the UI thread when `background`.
-    fn app(background: bool) -> VectorcraftApp {
+    fn app(background: bool) -> LiviPenApp {
         let services = Services { read: Some(Box::new(|p: &str| std::fs::read(p).map_err(|e| e.to_string()))), ..Default::default() };
-        let mut app = VectorcraftApp::new(Session::new(), services);
+        let mut app = LiviPenApp::new(Session::new(), services);
         app.placing.off_the_ui_thread = background;
         app.run("file.new", json!({"width": 400, "height": 300})).unwrap();
         app
@@ -263,11 +263,11 @@ mod tests {
         s.execute("file.new", &json!({"width": 100, "height": 50})).unwrap();
         s.execute("shape.rectangle", &json!({"x": 5, "y": 5, "width": 20, "height": 10})).unwrap();
         let v = s.execute("document.serialize", &json!({"format": "pdf"})).unwrap();
-        vectorcraft_format::base64_decode(v["dataBase64"].as_str().unwrap()).unwrap()
+        livipen_format::base64_decode(v["dataBase64"].as_str().unwrap()).unwrap()
     }
 
     /// Poll each frame until every file read for Place has been placed (at most 60 s).
-    fn placed(app: &mut VectorcraftApp) {
+    fn placed(app: &mut LiviPenApp) {
         let t0 = std::time::Instant::now();
         while !app.placing.pending.is_empty() && t0.elapsed().as_secs() < 60 {
             poll(app);
@@ -278,7 +278,7 @@ mod tests {
 
     /// What a place changes: the active document (without the second it was made in), its
     /// selection, its undo steps and the last journal entry.
-    fn state(app: &VectorcraftApp) -> (Document, Vec<NodeId>, usize, Option<(String, Value)>) {
+    fn state(app: &LiviPenApp) -> (Document, Vec<NodeId>, usize, Option<(String, Value)>) {
         let st = app.session.doc().unwrap();
         let mut doc = (*st.doc).clone();
         doc.metadata.created = None;
@@ -286,7 +286,7 @@ mod tests {
     }
 
     /// The names of the active document's top-level objects, bottom first.
-    fn names(app: &VectorcraftApp) -> Vec<String> {
+    fn names(app: &LiviPenApp) -> Vec<String> {
         let st = app.session.doc().unwrap();
         st.doc.layers.iter().flat_map(|l| l.children().into_iter().flatten()).filter_map(|n| n.name.clone()).collect()
     }
@@ -358,7 +358,7 @@ mod tests {
         app.select_tool("selection");
         // A drop and bytes placed without a path.
         let doc = app.session.doc().unwrap().uid;
-        let drop = DropTarget::Place(DropAt { doc, at: vectorcraft_geom::Point::new(100.0, 100.0), embed: false });
+        let drop = DropTarget::Place(DropAt { doc, at: livipen_geom::Point::new(100.0, 100.0), embed: false });
         crate::place::drop_files(&mut app, vec![(drop, ("b.bmp".into(), Some(b.clone()), vec![]))]);
         crate::io::place_bytes(&mut app, "c.png", &picture(Png, 10, 10)).unwrap();
         assert_eq!(app.placing.pending.len(), 2);
@@ -370,10 +370,10 @@ mod tests {
     /// a click and a drag place them when they are read at once.
     #[test]
     fn the_place_cursors_clicks_read_their_files_off_the_ui_thread() {
-        use vectorcraft_tools::{PointerEvent, PointerKind};
+        use livipen_tools::{PointerEvent, PointerKind};
         let paths = [saved("cursor", "a.tif", &picture(Tiff, 60, 40)), saved("cursor", "b.bmp", &picture(Bmp, 60, 40))];
-        let view = vectorcraft_engine::ViewInfo::default();
-        let press = |app: &mut VectorcraftApp, from: (f64, f64), to: (f64, f64)| {
+        let view = livipen_engine::ViewInfo::default();
+        let press = |app: &mut LiviPenApp, from: (f64, f64), to: (f64, f64)| {
             for (kind, (x, y)) in [(PointerKind::Down, from), (PointerKind::Drag, to), (PointerKind::Up, to)] {
                 crate::canvas::dispatch(app, &PointerEvent::new(kind, x, y), view);
             }
@@ -431,8 +431,8 @@ mod tests {
         let small = [saved("order", "small1.png", &picture(Png, 8, 8)), saved("order", "small2.png", &picture(Png, 8, 8))];
         let mut app = app(true);
         let doc = app.session.doc().unwrap().uid;
-        let drop = DropTarget::Place(DropAt { doc, at: vectorcraft_geom::Point::new(200.0, 150.0), embed: false });
-        let files = [&large, &small[0], &small[1]].map(|p| (drop, (vectorcraft_engine::cmd::fileio::file_name(p), Some(p.clone()), vec![])));
+        let drop = DropTarget::Place(DropAt { doc, at: livipen_geom::Point::new(200.0, 150.0), embed: false });
+        let files = [&large, &small[0], &small[1]].map(|p| (drop, (livipen_engine::cmd::fileio::file_name(p), Some(p.clone()), vec![])));
         crate::place::drop_files(&mut app, files.into());
         assert_eq!(app.placing.pending.len(), 3);
         placed(&mut app);
@@ -446,8 +446,8 @@ mod tests {
         let files: Vec<String> = (0..4).map(|i| saved("one-at-a-time", &format!("large{i}.tif"), &picture(Tiff, 1500, 1500))).collect();
         let mut app = app(true);
         let doc = app.session.doc().unwrap().uid;
-        let drop = DropTarget::Place(DropAt { doc, at: vectorcraft_geom::Point::new(200.0, 150.0), embed: false });
-        let dropped = files.iter().map(|p| (drop, (vectorcraft_engine::cmd::fileio::file_name(p), Some(p.clone()), vec![]))).collect();
+        let drop = DropTarget::Place(DropAt { doc, at: livipen_geom::Point::new(200.0, 150.0), embed: false });
+        let dropped = files.iter().map(|p| (drop, (livipen_engine::cmd::fileio::file_name(p), Some(p.clone()), vec![]))).collect();
         crate::place::drop_files(&mut app, dropped);
         placed(&mut app);
         assert_eq!(names(&app).len(), 4);
@@ -472,10 +472,10 @@ mod tests {
             assert_eq!(app.ui.status, at_once.ui.status);
             assert!(state(&app) == before, "{path}: nothing placed");
             // Dropped on the canvas.
-            let name = vectorcraft_engine::cmd::fileio::file_name(&path);
+            let name = livipen_engine::cmd::fileio::file_name(&path);
             for app in [&mut at_once, &mut app] {
                 let doc = app.session.doc().unwrap().uid;
-                let drop = DropTarget::Place(DropAt { doc, at: vectorcraft_geom::Point::new(100.0, 100.0), embed: false });
+                let drop = DropTarget::Place(DropAt { doc, at: livipen_geom::Point::new(100.0, 100.0), embed: false });
                 crate::place::drop_files(app, vec![(drop, (name.clone(), Some(path.clone()), vec![]))]);
                 placed(app);
             }
@@ -523,7 +523,7 @@ mod tests {
         let path = saved("dialog", "photo.tif", &picture(Tiff, 60, 40));
         let mut app = app(true);
         start(&mut app, &json!({"path": path}), false).unwrap();
-        app.ui.dialog = Some(crate::state::Dialog::new(crate::dialogs::save_options::KIND, json!({"path": "/art/First.vectorcraft"})));
+        app.ui.dialog = Some(crate::state::Dialog::new(crate::dialogs::save_options::KIND, json!({"path": "/art/First.livipen"})));
         let t0 = std::time::Instant::now();
         while t0.elapsed().as_millis() < 400 {
             poll(&mut app);
@@ -539,7 +539,7 @@ mod tests {
     /// the drag to end: the drag is not canceled, and the placed art stays.
     #[test]
     fn a_file_read_during_a_drag_waits_for_it_to_end() {
-        use vectorcraft_tools::{PointerEvent, PointerKind};
+        use livipen_tools::{PointerEvent, PointerKind};
         let path = saved("drag", "photo.tif", &picture(Tiff, 60, 40));
         for other_document in [false, true] {
             let mut app = app(true);
@@ -550,7 +550,7 @@ mod tests {
             let square = app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 20, "height": 20})).unwrap()["id"].as_u64().unwrap();
             let dragged = app.session.active_index();
             app.select_tool("selection");
-            let view = vectorcraft_engine::ViewInfo::default();
+            let view = livipen_engine::ViewInfo::default();
             for (kind, x) in [(PointerKind::Down, 20.0), (PointerKind::Drag, 40.0), (PointerKind::Drag, 60.0)] {
                 app.session.pointer(&PointerEvent::new(kind, x, 20.0), view).unwrap();
             }
@@ -576,14 +576,14 @@ mod tests {
     /// to end, which the place cursor keeps to itself: the drag still places its file.
     #[test]
     fn a_file_read_during_a_place_cursor_drag_waits_for_it_to_end() {
-        use vectorcraft_tools::{PointerEvent, PointerKind};
+        use livipen_tools::{PointerEvent, PointerKind};
         let path = saved("cursor-drag", "photo.tif", &picture(Tiff, 60, 40));
         let cursor = [saved("cursor-drag", "a.png", &picture(Png, 8, 8)), saved("cursor-drag", "b.png", &picture(Png, 8, 8))];
         let mut app = app(true);
         start(&mut app, &json!({"path": path, "at": [300, 200]}), false).unwrap();
         app.run("file.new", json!({"width": 400, "height": 300})).unwrap();
         app.run("file.place.queue", json!({"paths": cursor})).unwrap();
-        let view = vectorcraft_engine::ViewInfo::default();
+        let view = livipen_engine::ViewInfo::default();
         for (kind, x) in [(PointerKind::Down, 20.0), (PointerKind::Drag, 60.0)] {
             crate::canvas::dispatch(&mut app, &PointerEvent::new(kind, x, 20.0), view);
         }
@@ -596,7 +596,7 @@ mod tests {
         assert!(app.placing.pending.len() == 1 && app.session.tool_busy(), "the file waits for the drag");
         crate::canvas::dispatch(&mut app, &PointerEvent::new(PointerKind::Up, 60.0, 20.0), view);
         placed(&mut app);
-        let placed_in = |i: usize| -> Vec<(String, Option<vectorcraft_geom::Rect>)> {
+        let placed_in = |i: usize| -> Vec<(String, Option<livipen_geom::Rect>)> {
             let st = &app.session.documents()[i];
             st.doc
                 .layers
@@ -606,7 +606,7 @@ mod tests {
                 .collect()
         };
         assert_eq!(placed_in(0).iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>(), ["photo.tif"]);
-        assert_eq!(placed_in(1), [("a.png".to_string(), Some(vectorcraft_geom::Rect::new(20.0, 20.0, 60.0, 60.0)))], "the drag placed its file");
+        assert_eq!(placed_in(1), [("a.png".to_string(), Some(livipen_geom::Rect::new(20.0, 20.0, 60.0, 60.0)))], "the drag placed its file");
     }
 
     /// A file read while a tool waits between its clicks (the Dimension tool after its first point),
@@ -615,7 +615,7 @@ mod tests {
     /// switches documents.
     #[test]
     fn a_file_read_between_a_tools_clicks_is_placed() {
-        use vectorcraft_tools::{PointerEvent, PointerKind};
+        use livipen_tools::{PointerEvent, PointerKind};
         let path = saved("clicks", "photo.tif", &picture(Tiff, 60, 40));
         for other_document in [false, true] {
             let mut app = app(true);
@@ -624,7 +624,7 @@ mod tests {
                 app.run("file.new", json!({"width": 400, "height": 300})).unwrap();
             }
             app.select_tool("dimension");
-            let view = vectorcraft_engine::ViewInfo::default();
+            let view = livipen_engine::ViewInfo::default();
             for kind in [PointerKind::Down, PointerKind::Up] {
                 crate::canvas::dispatch(&mut app, &PointerEvent::new(kind, 20.0, 20.0), view);
             }

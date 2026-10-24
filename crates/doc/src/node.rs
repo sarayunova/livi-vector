@@ -2,11 +2,11 @@
 
 use std::sync::Arc;
 
+use livipen_color::{BlendMode, Color, Paint};
+use livipen_geom::corners::cut_corners;
+use livipen_geom::shapes::{self, CornerKind};
+use livipen_geom::{Affine, BezPath, FillRule, PathData, Point, Rect, Shape};
 use serde::{Deserialize, Serialize};
-use vectorcraft_color::{BlendMode, Color, Paint};
-use vectorcraft_geom::corners::cut_corners;
-use vectorcraft_geom::shapes::{self, CornerKind};
-use vectorcraft_geom::{Affine, BezPath, FillRule, PathData, Point, Rect, Shape};
 
 use crate::appearance::Appearance;
 use crate::live::{BlendSpec, EnvelopeKind, GradientMesh, Outliner};
@@ -528,7 +528,7 @@ pub enum NodeKind {
     Mesh(GradientMesh),
     /// Live Repeat (radial / grid / mirror) of source art.
     Repeat(RepeatSpec),
-    /// A placed document: an artboard of another VectorCraft file, or a page of a PDF or `.ai`
+    /// A placed document: an artboard of another Livi Pen file, or a page of a PDF or `.ai`
     /// file, linked and locked (see [`crate::placed_document`]).
     PlacedDocument(Box<crate::placed_document::PlacedDocument>),
     /// Object › Intertwine: the objects keep their own stacking order, except where one of them
@@ -1129,11 +1129,11 @@ impl Node {
         }
     }
     /// The path a path's or compound path's own strokes follow (a compound's members' together).
-    pub fn stroke_path(&self) -> Option<vectorcraft_geom::BezPath> {
+    pub fn stroke_path(&self) -> Option<livipen_geom::BezPath> {
         match &self.kind {
             NodeKind::Path { path, .. } => Some(path.to_bezpath()),
             NodeKind::Compound { children, .. } => {
-                let mut bp = vectorcraft_geom::BezPath::new();
+                let mut bp = livipen_geom::BezPath::new();
                 children.iter().filter_map(|c| c.path_data()).for_each(|pd| bp.extend(pd.to_bezpath()));
                 Some(bp)
             }
@@ -1169,15 +1169,15 @@ impl Node {
                 children
                     .iter()
                     .skip(usize::from(self.extras().shaper.is_some()))
-                    .fold(None, |acc, c| vectorcraft_geom::union_opt(acc, c.reach(symbols)))
+                    .fold(None, |acc, c| livipen_geom::union_opt(acc, c.reach(symbols)))
                     .map(|b| b.inflate(o, o))
             }
-            NodeKind::Intertwine { children } => children.iter().fold(None, |acc, c| vectorcraft_geom::union_opt(acc, c.reach(symbols))),
+            NodeKind::Intertwine { children } => children.iter().fold(None, |acc, c| livipen_geom::union_opt(acc, c.reach(symbols))),
             // The frame and each shape the image's own fills and strokes paint, a stroke's grown by
             // the farthest it can reach from its shape.
             NodeKind::Image(_) => crate::hit::image_paint(self).iter().fold(self.geometric(symbols), |acc, (bp, _, item)| {
                 let o = if let crate::AppearanceItem::Stroke(s) = item { s.reach() } else { 0.0 };
-                vectorcraft_geom::union_opt(acc, (!bp.elements().is_empty()).then(|| bp.bounding_box().inflate(o, o)))
+                livipen_geom::union_opt(acc, (!bp.elements().is_empty()).then(|| bp.bounding_box().inflate(o, o)))
             }),
             _ => self.visual(symbols),
         }
@@ -1210,7 +1210,7 @@ impl Node {
     /// The box of [`Node::geometric_bounds`], or of [`Node::geometric_bounds_with`] when `symbols`
     /// is given.
     pub(crate) fn geometric(&self, symbols: Option<&SymbolBoxes>) -> Option<Rect> {
-        let union = |nodes: &[Arc<Node>]| nodes.iter().fold(None, |acc, c| vectorcraft_geom::union_opt(acc, c.geometric(symbols)));
+        let union = |nodes: &[Arc<Node>]| nodes.iter().fold(None, |acc, c| livipen_geom::union_opt(acc, c.geometric(symbols)));
         match &self.kind {
             NodeKind::Path { path, .. } => path.bounds(),
             NodeKind::Group { children, clip: true } | NodeKind::Layer { children, clip: true, .. } => {
@@ -1220,14 +1220,14 @@ impl Node {
                 .editing_children()
                 .iter()
                 .filter(|c| c.visible || !matches!(self.kind, NodeKind::Layer { .. }))
-                .fold(None, |acc, c| vectorcraft_geom::union_opt(acc, c.geometric(symbols))),
+                .fold(None, |acc, c| livipen_geom::union_opt(acc, c.geometric(symbols))),
             NodeKind::Text(t) => self.projected(t.bounds()),
             NodeKind::Image(im) => Some(im.xf.transform_rect_bbox(Rect::new(0.0, 0.0, im.width as f64, im.height as f64))),
             NodeKind::SymbolInstance { symbol, xf } => {
                 let art = symbols.and_then(|s| s.art(symbol)).map_or(SYMBOL_SQUARE, |a| a.geometric);
                 self.projected(Some(xf.transform_rect_bbox(art)))
             }
-            NodeKind::Blend { children, spec } => vectorcraft_geom::union_opt(union(children), spec.spine.as_ref().and_then(|s| s.bounds())),
+            NodeKind::Blend { children, spec } => livipen_geom::union_opt(union(children), spec.spine.as_ref().and_then(|s| s.bounds())),
             NodeKind::Envelope { content, kind, frame, .. } => crate::live::envelope_bounds(content, kind, **frame),
             NodeKind::Mesh(m) => m.bounds(),
             // Each copy is measured where the repeat draws it: `RepeatSpec::transforms` lays the
@@ -1270,16 +1270,16 @@ impl Node {
                     clip.geometric(symbols)
                 }
             }
-            NodeKind::Intertwine { children } => children.iter().fold(None, |acc, c| vectorcraft_geom::union_opt(acc, c.visual(symbols))),
+            NodeKind::Intertwine { children } => children.iter().fold(None, |acc, c| livipen_geom::union_opt(acc, c.visual(symbols))),
             NodeKind::Layer { .. } | NodeKind::Group { .. } => {
                 // The container's own strokes paint around its members.
                 let o = self.appearance.outset();
-                self.editing_children().iter().fold(None, |acc, c| vectorcraft_geom::union_opt(acc, c.visual(symbols))).map(|b| b.inflate(o, o))
+                self.editing_children().iter().fold(None, |acc, c| livipen_geom::union_opt(acc, c.visual(symbols))).map(|b| b.inflate(o, o))
             }
             NodeKind::Blend { children, spec } => {
-                let b = children.iter().fold(None, |acc, c| vectorcraft_geom::union_opt(acc, c.visual(symbols)));
+                let b = children.iter().fold(None, |acc, c| livipen_geom::union_opt(acc, c.visual(symbols)));
                 let o = crate::live::max_outset(children, symbols);
-                vectorcraft_geom::union_opt(b, spec.spine.as_ref().and_then(|s| s.bounds()).map(|r| r.inflate(o, o)))
+                livipen_geom::union_opt(b, spec.spine.as_ref().and_then(|s| s.bounds()).map(|r| r.inflate(o, o)))
             }
             NodeKind::Envelope { content, .. } | NodeKind::Repeat(RepeatSpec { source: content, .. }) => {
                 let o = crate::live::max_outset(content, symbols);
@@ -1479,7 +1479,7 @@ impl Node {
     /// type objects paint their runs (the first run speaks for all) in text space, fitted to the
     /// layout bounds; everything else paints its fill or stroke in the document, fitted to the
     /// geometric bounds. Strokes fit the box grown by half their weight.
-    pub fn proxy_paint(&self, stroke: bool, item: Option<usize>) -> Option<(&vectorcraft_color::Paint, Affine, Rect)> {
+    pub fn proxy_paint(&self, stroke: bool, item: Option<usize>) -> Option<(&livipen_color::Paint, Affine, Rect)> {
         let item = self.appearance.item_of_kind(item, !stroke);
         if item.is_none()
             && let NodeKind::Text(t) = &self.kind
@@ -1498,9 +1498,9 @@ impl Node {
     }
     /// The gradient behind the Fill (or Stroke) proxy and its placement in document coordinates
     /// (see [`Node::proxy_paint`]): what the gradient annotator shows and edits.
-    pub fn proxy_gradient(&self, stroke: bool, item: Option<usize>) -> Option<(&vectorcraft_color::GradientPaint, vectorcraft_color::GradientGeom)> {
+    pub fn proxy_gradient(&self, stroke: bool, item: Option<usize>) -> Option<(&livipen_color::GradientPaint, livipen_color::GradientGeom)> {
         let (paint, to_doc, b) = self.proxy_paint(stroke, item)?;
-        let vectorcraft_color::Paint::Gradient(g) = paint else { return None };
+        let livipen_color::Paint::Gradient(g) = paint else { return None };
         let mut geom = g.resolve(b);
         if to_doc != Affine::IDENTITY {
             geom.transform(to_doc, g.gradient.kind);
@@ -1510,14 +1510,14 @@ impl Node {
     /// The freeform gradient behind the Fill (or Stroke) proxy, its points in document coordinates
     /// (the automatic ones while unplaced), and the length its spreads are fractions of there
     /// (see [`Node::proxy_paint`]): what the Gradient tool's freeform annotator shows and edits.
-    pub fn proxy_freeform(&self, stroke: bool, item: Option<usize>) -> Option<(vectorcraft_color::Freeform, f64)> {
+    pub fn proxy_freeform(&self, stroke: bool, item: Option<usize>) -> Option<(livipen_color::Freeform, f64)> {
         let (paint, to_doc, b) = self.proxy_paint(stroke, item)?;
-        let vectorcraft_color::Paint::Gradient(g) = paint else { return None };
-        if g.gradient.kind != vectorcraft_color::GradientKind::Freeform {
+        let livipen_color::Paint::Gradient(g) = paint else { return None };
+        if g.gradient.kind != livipen_color::GradientKind::Freeform {
             return None;
         }
         let mut f = g.freeform_on(b).into_owned();
-        let mut scale = vectorcraft_color::freeform::spread_scale(b);
+        let mut scale = livipen_color::freeform::spread_scale(b);
         if to_doc != Affine::IDENTITY {
             f.transform(to_doc);
             scale *= to_doc.determinant().abs().sqrt();
@@ -1527,7 +1527,7 @@ impl Node {
 }
 
 /// Unites filled regions (each under its own fill rule) into one path filled non-zero. Booleans
-/// live above this crate (`vectorcraft-pathops`), so callers supply it.
+/// live above this crate (`livipen-pathops`), so callers supply it.
 pub type Uniter<'a> = &'a dyn Fn(&[(BezPath, FillRule)]) -> BezPath;
 
 impl Node {
@@ -1625,7 +1625,7 @@ impl Node {
                 }
                 if let NodeKind::Text(t) = &mut n.kind {
                     for r in &mut t.runs {
-                        *(if fill { &mut r.style.stroke } else { &mut r.style.fill }) = vectorcraft_color::Paint::None;
+                        *(if fill { &mut r.style.stroke } else { &mut r.style.fill }) = livipen_color::Paint::None;
                     }
                 }
                 n
@@ -1814,12 +1814,12 @@ pub struct ObjectAttributes {
     pub data: Vec<(String, String)>,
     /// Window › SVG Interactivity: the JavaScript each event runs, in the panel's order
     /// (`("onclick", "alert(1)")`, one entry per event of [`SVG_EVENTS`]). SVG export writes them as
-    /// the element's event attributes; nothing in VectorCraft runs them.
+    /// the element's event attributes; nothing in Livi Pen runs them.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub events: Vec<(String, String)>,
     /// Attributes in other applications' XML namespaces, in order, kept from SVG import to SVG
     /// export: what another tool notes on an object (a plotter's pen, a cutter's passes) survives
-    /// a round trip through VectorCraft. Nothing in VectorCraft reads them. They are the object's,
+    /// a round trip through Livi Pen. Nothing in Livi Pen reads them. They are the object's,
     /// as `data` is, so copies, duplicates and pastes keep them and a deleted object takes them
     /// with it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -1927,7 +1927,7 @@ impl Node {
     /// stroke opacity below 100%, a blend mode, an opacity mask, effects or transparent gradient
     /// stops. Hidden objects show none.
     pub fn shows_transparency(&self) -> bool {
-        use vectorcraft_color::Paint;
+        use livipen_color::Paint;
         let see_through = |p: &Paint| matches!(p, Paint::Gradient(g) if g.gradient.stops.iter().any(|s| s.opacity < 1.0));
         let effects = |fx: &[crate::Effect]| fx.iter().any(|e| e.visible);
         self.visible
@@ -1956,7 +1956,7 @@ impl Node {
     /// everywhere for objects without them, such as type, whose boxes stand in).
     pub fn contains_fn(&self) -> impl Fn(Point) -> bool + use<> {
         let shapes = self.clip_shapes(None);
-        move |p| shapes.is_empty() || shapes.iter().any(|(bp, rule)| vectorcraft_geom::hit::fill_contains(bp, *rule, p))
+        move |p| shapes.is_empty() || shapes.iter().any(|(bp, rule)| livipen_geom::hit::fill_contains(bp, *rule, p))
     }
 }
 
@@ -1969,10 +1969,10 @@ mod kind_de {
     use std::fmt;
     use std::sync::Arc;
 
+    use livipen_geom::{Affine, FillRule, PathData};
     use serde::de::value::{MapAccessDeserializer, StringDeserializer};
     use serde::de::{self, DeserializeSeed, Deserializer, EnumAccess, IntoDeserializer, MapAccess, VariantAccess, Visitor};
     use serde::{Deserialize, forward_to_deserialize_any};
-    use vectorcraft_geom::{Affine, FillRule, PathData};
 
     use super::{LayerColor, LiveShape, Node, NodeKind, yes};
     use crate::live::{BlendSpec, EnvelopeKind, GradientMesh};
@@ -2502,7 +2502,7 @@ mod tests {
 
     #[test]
     fn unplaced_gradients_pin_only_when_a_refit_would_differ() {
-        use vectorcraft_color::{Gradient, GradientGeom, GradientKind, GradientPaint, Paint};
+        use livipen_color::{Gradient, GradientGeom, GradientKind, GradientPaint, Paint};
         let grad = || Paint::Gradient(Box::new(GradientPaint::new(Gradient::default())));
         let fresh = || Node::path(NodeId(2), shapes::rectangle(Rect::new(0.0, 0.0, 100.0, 50.0)), Appearance::basic(grad(), grad(), 2.0));
         let geoms = |n: &Node| match (n.appearance.fill_paint(), n.appearance.stroke_paint()) {
@@ -2544,8 +2544,8 @@ mod tests {
     fn type_visual_bounds_grow_with_the_character_stroke() {
         use crate::appearance::StrokeAlign;
         use crate::text::{CharStyle, TextObject};
-        let style = CharStyle { stroke: vectorcraft_color::Paint::solid(vectorcraft_color::Color::BLACK), stroke_width: 4.0, ..Default::default() };
-        let mut t = TextObject::point(vectorcraft_geom::Point::new(0.0, 0.0), "Ab", style);
+        let style = CharStyle { stroke: livipen_color::Paint::solid(livipen_color::Color::BLACK), stroke_width: 4.0, ..Default::default() };
+        let mut t = TextObject::point(livipen_geom::Point::new(0.0, 0.0), "Ab", style);
         t.xf = Affine::scale(2.0) * t.xf;
         let node = |t: &TextObject| Node::new(NodeId(1), NodeKind::Text(Box::new(t.clone())));
         let g = node(&t).geometric_bounds().unwrap();
@@ -2553,7 +2553,7 @@ mod tests {
             t.runs[0].style.stroke_align = align;
             assert_eq!(node(&t).visual_bounds(), Some(g.inflate(grow, grow)), "{align:?}");
         }
-        t.runs[0].style.stroke = vectorcraft_color::Paint::None;
+        t.runs[0].style.stroke = livipen_color::Paint::None;
         assert_eq!(node(&t).visual_bounds(), Some(g), "no stroke, no growth");
     }
 

@@ -32,10 +32,10 @@
 
 use std::borrow::Cow;
 
+use livipen_doc::hit::{HitKind, compound_part_at, hit_test};
+use livipen_doc::{AnchorRef, Node, NodeId, NodeKind, Selection};
+use livipen_geom::{Anchor, PathData, Point, Rect, Vec2};
 use serde_json::{Value, json};
-use vectorcraft_doc::hit::{HitKind, compound_part_at, hit_test};
-use vectorcraft_doc::{AnchorRef, Node, NodeId, NodeKind, Selection};
-use vectorcraft_geom::{Anchor, PathData, Point, Rect, Vec2};
 
 use crate::bbox::move_delta;
 use crate::corners::{self, CornerDrag, over_widget};
@@ -197,7 +197,7 @@ impl DirectSelectionTool {
 
 /// Whether `id` may be picked while `scope` is isolated: it is that object, or it sits inside it.
 /// With no isolation, everything may be picked.
-fn in_scope(doc: &vectorcraft_doc::Document, scope: Option<NodeId>, id: NodeId) -> bool {
+fn in_scope(doc: &livipen_doc::Document, scope: Option<NodeId>, id: NodeId) -> bool {
     scope.is_none_or(|scope| doc.ancestry(id).is_some_and(|anc| anc.contains(&scope)))
 }
 
@@ -205,7 +205,7 @@ fn in_scope(doc: &vectorcraft_doc::Document, scope: Option<NodeId>, id: NodeId) 
 /// its contents; art around it is locked and the walk does not reach it. A Shaper Group's original
 /// shapes, its first child, are left out unless they are the isolated object (Construction mode),
 /// as clicks leave them out.
-fn walk_pickable<'a>(doc: &'a vectorcraft_doc::Document, scope: Option<NodeId>, mut f: impl FnMut(&'a Node)) {
+fn walk_pickable<'a>(doc: &'a livipen_doc::Document, scope: Option<NodeId>, mut f: impl FnMut(&'a Node)) {
     fn walk<'a>(n: &'a Node, f: &mut impl FnMut(&'a Node)) {
         f(n);
         for c in n.children().into_iter().flatten().skip(usize::from(n.extras().shaper.is_some())) {
@@ -228,7 +228,7 @@ pub(crate) fn spines(cx: &ToolContext) -> Vec<(NodeId, PathData)> {
     let mut v = vec![];
     walk_pickable(cx.doc, cx.isolation, |n| {
         if let NodeKind::Blend { children, spec } = &n.kind
-            && let Some((path, _)) = vectorcraft_doc::live::blend_spine(children, spec)
+            && let Some((path, _)) = livipen_doc::live::blend_spine(children, spec)
         {
             v.push((n.id, path));
         }
@@ -267,9 +267,9 @@ fn hit_spine_handle(cx: &ToolContext, sel: (NodeId, usize), p: Point, tol: f64) 
 }
 
 /// Anchor `sel.1` of blend `sel.0`'s spine.
-fn spine_anchor(cx: &ToolContext, (id, ai): (NodeId, usize)) -> Option<vectorcraft_geom::Anchor> {
+fn spine_anchor(cx: &ToolContext, (id, ai): (NodeId, usize)) -> Option<livipen_geom::Anchor> {
     match &cx.doc.node(id)?.kind {
-        NodeKind::Blend { children, spec } => vectorcraft_doc::live::blend_spine(children, spec)?.0.subpaths.first()?.anchors.get(ai).copied(),
+        NodeKind::Blend { children, spec } => livipen_doc::live::blend_spine(children, spec)?.0.subpaths.first()?.anchors.get(ai).copied(),
         _ => None,
     }
 }
@@ -738,7 +738,7 @@ impl Tool for DirectSelectionTool {
                 self.snapped = snapped(d, unsnapped, ev.mods.shift, &self.guides);
                 out.push(Action::Preview(
                     "object.transform".into(),
-                    json!({"matrix": matrix_json(vectorcraft_geom::Affine::translate(d)), "copy": ev.mods.alt}),
+                    json!({"matrix": matrix_json(livipen_geom::Affine::translate(d)), "copy": ev.mods.alt}),
                 ));
                 out
             }
@@ -866,7 +866,7 @@ impl Tool for DirectSelectionTool {
                 // With Group Selection's enclosed marquee, the tool selects the objects inside it
                 // (members of groups too), each whole, as a click selects one.
                 if enclosed {
-                    let mut touched = vectorcraft_doc::hit::marquee(cx.doc, r, cx.isolation, true);
+                    let mut touched = livipen_doc::hit::marquee(cx.doc, r, cx.isolation, true);
                     let editable = cx.doc.editable();
                     touched.retain(|id| editable(*id));
                     let ids: Vec<Value> = crate::select::inside(cx, r, touched).into_iter().map(|id| json!(id.0)).collect();
@@ -885,7 +885,7 @@ impl Tool for DirectSelectionTool {
                 });
                 // Objects without anchors to pick (type, images, symbols…) are selected whole when
                 // the marquee touches them, as with the Selection tool (#927).
-                for id in vectorcraft_doc::hit::marquee(cx.doc, r, cx.isolation, true) {
+                for id in livipen_doc::hit::marquee(cx.doc, r, cx.isolation, true) {
                     let whole = cx.doc.node(id).is_some_and(|n| !matches!(n.kind, NodeKind::Path { .. } | NodeKind::Compound { .. }));
                     if whole && !sel.iter().any(|(s, _)| *s == id) {
                         sel.push((id, vec![]));
@@ -1064,13 +1064,13 @@ impl DirectSelectionTool {
 mod tests {
     use super::*;
     use crate::testutil::*;
-    use vectorcraft_doc::Selection;
+    use livipen_doc::Selection;
 
     /// #414: a ruler guide is picked over the art, but an anchor on it is picked first.
     #[test]
     fn direct_and_group_selection_pick_ruler_guides() {
         let (mut d, id) = doc_with_rect();
-        d.guides.push(vectorcraft_doc::Guide::new(true, 100.0));
+        d.guides.push(livipen_doc::Guide::new(true, 100.0));
         let (s, p) = (Selection::default(), paint());
         let c = cx(&d, &s, &p);
         let down = |t: &mut DirectSelectionTool, y: f64| t.pointer(&c, &PointerEvent::new(PointerKind::Down, 100.0, y));
@@ -1092,7 +1092,7 @@ mod tests {
     #[test]
     fn a_cmd_shift_double_click_releases_the_guide_under_the_pointer() {
         let (mut d, id) = doc_with_rect();
-        d.guides.push(vectorcraft_doc::Guide::new(false, 300.0));
+        d.guides.push(livipen_doc::Guide::new(false, 300.0));
         let Some(NodeKind::Path { guide, .. }) = d.node_mut(id).map(|n| &mut n.kind) else { panic!("the rectangle is a path") };
         *guide = true;
         let (s, p) = (Selection::default(), paint());
@@ -1159,15 +1159,15 @@ mod tests {
     }
 
     /// A blend of two 20 pt squares centred on (110, 310) and (210, 310), selected.
-    fn blend_doc() -> (vectorcraft_doc::Document, NodeId, NodeId) {
+    fn blend_doc() -> (livipen_doc::Document, NodeId, NodeId) {
         let (mut d, _) = doc_with_rect();
         let l = d.layers[0].id;
         let key = |id: NodeId, x: f64| {
-            let r = vectorcraft_geom::shapes::rectangle(Rect::new(x, 300.0, x + 20.0, 320.0));
-            std::sync::Arc::new(vectorcraft_doc::Node::path(id, r, vectorcraft_doc::Appearance::default_art()))
+            let r = livipen_geom::shapes::rectangle(Rect::new(x, 300.0, x + 20.0, 320.0));
+            std::sync::Arc::new(livipen_doc::Node::path(id, r, livipen_doc::Appearance::default_art()))
         };
         let (g, k1, k2) = (d.alloc_id(), d.alloc_id(), d.alloc_id());
-        let b = vectorcraft_doc::Node::new(g, NodeKind::Blend { children: vec![key(k1, 100.0), key(k2, 200.0)], spec: Default::default() });
+        let b = livipen_doc::Node::new(g, NodeKind::Blend { children: vec![key(k1, 100.0), key(k2, 200.0)], spec: Default::default() });
         d.insert(Some(l), 1, b).unwrap();
         (d, g, k1)
     }
@@ -1235,8 +1235,8 @@ mod tests {
         let a = drag(&mut DirectSelectionTool::new(false), &straight);
         assert!(!a.iter().any(|x| matches!(x, Action::Preview(c, _) if c == "object.blend.spine.reshapeSegment")), "straight: {a:?}");
         // The spine bent upward: Direct Selection takes it from where it passes.
-        let mut sp = vectorcraft_geom::SubPath::polyline(&[Point::new(110.0, 310.0), Point::new(210.0, 310.0)], false);
-        sp.bend_segment(0, 0.5, vectorcraft_geom::Vec2::new(0.0, 20.0));
+        let mut sp = livipen_geom::SubPath::polyline(&[Point::new(110.0, 310.0), Point::new(210.0, 310.0)], false);
+        sp.bend_segment(0, 0.5, livipen_geom::Vec2::new(0.0, 20.0));
         let Some(NodeKind::Blend { spec, .. }) = d.node_mut(g).map(|n| &mut n.kind) else { panic!("blend") };
         (spec.spine, spec.key_anchors) = (Some(PathData::single(sp)), vec![0, 1]);
         let mut t = DirectSelectionTool::new(false);
@@ -1272,8 +1272,8 @@ mod tests {
         let s = Selection::default();
         let arch = cx(&d, &s, &p);
         let (mut b, g, _) = blend_doc();
-        let mut sp = vectorcraft_geom::SubPath::polyline(&[Point::new(110.0, 310.0), Point::new(210.0, 310.0)], false);
-        sp.bend_segment(0, 0.5, vectorcraft_geom::Vec2::new(0.0, 20.0));
+        let mut sp = livipen_geom::SubPath::polyline(&[Point::new(110.0, 310.0), Point::new(210.0, 310.0)], false);
+        sp.bend_segment(0, 0.5, livipen_geom::Vec2::new(0.0, 20.0));
         let Some(NodeKind::Blend { spec, .. }) = b.node_mut(g).map(|n| &mut n.kind) else { panic!("blend") };
         (spec.spine, spec.key_anchors) = (Some(PathData::single(sp)), vec![0, 1]);
         let mut bs = Selection::default();
@@ -1430,7 +1430,7 @@ mod tests {
     #[test]
     fn marquee_selects_ruler_guides() {
         let (mut d, id) = doc_with_rect();
-        d.guides.push(vectorcraft_doc::Guide::new(false, 80.0));
+        d.guides.push(livipen_doc::Guide::new(false, 80.0));
         let s = Selection::default();
         let p = paint();
         let cx = cx(&d, &s, &p);
@@ -1451,20 +1451,20 @@ mod tests {
     /// a second click on it adds the compound path, like a group around a member.
     #[test]
     fn group_selection_picks_a_path_of_a_compound_path() {
-        let mut d = vectorcraft_doc::Document::new(500.0, 500.0);
+        let mut d = livipen_doc::Document::new(500.0, 500.0);
         let l = d.layers[0].id;
         let (outer, hole, compound) = (d.alloc_id(), d.alloc_id(), d.alloc_id());
         let rect = |id, a: f64, b: f64| {
-            std::sync::Arc::new(vectorcraft_doc::Node::path(id, vectorcraft_geom::shapes::rectangle(Rect::new(a, a, b, b)), Default::default()))
+            std::sync::Arc::new(livipen_doc::Node::path(id, livipen_geom::shapes::rectangle(Rect::new(a, a, b, b)), Default::default()))
         };
-        let mut c = vectorcraft_doc::Node::new(
+        let mut c = livipen_doc::Node::new(
             compound,
-            vectorcraft_doc::NodeKind::Compound {
+            livipen_doc::NodeKind::Compound {
                 children: vec![rect(outer, 0.0, 200.0), rect(hole, 50.0, 150.0)],
-                rule: vectorcraft_geom::FillRule::EvenOdd,
+                rule: livipen_geom::FillRule::EvenOdd,
             },
         );
-        c.appearance = vectorcraft_doc::Appearance::default_art().into();
+        c.appearance = livipen_doc::Appearance::default_art().into();
         d.insert(Some(l), 0, c).unwrap();
         let p = paint();
         let none = Selection::default();
@@ -1481,20 +1481,20 @@ mod tests {
     /// Group Selection Shift-click on a selected compound-path member deselects it on release.
     #[test]
     fn group_selection_shift_click_deselects_a_compound_path_member() {
-        let mut d = vectorcraft_doc::Document::new(500.0, 500.0);
+        let mut d = livipen_doc::Document::new(500.0, 500.0);
         let l = d.layers[0].id;
         let (outer, hole, compound) = (d.alloc_id(), d.alloc_id(), d.alloc_id());
         let rect = |id, a: f64, b: f64| {
-            std::sync::Arc::new(vectorcraft_doc::Node::path(id, vectorcraft_geom::shapes::rectangle(Rect::new(a, a, b, b)), Default::default()))
+            std::sync::Arc::new(livipen_doc::Node::path(id, livipen_geom::shapes::rectangle(Rect::new(a, a, b, b)), Default::default()))
         };
-        let mut c = vectorcraft_doc::Node::new(
+        let mut c = livipen_doc::Node::new(
             compound,
-            vectorcraft_doc::NodeKind::Compound {
+            livipen_doc::NodeKind::Compound {
                 children: vec![rect(outer, 0.0, 200.0), rect(hole, 50.0, 150.0)],
-                rule: vectorcraft_geom::FillRule::EvenOdd,
+                rule: livipen_geom::FillRule::EvenOdd,
             },
         );
-        c.appearance = vectorcraft_doc::Appearance::default_art().into();
+        c.appearance = livipen_doc::Appearance::default_art().into();
         d.insert(Some(l), 0, c).unwrap();
         let p = paint();
         let mut s = Selection::default();
@@ -1509,19 +1509,19 @@ mod tests {
 
     /// A path inside an inner group, a sibling path outside it, and the groups' ids.
     /// The inside path is the rectangle at (100, 100); the outside one at (300, 300).
-    fn nested_group_doc() -> (vectorcraft_doc::Document, NodeId, NodeId, NodeId, NodeId) {
-        let mut d = vectorcraft_doc::Document::new(500.0, 500.0);
+    fn nested_group_doc() -> (livipen_doc::Document, NodeId, NodeId, NodeId, NodeId) {
+        let mut d = livipen_doc::Document::new(500.0, 500.0);
         let l = d.layers[0].id;
         let (inside, outside, inner, outer) = (d.alloc_id(), d.alloc_id(), d.alloc_id(), d.alloc_id());
         let path = |id, x| {
-            std::sync::Arc::new(vectorcraft_doc::Node::path(
+            std::sync::Arc::new(livipen_doc::Node::path(
                 id,
-                vectorcraft_geom::shapes::rectangle(Rect::new(x, x, x + 100.0, x + 100.0)),
-                vectorcraft_doc::Appearance::default_art(),
+                livipen_geom::shapes::rectangle(Rect::new(x, x, x + 100.0, x + 100.0)),
+                livipen_doc::Appearance::default_art(),
             ))
         };
-        let inner_g = vectorcraft_doc::Node::group(inner, vec![path(inside, 100.0)]);
-        let outer_g = vectorcraft_doc::Node::group(outer, vec![std::sync::Arc::new(inner_g), path(outside, 300.0)]);
+        let inner_g = livipen_doc::Node::group(inner, vec![path(inside, 100.0)]);
+        let outer_g = livipen_doc::Node::group(outer, vec![std::sync::Arc::new(inner_g), path(outside, 300.0)]);
         d.insert(Some(l), 0, outer_g).unwrap();
         (d, inside, outside, inner, outer)
     }
@@ -1584,17 +1584,17 @@ mod tests {
     /// plain group, and not the Intertwine group whole.
     #[test]
     fn marquee_selects_the_anchors_of_intertwine_members() {
-        let mut d = vectorcraft_doc::Document::new(500.0, 500.0);
+        let mut d = livipen_doc::Document::new(500.0, 500.0);
         let l = d.layers[0].id;
         let (a, b, g) = (d.alloc_id(), d.alloc_id(), d.alloc_id());
         let path = |id, x| {
-            std::sync::Arc::new(vectorcraft_doc::Node::path(
+            std::sync::Arc::new(livipen_doc::Node::path(
                 id,
-                vectorcraft_geom::shapes::rectangle(Rect::new(x, 100.0, x + 100.0, 200.0)),
-                vectorcraft_doc::Appearance::default_art(),
+                livipen_geom::shapes::rectangle(Rect::new(x, 100.0, x + 100.0, 200.0)),
+                livipen_doc::Appearance::default_art(),
             ))
         };
-        let intertwine = vectorcraft_doc::Node::new(g, vectorcraft_doc::NodeKind::Intertwine { children: vec![path(a, 100.0), path(b, 300.0)] });
+        let intertwine = livipen_doc::Node::new(g, livipen_doc::NodeKind::Intertwine { children: vec![path(a, 100.0), path(b, 300.0)] });
         d.insert(Some(l), 0, intertwine).unwrap();
         let s = Selection::default();
         let p = paint();
@@ -1630,10 +1630,10 @@ mod tests {
     /// it whole, a group's member without its group. Direct Selection does not take E.
     #[test]
     fn e_during_a_group_selection_marquee_selects_the_objects_inside() {
-        use vectorcraft_doc::{Appearance, Node};
+        use livipen_doc::{Appearance, Node};
         let (mut d, id) = doc_with_rect();
         let l = d.layers[0].id;
-        let rect = |id, r| Node::path(id, vectorcraft_geom::shapes::rectangle(r), Appearance::default_art());
+        let rect = |id, r| Node::path(id, livipen_geom::shapes::rectangle(r), Appearance::default_art());
         let (g, a, b) = (d.alloc_id(), d.alloc_id(), d.alloc_id());
         d.insert(Some(l), 1, Node::group(g, vec![])).unwrap();
         d.insert(Some(g), 0, rect(a, Rect::new(100.0, 220.0, 120.0, 240.0))).unwrap();
@@ -1664,14 +1664,14 @@ mod tests {
     }
 
     /// An open path from (100, 300) to (200, 300) arching up through (150, 262.5).
-    fn arch_doc() -> (vectorcraft_doc::Document, NodeId) {
+    fn arch_doc() -> (livipen_doc::Document, NodeId) {
         let (mut d, _) = doc_with_rect();
         let l = d.layers[0].id;
         let id = d.alloc_id();
-        let mut sp = vectorcraft_geom::SubPath::polyline(&[Point::new(100.0, 300.0), Point::new(200.0, 300.0)], false);
+        let mut sp = livipen_geom::SubPath::polyline(&[Point::new(100.0, 300.0), Point::new(200.0, 300.0)], false);
         sp.anchors[0].h_out = Point::new(100.0, 250.0);
         sp.anchors[1].h_in = Point::new(200.0, 250.0);
-        d.insert(Some(l), 1, vectorcraft_doc::Node::path(id, PathData::single(sp), vectorcraft_doc::Appearance::default_art())).unwrap();
+        d.insert(Some(l), 1, livipen_doc::Node::path(id, PathData::single(sp), livipen_doc::Appearance::default_art())).unwrap();
         (d, id)
     }
 
@@ -1779,9 +1779,9 @@ mod tests {
         let (mut d, _) = doc_with_rect();
         let l = d.layers[0].id;
         let id = d.alloc_id();
-        let mut sp = vectorcraft_geom::SubPath::polyline(&[Point::new(100.0, 300.0), Point::new(200.0, 300.0)], false);
+        let mut sp = livipen_geom::SubPath::polyline(&[Point::new(100.0, 300.0), Point::new(200.0, 300.0)], false);
         sp.anchors[0].h_out = Point::new(102.0, 300.0);
-        d.insert(Some(l), 1, vectorcraft_doc::Node::path(id, PathData::single(sp), vectorcraft_doc::Appearance::default_art())).unwrap();
+        d.insert(Some(l), 1, livipen_doc::Node::path(id, PathData::single(sp), livipen_doc::Appearance::default_art())).unwrap();
         let s = anchors_of(id, &[(0, 0)]);
         let p = paint();
         let c = cx(&d, &s, &p);
@@ -1869,12 +1869,12 @@ mod tests {
     }
 
     /// [`doc_with_rect`] (A, 100..200) and a second square B, 300..400: (A, B).
-    fn two_squares() -> (vectorcraft_doc::Document, NodeId, NodeId) {
+    fn two_squares() -> (livipen_doc::Document, NodeId, NodeId) {
         let (mut d, a) = doc_with_rect();
         let l = d.layers[0].id;
         let b = d.alloc_id();
-        let sq = vectorcraft_geom::shapes::rectangle(Rect::new(300.0, 300.0, 400.0, 400.0));
-        d.insert(Some(l), 1, vectorcraft_doc::Node::path(b, sq, vectorcraft_doc::Appearance::default_art())).unwrap();
+        let sq = livipen_geom::shapes::rectangle(Rect::new(300.0, 300.0, 400.0, 400.0));
+        d.insert(Some(l), 1, livipen_doc::Node::path(b, sq, livipen_doc::Appearance::default_art())).unwrap();
         (d, a, b)
     }
 
@@ -1886,8 +1886,8 @@ mod tests {
         let (mut d, a) = doc_with_rect();
         let top = d.add_layer(None);
         let b = d.alloc_id();
-        let sq = vectorcraft_geom::shapes::rectangle(Rect::new(101.0, 100.0, 201.0, 200.0));
-        d.insert(Some(top), 0, vectorcraft_doc::Node::path(b, sq, vectorcraft_doc::Appearance::default_art())).unwrap();
+        let sq = livipen_geom::shapes::rectangle(Rect::new(101.0, 100.0, 201.0, 200.0));
+        d.insert(Some(top), 0, livipen_doc::Node::path(b, sq, livipen_doc::Appearance::default_art())).unwrap();
         let p = paint();
         let pick = |id: NodeId| vec![Action::Exec("select.anchors".into(), json!({"id": id.0, "anchors": [[0, 0]], "mode": "set"}))];
         let s = anchors_of(a, &[(0, 2)]);
@@ -1941,8 +1941,7 @@ mod tests {
         whole.set([b]);
         let c = cx(&d, &whole, &p);
         let mut t = DirectSelectionTool::new(false);
-        let copy =
-            |dx: f64, dy: f64| json!({"matrix": matrix_json(vectorcraft_geom::Affine::translate(vectorcraft_geom::Vec2::new(dx, dy))), "copy": true});
+        let copy = |dx: f64, dy: f64| json!({"matrix": matrix_json(livipen_geom::Affine::translate(livipen_geom::Vec2::new(dx, dy))), "copy": true});
         // B's top-left corner, pressed 1 pt off, onto A's bottom-right one.
         let (v, labels) = drag(&mut t, &c, (301.0, 301.0), (203.0, 199.0), alt);
         assert_eq!((v, labels), (copy(-100.0, -100.0), vec!["anchor".to_string()]));
@@ -1970,7 +1969,7 @@ mod tests {
         let preview = |dx: f64, dy: f64, copy: bool| {
             Action::Preview(
                 "object.transform".into(),
-                json!({"matrix": matrix_json(vectorcraft_geom::Affine::translate(vectorcraft_geom::Vec2::new(dx, dy))), "copy": copy}),
+                json!({"matrix": matrix_json(livipen_geom::Affine::translate(livipen_geom::Vec2::new(dx, dy))), "copy": copy}),
             )
         };
         assert!(t.pointer(&c, &PointerEvent::new(PointerKind::Down, 300.0, 300.0)).is_empty());
@@ -1981,9 +1980,9 @@ mod tests {
         // The tool sees the document as previewed: B moved along, not where the copy leaves it.
         let (mut moved, _, b2) = two_squares();
         let l = moved.layers[0].id;
-        let sq = vectorcraft_geom::shapes::rectangle(Rect::new(250.0, 250.0, 350.0, 350.0));
+        let sq = livipen_geom::shapes::rectangle(Rect::new(250.0, 250.0, 350.0, 350.0));
         moved.remove(b2).unwrap();
-        moved.insert(Some(l), 1, vectorcraft_doc::Node::path(b, sq, vectorcraft_doc::Appearance::default_art())).unwrap();
+        moved.insert(Some(l), 1, livipen_doc::Node::path(b, sq, livipen_doc::Appearance::default_art())).unwrap();
         let c = cx(&moved, &whole, &p);
         // Alt down mid-drag: a copy, whose pressed corner can land on the original's top-right one.
         assert_eq!(t.pointer(&c, &PointerEvent::new(PointerKind::Drag, 402.0, 301.0).with_mods(alt)), vec![preview(100.0, 0.0, true)]);
@@ -2047,8 +2046,8 @@ mod tests {
         let (mut d, _) = doc_with_rect();
         let l = d.layers[0].id;
         let id = d.alloc_id();
-        let line = vectorcraft_geom::shapes::line(Point::new(300.0, 400.0), Point::new(380.0, 340.0));
-        d.insert(Some(l), 1, vectorcraft_doc::Node::path(id, line, vectorcraft_doc::Appearance::default_art())).unwrap();
+        let line = livipen_geom::shapes::line(Point::new(300.0, 400.0), Point::new(380.0, 340.0));
+        d.insert(Some(l), 1, livipen_doc::Node::path(id, line, livipen_doc::Appearance::default_art())).unwrap();
         let p = paint();
         let end = anchors_of(id, &[(0, 1)]);
         let c = cx(&d, &end, &p);
@@ -2086,11 +2085,11 @@ mod tests {
     /// does not snap.
     #[test]
     fn a_move_of_objects_lands_an_edge_on_the_grid() {
-        let mut d = vectorcraft_doc::Document::new(500.0, 500.0);
+        let mut d = livipen_doc::Document::new(500.0, 500.0);
         let l = d.layers[0].id;
         let id = d.alloc_id();
-        let sq = vectorcraft_geom::shapes::rectangle(Rect::new(90.0, 90.0, 135.0, 135.0));
-        d.insert(Some(l), 0, vectorcraft_doc::Node::path(id, sq, vectorcraft_doc::Appearance::default_art())).unwrap();
+        let sq = livipen_geom::shapes::rectangle(Rect::new(90.0, 90.0, 135.0, 135.0));
+        d.insert(Some(l), 0, livipen_doc::Node::path(id, sq, livipen_doc::Appearance::default_art())).unwrap();
         let p = paint();
         let mut s = Selection::default();
         s.set([id]);
@@ -2155,7 +2154,7 @@ mod tests {
         let text_id = d.alloc_id();
         let text_node = Node::new(
             text_id,
-            vectorcraft_doc::NodeKind::Text(Box::new(vectorcraft_doc::TextObject::point(Point::new(50.0, 50.0), "In group", Default::default()))),
+            livipen_doc::NodeKind::Text(Box::new(livipen_doc::TextObject::point(Point::new(50.0, 50.0), "In group", Default::default()))),
         );
         d.insert(Some(d.layers[0].id), 2, Node::group(gid, vec![Arc::new(text_node)])).unwrap();
         let in_group_b = d.node(gid).unwrap().geometric_bounds().unwrap();
@@ -2166,20 +2165,20 @@ mod tests {
 
     #[test]
     fn direct_selection_click_and_drag_member_of_compound_path() {
-        let mut d = vectorcraft_doc::Document::new(500.0, 500.0);
+        let mut d = livipen_doc::Document::new(500.0, 500.0);
         let l = d.layers[0].id;
         let (outer, hole, compound) = (d.alloc_id(), d.alloc_id(), d.alloc_id());
         let rect = |id, a: f64, b: f64| {
-            std::sync::Arc::new(vectorcraft_doc::Node::path(id, vectorcraft_geom::shapes::rectangle(Rect::new(a, a, b, b)), Default::default()))
+            std::sync::Arc::new(livipen_doc::Node::path(id, livipen_geom::shapes::rectangle(Rect::new(a, a, b, b)), Default::default()))
         };
-        let mut c = vectorcraft_doc::Node::new(
+        let mut c = livipen_doc::Node::new(
             compound,
-            vectorcraft_doc::NodeKind::Compound {
+            livipen_doc::NodeKind::Compound {
                 children: vec![rect(outer, 0.0, 200.0), rect(hole, 50.0, 150.0)],
-                rule: vectorcraft_geom::FillRule::EvenOdd,
+                rule: livipen_geom::FillRule::EvenOdd,
             },
         );
-        c.appearance = vectorcraft_doc::Appearance::default_art().into();
+        c.appearance = livipen_doc::Appearance::default_art().into();
         d.insert(Some(l), 0, c).unwrap();
         let p = paint();
         let none = Selection::default();
@@ -2238,7 +2237,7 @@ mod tests {
     /// behind has an anchor directly under the click).
     #[test]
     fn clicking_fill_of_open_path_in_front_never_selects_path_behind() {
-        use vectorcraft_geom::{Anchor, SubPath};
+        use livipen_geom::{Anchor, SubPath};
         let (mut d, _behind) = doc_with_rect();
         // `behind` has an anchor at (100.0, 100.0).
         // Create an open path in front (id `front`), with a fill, covering (100.0, 100.0).
@@ -2248,8 +2247,8 @@ mod tests {
         // (100.0, 100.0) is inside this filled triangle, but `front` has NO anchor at (100.0, 100.0).
         let anchors = vec![Anchor::corner(Point::new(50.0, 50.0)), Anchor::corner(Point::new(150.0, 50.0)), Anchor::corner(Point::new(150.0, 150.0))];
         let open_path = PathData::single(SubPath::new(anchors, false));
-        let ap = vectorcraft_doc::Appearance::default_art(); // has solid white fill
-        d.insert(Some(l), 1, vectorcraft_doc::Node::path(front, open_path, ap)).unwrap();
+        let ap = livipen_doc::Appearance::default_art(); // has solid white fill
+        d.insert(Some(l), 1, livipen_doc::Node::path(front, open_path, ap)).unwrap();
 
         let (s, p) = (Selection::default(), paint());
         let c = cx(&d, &s, &p);
@@ -2267,13 +2266,13 @@ mod tests {
     /// can be hit and dragged without being occluded by the background fill.
     #[test]
     fn selected_path_handle_over_background_rect_is_draggable() {
-        use vectorcraft_geom::{Anchor, SubPath};
-        let mut d = vectorcraft_doc::Document::new(500.0, 500.0);
+        use livipen_geom::{Anchor, SubPath};
+        let mut d = livipen_doc::Document::new(500.0, 500.0);
         let l = d.layers[0].id;
         // Background rectangle covering 0..300 with default white fill
         let bg = d.alloc_id();
-        let bg_rect = vectorcraft_geom::shapes::rectangle(Rect::new(0.0, 0.0, 300.0, 300.0));
-        d.insert(Some(l), 0, vectorcraft_doc::Node::path(bg, bg_rect, vectorcraft_doc::Appearance::default_art())).unwrap();
+        let bg_rect = livipen_geom::shapes::rectangle(Rect::new(0.0, 0.0, 300.0, 300.0));
+        d.insert(Some(l), 0, livipen_doc::Node::path(bg, bg_rect, livipen_doc::Appearance::default_art())).unwrap();
 
         // Selected path with a Bézier curve whose out-handle is at (150, 150)
         let fg = d.alloc_id();
@@ -2281,7 +2280,7 @@ mod tests {
         a0.h_out = Point::new(150.0, 150.0); // handle over the background rect
         let a1 = Anchor::corner(Point::new(200.0, 150.0));
         let curve = PathData::single(SubPath::new(vec![a0, a1], false));
-        d.insert(Some(l), 1, vectorcraft_doc::Node::path(fg, curve, vectorcraft_doc::Appearance::default_art())).unwrap();
+        d.insert(Some(l), 1, livipen_doc::Node::path(fg, curve, livipen_doc::Appearance::default_art())).unwrap();
 
         let mut s = Selection::default();
         s.set([fg]);

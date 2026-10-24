@@ -4,20 +4,20 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use livipen_engine::Session;
+use livipen_geom::Point;
 use serde_json::json;
-use vectorcraft_engine::Session;
-use vectorcraft_geom::Point;
 
-use crate::{Services, VectorcraftApp, dialogs, io, menus, palette, theme};
+use crate::{LiviPenApp, Services, dialogs, io, menus, palette, theme};
 
 /// An app that reads and writes real files.
-fn app() -> VectorcraftApp {
+fn app() -> LiviPenApp {
     let services = Services {
         read: Some(Box::new(|p: &str| std::fs::read(p).map_err(|e| e.to_string()))),
         write: Some(Box::new(|p: &str, b: &[u8]| std::fs::write(p, b).map_err(|e| e.to_string()))),
         ..Default::default()
     };
-    VectorcraftApp::new(Session::new(), services)
+    LiviPenApp::new(Session::new(), services)
 }
 
 /// A fresh folder for one test.
@@ -28,16 +28,16 @@ fn dir(tag: &str) -> std::path::PathBuf {
     d
 }
 
-fn rect(app: &mut VectorcraftApp) {
+fn rect(app: &mut LiviPenApp) {
     app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 30, "height": 20})).unwrap();
 }
 
-fn objects(app: &VectorcraftApp) -> usize {
+fn objects(app: &LiviPenApp) -> usize {
     app.session.doc().unwrap().doc.node_count()
 }
 
 /// One headless frame of the dialog layer with Enter pressed (OK).
-fn press_ok(app: &mut VectorcraftApp) {
+fn press_ok(app: &mut LiviPenApp) {
     let ctx = egui::Context::default();
     theme::install_fonts(&ctx);
     let key = egui::Event::Key { key: egui::Key::Enter, physical_key: None, pressed: true, repeat: false, modifiers: Default::default() };
@@ -48,7 +48,7 @@ fn press_ok(app: &mut VectorcraftApp) {
 #[test]
 fn revert_asks_then_reloads_in_the_same_tab_keeping_every_zoom() {
     let d = dir("revert");
-    let path = d.join("a.vectorcraft").to_string_lossy().to_string();
+    let path = d.join("a.livipen").to_string_lossy().to_string();
     let mut app = app();
     app.run("file.new", json!({"width": 100, "height": 100})).unwrap();
     rect(&mut app);
@@ -84,7 +84,7 @@ fn revert_asks_then_reloads_in_the_same_tab_keeping_every_zoom() {
 #[test]
 fn revert_with_the_artboard_tool_keeps_the_active_artboard() {
     let d = dir("revert-artboard");
-    let path = d.join("a.vectorcraft").to_string_lossy().to_string();
+    let path = d.join("a.livipen").to_string_lossy().to_string();
     let mut app = app();
     app.run("file.new", json!({"width": 100, "height": 100, "artboards": 3})).unwrap();
     app.run("file.saveAs", json!({"path": path})).unwrap();
@@ -102,7 +102,7 @@ fn revert_with_the_artboard_tool_keeps_the_active_artboard() {
 #[test]
 fn a_batch_that_reverts_with_the_artboard_tool_keeps_the_active_artboard() {
     let d = dir("revert-batch");
-    let path = d.join("a.vectorcraft").to_string_lossy().to_string();
+    let path = d.join("a.livipen").to_string_lossy().to_string();
     let mut app = app();
     app.run("file.new", json!({"width": 100, "height": 100, "artboards": 3})).unwrap();
     app.run("file.saveAs", json!({"path": path})).unwrap();
@@ -113,7 +113,7 @@ fn a_batch_that_reverts_with_the_artboard_tool_keeps_the_active_artboard() {
     let revert = json!({"command": "file.revert", "params": {"confirmed": true}});
     app.run("command.batch", json!({"commands": [revert]})).unwrap();
     assert_eq!(objects(&app), saved, "the batch reverted");
-    let active = |app: &VectorcraftApp| (app.view().unwrap().artboard, app.session.tool_options()["selected"].clone());
+    let active = |app: &LiviPenApp| (app.view().unwrap().artboard, app.session.tool_options()["selected"].clone());
     assert_eq!(active(&app), (2, json!([2])));
     app.run("edit.copy", json!({})).unwrap();
     rect(&mut app);
@@ -132,8 +132,8 @@ fn batch_with_the_artboard_tool_keeps_the_active_artboard() {
     std::fs::create_dir_all(&src).unwrap();
     let mut other = app();
     other.run("file.new", json!({"width": 50, "height": 50})).unwrap();
-    other.run("file.saveAs", json!({"path": src.join("b.vectorcraft").to_string_lossy()})).unwrap();
-    let path = d.join("a.vectorcraft").to_string_lossy().to_string();
+    other.run("file.saveAs", json!({"path": src.join("b.livipen").to_string_lossy()})).unwrap();
+    let path = d.join("a.livipen").to_string_lossy().to_string();
     let mut app = app();
     app.run("file.new", json!({"width": 100, "height": 100, "artboards": 3})).unwrap();
     app.run("dataset.new", json!({"name": "a"})).unwrap();
@@ -141,7 +141,7 @@ fn batch_with_the_artboard_tool_keeps_the_active_artboard() {
     let saved = objects(&app);
     app.select_tool("artboard");
     crate::panels::artboards::select(&mut app, 2);
-    let active = |app: &VectorcraftApp| (app.view().unwrap().artboard, app.session.tool_options()["selected"].clone());
+    let active = |app: &LiviPenApp| (app.view().unwrap().artboard, app.session.tool_options()["selected"].clone());
     let unlock = json!([{"command": "object.unlockAll", "params": {}}]);
     let r = app.run("action.batch", json!({"folder": src.to_string_lossy(), "destination": "saveAndClose", "commands": unlock})).unwrap();
     assert_eq!((r["count"].clone(), r["failed"].clone(), app.session.documents().len()), (json!(1), json!(0), 1), "{r}");
@@ -171,9 +171,8 @@ fn recent_files_show_as_many_as_the_preference_keeps() {
     for i in 0..35 {
         io::note_recent(&mut app, &format!("/art/{i}.svg"));
     }
-    let listed = |app: &VectorcraftApp| {
-        menus::menu_entries(app).iter().filter(|e| e.command.as_deref().is_some_and(|c| c.starts_with("file.openRecent"))).count()
-    };
+    let listed =
+        |app: &LiviPenApp| menus::menu_entries(app).iter().filter(|e| e.command.as_deref().is_some_and(|c| c.starts_with("file.openRecent"))).count();
     assert_eq!((io::recent_files(&app).len(), listed(&app)), (20, 20), "the default");
     assert_eq!(menus::dynamic_label(&app, "file.openRecent1", ""), "34.svg");
     app.session.prefs.recent_files_count = 30;
@@ -194,15 +193,15 @@ fn show_in_folder_needs_a_saved_document_and_a_file_manager() {
     let mut app = app();
     app.run("file.new", json!({})).unwrap();
     assert!(!menus::enabled(&app, "file.reveal"));
-    app.session.doc_mut().unwrap().path = Some("/art/a.vectorcraft".into());
+    app.session.doc_mut().unwrap().path = Some("/art/a.livipen".into());
     assert!(!menus::enabled(&app, "file.reveal"), "no file manager (web)");
     app.services.reveal = Some(Box::new(move |p: &str| {
         s.borrow_mut().push(p.to_string());
         Ok(())
     }));
     assert!(menus::enabled(&app, "file.reveal"));
-    assert_eq!(app.run("file.reveal", json!({})).unwrap()["path"], "/art/a.vectorcraft");
-    assert_eq!(*shown.borrow(), ["/art/a.vectorcraft"]);
+    assert_eq!(app.run("file.reveal", json!({})).unwrap()["path"], "/art/a.livipen");
+    assert_eq!(*shown.borrow(), ["/art/a.livipen"]);
 }
 
 #[test]
@@ -221,7 +220,7 @@ fn the_palette_lists_document_color_mode_once() {
 #[test]
 fn a_document_reopens_at_its_saved_view() {
     let d = dir("view");
-    let path = d.join("v.vectorcraft").to_string_lossy().to_string();
+    let path = d.join("v.livipen").to_string_lossy().to_string();
     let mut app = app();
     app.run("file.new", json!({"width": 300, "height": 200})).unwrap();
     {
@@ -244,7 +243,7 @@ fn a_document_reopens_at_its_saved_view() {
 #[test]
 fn replacing_a_file_that_opening_left_things_out_of_asks_first() {
     let d = dir("lossy");
-    let path = d.join("a.vectorcraft").to_string_lossy().to_string();
+    let path = d.join("a.livipen").to_string_lossy().to_string();
     let mut app = app();
     app.run("file.new", json!({"width": 100, "height": 100})).unwrap();
     rect(&mut app);
@@ -293,12 +292,12 @@ fn native_saves_stream_into_the_file() {
     }));
     app.run("file.new", json!({"width": 100, "height": 100})).unwrap();
     rect(&mut app);
-    let native = d.join("a.vectorcraft").to_string_lossy().to_string();
+    let native = d.join("a.livipen").to_string_lossy().to_string();
     let r = app.run("file.saveAs", json!({"path": native, "compress": true})).unwrap();
     let bytes = std::fs::read(&native).unwrap();
     assert_eq!(r["bytes"], bytes.len(), "{r}");
-    assert!(vectorcraft_format::is_compressed(&bytes));
-    assert_eq!(vectorcraft_format::load(&bytes).unwrap().node_count(), objects(&app));
+    assert!(livipen_format::is_compressed(&bytes));
+    assert_eq!(livipen_format::load(&bytes).unwrap().node_count(), objects(&app));
     assert!(!app.session.doc().unwrap().is_dirty(), "the file is the document's own");
     assert_eq!(*streamed.lock().unwrap(), [native]);
     let _ = std::fs::remove_dir_all(&d);

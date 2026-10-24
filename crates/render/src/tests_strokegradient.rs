@@ -1,9 +1,9 @@
 //! Gradients along and across strokes: positions along the path and across the stroke, no seams
 //! between the slices, translucent stops painted once.
 
-use vectorcraft_color::{Gradient, GradientPaint, Paint};
-use vectorcraft_doc::{Appearance, AppearanceItem, Node, StrokeGradientMode, StrokeLayer};
-use vectorcraft_geom::PathData;
+use livipen_color::{Gradient, GradientPaint, Paint};
+use livipen_doc::{Appearance, AppearanceItem, Node, StrokeGradientMode, StrokeLayer};
+use livipen_geom::PathData;
 
 use super::*;
 

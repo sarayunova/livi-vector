@@ -1,15 +1,15 @@
 //! SVG export/import properties: never panics, always re-imports, and plain art survives the round
 //! trip visually (render comparison with a perceptual tolerance).
 
+use livipen_color::{Color, Paint};
+use livipen_doc::Appearance;
+use livipen_geom::{PathData, Rect, shapes};
+use livipen_svg::{ExportOptions, ObjectIds, Styling, export, import};
+use livipen_testkit::fixtures::{self, DocBuilder, art_nodes};
+use livipen_testkit::invariants::check_document;
+use livipen_testkit::raster::{assert_similar, render_artboard};
+use livipen_testkit::strategies::{arb_closed_shape, arb_ops, arb_path_data};
 use proptest::prelude::*;
-use vectorcraft_color::{Color, Paint};
-use vectorcraft_doc::Appearance;
-use vectorcraft_geom::{PathData, Rect, shapes};
-use vectorcraft_svg::{ExportOptions, ObjectIds, Styling, export, import};
-use vectorcraft_testkit::fixtures::{self, DocBuilder, art_nodes};
-use vectorcraft_testkit::invariants::check_document;
-use vectorcraft_testkit::raster::{assert_similar, render_artboard};
-use vectorcraft_testkit::strategies::{arb_closed_shape, arb_ops, arb_path_data};
 
 fn all_options() -> Vec<ExportOptions> {
     let mut v = vec![];

@@ -2,27 +2,27 @@
 //! applies to the selection.
 
 use egui::{Event, PointerButton, Pos2, Rect, pos2, vec2};
+use livipen_doc::{NodeId, NodeKind};
+use livipen_engine::Session;
+use livipen_geom::Point;
 use serde_json::json;
-use vectorcraft_doc::{NodeId, NodeKind};
-use vectorcraft_engine::Session;
-use vectorcraft_geom::Point;
 
 use crate::canvas::Xf;
 use crate::menus::{self, Item};
-use crate::{VectorcraftApp, canvas};
+use crate::{LiviPenApp, canvas};
 
-fn app() -> VectorcraftApp {
-    let mut app = VectorcraftApp::new(Session::new(), Default::default());
+fn app() -> LiviPenApp {
+    let mut app = LiviPenApp::new(Session::new(), Default::default());
     app.run("file.new", json!({"width": 400, "height": 300})).unwrap();
     app
 }
 
-fn rect(app: &mut VectorcraftApp, x: f64, y: f64) -> NodeId {
+fn rect(app: &mut LiviPenApp, x: f64, y: f64) -> NodeId {
     NodeId(app.run("shape.rectangle", json!({"x": x, "y": y, "width": 100, "height": 100})).unwrap()["id"].as_u64().unwrap())
 }
 
 /// One headless frame of the canvas on an 800 × 600 window → the text painted, with its rect.
-fn frame(app: &mut VectorcraftApp, ctx: &egui::Context, events: Vec<Event>) -> Vec<(String, Rect)> {
+fn frame(app: &mut LiviPenApp, ctx: &egui::Context, events: Vec<Event>) -> Vec<(String, Rect)> {
     let raw = egui::RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(800.0, 600.0))), events, ..Default::default() };
     let mut out = ctx.run_ui(raw, |ui| canvas::show(app, ui));
     out.textures_delta.clear();
@@ -43,7 +43,7 @@ fn press(pos: Pos2, button: PointerButton, pressed: bool) -> Event {
 }
 
 /// Click `button` at `pos` (move, press, release, then a frame to show the result).
-fn click(app: &mut VectorcraftApp, ctx: &egui::Context, pos: Pos2, button: PointerButton) -> Vec<(String, Rect)> {
+fn click(app: &mut LiviPenApp, ctx: &egui::Context, pos: Pos2, button: PointerButton) -> Vec<(String, Rect)> {
     frame(app, ctx, vec![Event::PointerMoved(pos)]);
     frame(app, ctx, vec![press(pos, button, true)]);
     frame(app, ctx, vec![press(pos, button, false)]);
@@ -51,7 +51,7 @@ fn click(app: &mut VectorcraftApp, ctx: &egui::Context, pos: Pos2, button: Point
 }
 
 /// Where document point `p` is on screen (after a first frame laid the canvas out).
-fn screen(app: &VectorcraftApp, x: f64, y: f64) -> Pos2 {
+fn screen(app: &LiviPenApp, x: f64, y: f64) -> Pos2 {
     Xf::new(app.canvas_rect.unwrap(), app.view().unwrap()).to_screen(Point::new(x, y))
 }
 
@@ -146,7 +146,7 @@ fn right_click_on_a_locked_object_offers_unlock_by_its_name() {
 /// swaps them — the same effect as Preferences ▸ Units ▸ General (`document.setUnits`).
 #[test]
 fn right_clicking_a_ruler_swaps_the_document_units() {
-    use vectorcraft_doc::Unit;
+    use livipen_doc::Unit;
     let mut app = app();
     app.ui.view.rulers = true;
     let ctx = egui::Context::default();
@@ -220,7 +220,7 @@ fn selected_type_has_apply_bullets() {
     let mut app = app();
     let r = rect(&mut app, 0.0, 0.0);
     app.run("select.set", json!({"ids": [r.0]})).unwrap();
-    let bullets = |app: &VectorcraftApp| menus::context_entries(app).into_iter().find(|e| e.command.as_deref() == Some("type.applyBullets"));
+    let bullets = |app: &LiviPenApp| menus::context_entries(app).into_iter().find(|e| e.command.as_deref() == Some("type.applyBullets"));
     assert!(bullets(&app).is_none(), "a rectangle has no paragraphs");
     let t = NodeId(app.run("text.create", json!({"x": 10, "y": 200, "text": "Item"})).unwrap()["id"].as_u64().unwrap());
     app.run("select.set", json!({"ids": [t.0]})).unwrap();
@@ -240,7 +240,7 @@ fn selected_type_has_apply_numbers() {
     let mut app = app();
     let r = rect(&mut app, 0.0, 0.0);
     app.run("select.set", json!({"ids": [r.0]})).unwrap();
-    let numbers = |app: &VectorcraftApp| menus::context_entries(app).into_iter().position(|e| e.command.as_deref() == Some("type.applyNumbers"));
+    let numbers = |app: &LiviPenApp| menus::context_entries(app).into_iter().position(|e| e.command.as_deref() == Some("type.applyNumbers"));
     assert!(numbers(&app).is_none(), "a rectangle has no paragraphs");
     let t = NodeId(app.run("text.create", json!({"x": 10, "y": 200, "text": "Item"})).unwrap()["id"].as_u64().unwrap());
     app.run("select.set", json!({"ids": [t.0]})).unwrap();
@@ -253,7 +253,7 @@ fn selected_type_has_apply_numbers() {
     assert_eq!(typed.path, ["Type", "Bullets and Numbering"]);
     menus::invoke(&mut app, "type.applyNumbers", json!({}));
     let Some(NodeKind::Text(text)) = app.session.active().unwrap().doc.node(t).map(|n| &n.kind) else { panic!("text") };
-    assert_eq!(text.para_at(0).list.and_then(|l| l.number), Some(vectorcraft_doc::text::NumberStyle::Arabic));
+    assert_eq!(text.para_at(0).list.and_then(|l| l.number), Some(livipen_doc::text::NumberStyle::Arabic));
 }
 
 /// Every label the context menu can show is a menu string, so complete catalogs must translate it.

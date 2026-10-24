@@ -1,10 +1,10 @@
 //! General › Constrain Angle turns the axes the arrow keys, Shift-constrained drags and the
 //! Rectangle, Rounded Rectangle and Ellipse tools work along (G12, #394, first batch).
 
+use livipen_doc::{LiveShape, NodeKind};
+use livipen_geom::{Point, Vec2};
+use livipen_tools::{Mods, PointerEvent, PointerKind};
 use serde_json::{Value, json};
-use vectorcraft_doc::{LiveShape, NodeKind};
-use vectorcraft_geom::{Point, Vec2};
-use vectorcraft_tools::{Mods, PointerEvent, PointerKind};
 
 use super::*;
 

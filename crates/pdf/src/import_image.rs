@@ -9,8 +9,8 @@
 use craft_pdf::syntax::Filter;
 use craft_pdf::syntax::object::stream::ImageDecodeParams;
 use craft_pdf::syntax::object::{Array, Dict, Name, Stream};
-use vectorcraft_doc::ImageBlob;
-use vectorcraft_doc::cmyk::{Inks, MAX_CMYK_PIXELS, jpeg_components};
+use livipen_doc::ImageBlob;
+use livipen_doc::cmyk::{Inks, MAX_CMYK_PIXELS, jpeg_components};
 
 /// A CMYK image read as RGB: why.
 pub(crate) const UNREAD: &str = "CMYK images whose samples couldn't be read in CMYK were imported in RGB";

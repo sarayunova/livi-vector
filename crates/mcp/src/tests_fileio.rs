@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 use crate::{Backend, Headless, Remote, Server, call_tool, tool_definitions};
 
 fn tmp(name: &str) -> String {
-    let dir = std::env::temp_dir().join(format!("vectorcraft-mcp-fileio-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("livipen-mcp-fileio-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     dir.join(name).to_string_lossy().to_string()
 }
@@ -31,7 +31,7 @@ fn two_boards() -> Headless {
 fn headless_opens_pdf_ai_and_templates() {
     let mut h = two_boards();
     let pdf = h.call("engine.execute", json!({"command": "document.serialize", "params": {"format": "pdf"}})).unwrap();
-    let pdf = vectorcraft_format::base64_decode(pdf["dataBase64"].as_str().unwrap()).unwrap();
+    let pdf = livipen_format::base64_decode(pdf["dataBase64"].as_str().unwrap()).unwrap();
     for name in ["x.pdf", "x.ai"] {
         let path = tmp(name);
         std::fs::write(&path, &pdf).unwrap();
@@ -43,7 +43,7 @@ fn headless_opens_pdf_ai_and_templates() {
     std::fs::write(&ait, &pdf).unwrap();
     let r = text(&call_tool(&mut h, "open_file", &json!({"path": ait})));
     assert!(r["title"].as_str().unwrap().starts_with("Untitled-"), "{r}");
-    let saved = h.call("engine.execute", json!({"command": "file.saveAsTemplate", "params": {"path": tmp("t.vectorcraft")}})).unwrap();
+    let saved = h.call("engine.execute", json!({"command": "file.saveAsTemplate", "params": {"path": tmp("t.livipen")}})).unwrap();
     let tpl = tmp("t.vctemplate");
     assert_eq!(saved["path"], tpl.as_str(), "saved with the template's extension: {saved}");
     let r = text(&call_tool(&mut h, "open_file", &json!({"path": tpl})));
@@ -59,26 +59,8 @@ fn export_tool_lists_engine_formats_and_options() {
     assert_eq!(
         props["format"]["enum"],
         json!([
-            "vectorcraft",
-            "svg",
-            "svgz",
-            "pdf",
-            "ai",
-            "png",
-            "jpg",
-            "gif",
-            "webp",
-            "tiff",
-            "bmp",
-            "template",
-            "png8",
-            "txt",
-            "dxf",
-            "eps",
-            "emf",
-            "wmf",
-            "tga",
-            "psd"
+            "livipen", "svg", "svgz", "pdf", "ai", "png", "jpg", "gif", "webp", "tiff", "bmp", "template", "png8", "txt", "dxf", "eps", "emf", "wmf",
+            "tga", "psd"
         ])
     );
     for k in ["artboard", "range", "options"] {
@@ -127,7 +109,7 @@ fn export_is_the_same_call_in_the_app_and_headless() {
     // Headless runs that very call: artboard 1 (40 pt wide) at scale 2.
     let mut h = two_boards();
     let r = text(&call_tool(&mut h, "export", &args));
-    let png = vectorcraft_format::base64_decode(r["dataBase64"].as_str().unwrap()).unwrap();
+    let png = livipen_format::base64_decode(r["dataBase64"].as_str().unwrap()).unwrap();
     assert_eq!(&png[16..20], 80u32.to_be_bytes(), "IHDR width");
     let direct = h.call("engine.execute", seen[0]["params"].clone()).unwrap();
     assert_eq!(direct["dataBase64"], r["dataBase64"]);
@@ -147,21 +129,21 @@ fn the_raster_scale_leaves_other_formats_alone() {
 #[test]
 fn exporting_native_keeps_the_document_path() {
     let mut h = two_boards();
-    let doc = tmp("keep.vectorcraft");
+    let doc = tmp("keep.livipen");
     h.call("app.save", json!({"path": doc})).unwrap();
-    let copy = tmp("copy.vectorcraft");
+    let copy = tmp("copy.livipen");
     let r = text(&call_tool(&mut h, "export", &json!({"path": copy})));
-    assert_eq!(r["format"], "vectorcraft");
+    assert_eq!(r["format"], "livipen");
     assert_eq!(h.session.doc().unwrap().path.as_deref(), Some(doc.as_str()));
     // PDF range through the tool: one page.
     let pdf = text(&call_tool(&mut h, "export", &json!({"format": "pdf", "range": "2"})));
-    let pdf = vectorcraft_format::base64_decode(pdf["dataBase64"].as_str().unwrap()).unwrap();
+    let pdf = livipen_format::base64_decode(pdf["dataBase64"].as_str().unwrap()).unwrap();
     assert_eq!(pdf_pages(&pdf), 1);
     // An .ai export holds every artboard by default and one artboard with a range, and the document keeps its path.
     for (args, pages) in [(json!({"format": "ai"}), 2), (json!({"format": "ai", "range": "2"}), 1)] {
         let ai = text(&call_tool(&mut h, "export", &args));
         assert_eq!(ai["format"], "ai");
-        assert_eq!(pdf_pages(&vectorcraft_format::base64_decode(ai["dataBase64"].as_str().unwrap()).unwrap()), pages, "{args}");
+        assert_eq!(pdf_pages(&livipen_format::base64_decode(ai["dataBase64"].as_str().unwrap()).unwrap()), pages, "{args}");
     }
     assert_eq!(h.session.doc().unwrap().path.as_deref(), Some(doc.as_str()));
 }
@@ -171,32 +153,32 @@ fn saved_with(h: &mut Headless, name: &str, mut args: Value) -> Vec<u8> {
     let path = tmp(name);
     args["path"] = json!(path);
     let r = text(&call_tool(h, "save_file", &args));
-    assert_eq!(r["format"], "vectorcraft", "{r}");
+    assert_eq!(r["format"], "livipen", "{r}");
     std::fs::read(&path).unwrap()
 }
 
 #[test]
 fn save_file_takes_the_native_save_options() {
     let mut h = two_boards();
-    let gz = saved_with(&mut h, "gz.vectorcraft", json!({"compress": true}));
+    let gz = saved_with(&mut h, "gz.livipen", json!({"compress": true}));
     assert_eq!(gz[..2], [0x1f, 0x8b], "gzipped");
-    let plain = saved_with(&mut h, "plain.vectorcraft", json!({"compress": false}));
+    let plain = saved_with(&mut h, "plain.livipen", json!({"compress": false}));
     assert_eq!(plain[0], b'{', "plain JSON");
     let nodes = h.session.doc().unwrap().doc.node_count();
-    for name in ["gz.vectorcraft", "plain.vectorcraft"] {
+    for name in ["gz.livipen", "plain.livipen"] {
         let mut back = Headless::new();
         text(&call_tool(&mut back, "open_file", &json!({"path": tmp(name)})));
         assert_eq!(back.session.doc().unwrap().doc.node_count(), nodes, "{name} reopens");
     }
-    let opt = saved_with(&mut h, "opt.vectorcraft", json!({"options": {"compress": true}}));
+    let opt = saved_with(&mut h, "opt.livipen", json!({"options": {"compress": true}}));
     assert_eq!(opt[..2], [0x1f, 0x8b], "`options` carries them too");
-    let v3: Value = serde_json::from_slice(&saved_with(&mut h, "v3.vectorcraft", json!({"version": 3, "preview": null}))).unwrap();
+    let v3: Value = serde_json::from_slice(&saved_with(&mut h, "v3.livipen", json!({"version": 3, "preview": null}))).unwrap();
     assert_eq!(v3["version"], 3);
-    let shown = saved_with(&mut h, "preview.vectorcraft", json!({"preview": true}));
-    assert!(vectorcraft_format::preview(&shown).is_some(), "a preview");
-    assert!(vectorcraft_format::preview(&plain).is_none(), "off by default");
+    let shown = saved_with(&mut h, "preview.livipen", json!({"preview": true}));
+    assert!(livipen_format::preview(&shown).is_some(), "a preview");
+    assert!(livipen_format::preview(&plain).is_none(), "off by default");
     // Version 2 files can't be compressed: the engine's error comes back.
-    let r = call_tool(&mut h, "save_file", &json!({"path": tmp("v2.vectorcraft"), "version": 2, "compress": true}));
+    let r = call_tool(&mut h, "save_file", &json!({"path": tmp("v2.livipen"), "version": 2, "compress": true}));
     assert!(r.is_error && r.content[0]["text"].as_str().unwrap().contains("can't be compressed"), "{r:?}");
 
     // The options are in the schema; a misspelled one is still refused.
@@ -204,9 +186,9 @@ fn save_file_takes_the_native_save_options() {
     let call = |s: &mut Server, args: Value| {
         s.handle(json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "save_file", "arguments": args}})).unwrap()
     };
-    let r = call(&mut s, json!({"path": tmp("ok.vectorcraft"), "compress": true}));
+    let r = call(&mut s, json!({"path": tmp("ok.livipen"), "compress": true}));
     assert_eq!(r["result"]["isError"], false, "{r}");
-    let r = call(&mut s, json!({"path": tmp("typo.vectorcraft"), "compresss": true}));
+    let r = call(&mut s, json!({"path": tmp("typo.livipen"), "compresss": true}));
     assert_eq!(r["error"]["code"], -32602, "{r}");
     assert!(r["error"]["message"].as_str().unwrap().contains("unknown argument `compresss`"), "{r}");
 }
@@ -234,7 +216,7 @@ fn save_file_warns_about_options_it_does_not_use() {
     assert!(ignored(&w, "version") && !ignored(&w, "compress"), "{w:?}");
 
     // A top-level value that disagrees with `options` is refused, and nothing is written.
-    let path = tmp("both.vectorcraft");
+    let path = tmp("both.livipen");
     let _ = std::fs::remove_file(&path);
     let r = call_tool(&mut h, "save_file", &json!({"path": path, "compress": true, "options": {"compress": false}}));
     let e = r.content[0]["text"].as_str().unwrap();
@@ -242,7 +224,7 @@ fn save_file_warns_about_options_it_does_not_use() {
     assert!(!std::path::Path::new(&path).exists(), "nothing is written");
     // Nothing to say when they agree or when every option applies.
     for mut args in [json!({"compress": true, "options": {"compress": true}}), json!({"compress": false, "version": 3, "preview": true})] {
-        args["path"] = json!(tmp("quiet.vectorcraft"));
+        args["path"] = json!(tmp("quiet.livipen"));
         let r = text(&call_tool(&mut h, "save_file", &args));
         assert_eq!(r["warnings"], json!([]), "{args}: {r}");
     }
@@ -269,7 +251,7 @@ fn save_file_warns_about_options_it_does_not_use() {
 
 #[test]
 fn save_file_is_the_same_call_in_the_app_and_headless() {
-    let path = tmp("app.vectorcraft");
+    let path = tmp("app.livipen");
     let (addr, app) = recording_app();
     let mut remote = Remote::connect(&addr).unwrap();
     let args = json!({"path": path, "compress": true, "version": 3, "preview": null, "options": {"preview": true}});
@@ -291,7 +273,7 @@ fn save_file_waits_for_the_file_in_the_app() {
     impl Backend for Recording {
         fn call(&mut self, method: &str, params: Value) -> Result<Value, String> {
             self.seen.push((method.to_string(), params));
-            if self.ui { Err("Saving a.vectorcraft failed: disk full".into()) } else { Ok(json!({})) }
+            if self.ui { Err("Saving a.livipen failed: disk full".into()) } else { Ok(json!({})) }
         }
         fn has_ui(&self) -> bool {
             self.ui
@@ -302,12 +284,12 @@ fn save_file_waits_for_the_file_in_the_app() {
     }
     for ui in [true, false] {
         let mut b = Recording { ui, seen: vec![] };
-        let r = call_tool(&mut b, "save_file", &json!({"path": "/out/a.vectorcraft"}));
+        let r = call_tool(&mut b, "save_file", &json!({"path": "/out/a.livipen"}));
         assert_eq!(r.is_error, ui, "the app's error is the call's: {r:?}");
         let [(method, params)] = &b.seen[..] else { panic!("one call: {:?}", b.seen) };
         assert_eq!(method, "app.save");
         // The tool sends the path made absolute (on Windows, against the current drive).
-        let path = std::path::absolute("/out/a.vectorcraft").unwrap().to_string_lossy().into_owned();
+        let path = std::path::absolute("/out/a.livipen").unwrap().to_string_lossy().into_owned();
         let mut want = json!({"path": path});
         if ui {
             want["wait"] = json!(true);
@@ -318,7 +300,7 @@ fn save_file_waits_for_the_file_in_the_app() {
 
 fn pdf_pages(pdf: &[u8]) -> usize {
     let mut h = Headless::new();
-    h.call("engine.execute", json!({"command": "document.open", "params": {"name": "p.pdf", "dataBase64": vectorcraft_format::base64_encode(pdf)}}))
+    h.call("engine.execute", json!({"command": "document.open", "params": {"name": "p.pdf", "dataBase64": livipen_format::base64_encode(pdf)}}))
         .unwrap();
     h.session.doc().unwrap().doc.artboards.len()
 }

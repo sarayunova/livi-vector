@@ -1,26 +1,26 @@
 [package]
-name = "vectorcraft-eps"
+name = "livipen-eps"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "VectorCraft Encapsulated PostScript: a hand-written EPS writer (PostScript Level 2 and 3) with TIFF previews"
+description = "Livi Pen Encapsulated PostScript: a hand-written EPS writer (PostScript Level 2 and 3) with TIFF previews"
 
 [lints]
 workspace = true
 
 [dependencies]
-vectorcraft-geom = { workspace = true }
-vectorcraft-color = { workspace = true }
-vectorcraft-doc = { workspace = true }
-vectorcraft-effects = { workspace = true }
-vectorcraft-brush = { workspace = true }
-vectorcraft-text = { workspace = true }
+livipen-geom = { workspace = true }
+livipen-color = { workspace = true }
+livipen-doc = { workspace = true }
+livipen-effects = { workspace = true }
+livipen-brush = { workspace = true }
+livipen-text = { workspace = true }
 # Windows metafile previews, opened when a file's PostScript can't be read.
-vectorcraft-metafile = { workspace = true }
+livipen-metafile = { workspace = true }
 # Non-native art in Illustrator editing data (a placed PDF's content, kept as a PDF).
-vectorcraft-pdf = { workspace = true }
+livipen-pdf = { workspace = true }
 # The TIFF writer (previews) and PackBits, shared with raster export.
-vectorcraft-render = { workspace = true }
+livipen-render = { workspace = true }
 kurbo = { workspace = true }
 image = { workspace = true }
 flate2 = { workspace = true }
@@ -33,7 +33,7 @@ serde_json = { workspace = true }
 memchr = { workspace = true }
 
 [dev-dependencies]
-vectorcraft-testkit = { workspace = true }
-vectorcraft-text = { workspace = true, features = ["test-fonts"] }
+livipen-testkit = { workspace = true }
+livipen-text = { workspace = true, features = ["test-fonts"] }
 # Tests: a Group 4 encoder and the T.4 run codes, to write CCITT test images.
 fax = "0.2"

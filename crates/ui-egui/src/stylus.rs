@@ -19,7 +19,7 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::time::Duration;
 
-use crate::VectorcraftApp;
+use crate::LiviPenApp;
 
 /// The tool the pen's eraser end selects.
 const ERASER: &str = "eraser";
@@ -231,7 +231,7 @@ impl PenEnd {
 /// The canvas calls this once a frame while no press is held and the pointer is in the window, so
 /// a turn during a press takes effect after the release, and a turn over another window takes
 /// effect when the pointer comes in.
-pub(crate) fn sync_eraser_tool(app: &mut VectorcraftApp) -> bool {
+pub(crate) fn sync_eraser_tool(app: &mut LiviPenApp) -> bool {
     let Some(eraser) = app.pen_end.take_flip(app.services.stylus.as_ref()) else { return false };
     let tool = app.session.tool_id();
     if eraser {

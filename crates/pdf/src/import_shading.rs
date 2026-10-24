@@ -11,10 +11,10 @@ use std::sync::Arc;
 use craft_pdf::interpret::pattern::ShadingPattern;
 use craft_pdf::interpret::shading::{ShadingFunction, ShadingType};
 use kurbo::{BezPath, Circle, Point, Rect, Shape, Vec2};
-use vectorcraft_color::{Color, Gradient, GradientGeom, GradientKind, GradientPaint, GradientStop, Paint};
-use vectorcraft_doc::live::{GradientMesh, lerp_color};
-use vectorcraft_doc::{AppearanceItem, Node, NodeKind, OpacityMask};
-use vectorcraft_geom::PathData;
+use livipen_color::{Color, Gradient, GradientGeom, GradientKind, GradientPaint, GradientStop, Paint};
+use livipen_doc::live::{GradientMesh, lerp_color};
+use livipen_doc::{AppearanceItem, Node, NodeKind, OpacityMask};
+use livipen_geom::PathData;
 
 use crate::import::{closed_subpaths, round3};
 use crate::import_color::{Colors, Native};
@@ -527,7 +527,7 @@ pub(crate) fn fold_stop_opacity(content: &Node, mask: &OpacityMask) -> Option<No
 }
 
 /// `node` (filling `bounds`) clipped to `clip`: a clip group.
-pub(crate) fn clipped(clip: Node, node: Node, id: vectorcraft_doc::NodeId) -> Node {
+pub(crate) fn clipped(clip: Node, node: Node, id: livipen_doc::NodeId) -> Node {
     Node::new(id, NodeKind::Group { children: vec![Arc::new(clip), Arc::new(node)], clip: true })
 }
 

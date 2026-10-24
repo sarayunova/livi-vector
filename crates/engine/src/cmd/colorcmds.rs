@@ -7,15 +7,15 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
+use livipen_color::cms::Model;
+use livipen_color::harmony::{Guide, GuideOptions, Harmony, Variation};
+use livipen_color::{Color, Paint, keep_model};
+use livipen_doc::live::lerp_color;
+use livipen_doc::pattern::PatternDef;
+pub(crate) use livipen_doc::recolor::map_paint;
+use livipen_doc::recolor::{ColorVisitor, Reach, map_links, recolor_node};
+use livipen_doc::{Document, ImageBlob, Node, NodeId, NodeKind};
 use serde_json::{Value, json};
-use vectorcraft_color::cms::Model;
-use vectorcraft_color::harmony::{Guide, GuideOptions, Harmony, Variation};
-use vectorcraft_color::{Color, Paint, keep_model};
-use vectorcraft_doc::live::lerp_color;
-use vectorcraft_doc::pattern::PatternDef;
-pub(crate) use vectorcraft_doc::recolor::map_paint;
-use vectorcraft_doc::recolor::{ColorVisitor, Reach, map_links, recolor_node};
-use vectorcraft_doc::{Document, ImageBlob, Node, NodeId, NodeKind};
 
 use super::edit::selected_roots;
 use super::*;

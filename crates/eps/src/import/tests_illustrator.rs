@@ -3,9 +3,9 @@
 
 use std::sync::Arc;
 
-use vectorcraft_doc::clipnest::MAX_NEST;
-use vectorcraft_doc::{LayerColor, LineCap, Node, NodeKind};
-use vectorcraft_geom::Rect;
+use livipen_doc::clipnest::MAX_NEST;
+use livipen_doc::{LayerColor, LineCap, Node, NodeKind};
+use livipen_geom::Rect;
 
 use crate::import::import;
 

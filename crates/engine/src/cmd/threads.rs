@@ -5,8 +5,8 @@
 //! Frames are ordinary text objects holding their slice of the story; the document lists the
 //! thread order. After every edit, threads whose frames changed are re-flowed ([`reflow`]).
 
+use livipen_doc::{Document, Node, NodeId, NodeKind, TextKind, TextObject, TextRun};
 use serde_json::{Value, json};
-use vectorcraft_doc::{Document, Node, NodeId, NodeKind, TextKind, TextObject, TextRun};
 
 use super::edit::selected_roots;
 use super::typecmd::refresh_bounds;
@@ -131,22 +131,22 @@ pub(crate) fn reflow(before: &Document, doc: &mut Document) {
             continue;
         }
         let source_refs: Vec<&TextObject> = sources.iter().collect();
-        let paras = vectorcraft_text::thread::story_paras(&source_refs, &later_wins);
-        vectorcraft_text::edit::normalize(&mut story);
+        let paras = livipen_text::thread::story_paras(&source_refs, &later_wins);
+        livipen_text::edit::normalize(&mut story);
         if live.len() >= 2 {
             // Threaded frames keep their size: Auto Size is off for them (as in Illustrator).
             for id in &live {
-                if text_of(doc, *id).is_some_and(|t| t.area.fit == vectorcraft_doc::AreaFit::AutoHeight)
+                if text_of(doc, *id).is_some_and(|t| t.area.fit == livipen_doc::AreaFit::AutoHeight)
                     && let Some(NodeKind::Text(t)) = doc.node_mut(*id).map(|n| &mut n.kind)
                 {
-                    t.area.fit = vectorcraft_doc::AreaFit::None;
+                    t.area.fit = livipen_doc::AreaFit::None;
                 }
             }
         }
         let optical = if live.len() >= 2 { optical_margin(before, doc, &live) } else { None };
         let frames: Vec<TextObject> = live.iter().filter_map(|id| text_of(doc, *id).cloned()).collect();
         let refs: Vec<&TextObject> = frames.iter().collect();
-        let parts = vectorcraft_text::thread::distribute(vectorcraft_text::FontDb::global(), &refs, &story, &paras);
+        let parts = livipen_text::thread::distribute(livipen_text::FontDb::global(), &refs, &story, &paras);
         for (id, part) in live.iter().zip(parts) {
             if let Some(NodeKind::Text(t)) = doc.node_mut(*id).map(|n| &mut n.kind) {
                 let mut next = (**t).clone();
@@ -240,7 +240,7 @@ pub(crate) fn mark_continued(doc: &mut Document) {
     for thread in doc.text_threads.clone() {
         let live: Vec<NodeId> = thread.into_iter().filter(|id| text_of(doc, *id).is_some()).collect();
         let frames: Vec<&TextObject> = live.iter().filter_map(|id| text_of(doc, *id)).collect();
-        let marks = vectorcraft_text::thread::continued(&frames);
+        let marks = livipen_text::thread::continued(&frames);
         for (id, on) in live.iter().zip(marks) {
             if let Some(NodeKind::Text(t)) = doc.node_mut(*id).map(|n| &mut n.kind)
                 && t.first_para_continues != on
@@ -314,7 +314,7 @@ pub(crate) fn leave_threads(d: &mut Document, was: &[(NodeId, TextObject)]) {
             let on = d.text_threads.iter().find(|t| t.contains(id)).is_some_and(|t| {
                 let live: Vec<(NodeId, &TextObject)> = t.iter().filter_map(|i| Some((*i, text_of(d, *i)?))).collect();
                 let frames: Vec<&TextObject> = live.iter().map(|(_, f)| *f).collect();
-                live.iter().zip(vectorcraft_text::thread::continued(&frames)).any(|((i, _), on)| on && i == id)
+                live.iter().zip(livipen_text::thread::continued(&frames)).any(|((i, _), on)| on && i == id)
             });
             (*id, on)
         })
@@ -345,11 +345,11 @@ fn kept_type(d: &Document, id: NodeId) -> Option<NodeId> {
 
 /// Put the text that frame `from` holds beyond what it shows after the text of frame `to`.
 fn take_overflow(d: &mut Document, to: NodeId, from: &TextObject) {
-    let db = vectorcraft_text::FontDb::global();
+    let db = livipen_text::FontDb::global();
     // `from`'s text split as if it flowed on into a second frame: the second part is what `from`
     // has no room for. Its share is measured as it is laid out, continuing a paragraph or not and
     // with its numbered list paragraphs counted on from the frames before it.
-    let parts = vectorcraft_text::thread::distribute_continuing(
+    let parts = livipen_text::thread::distribute_continuing(
         db,
         &[from, from],
         &from.runs,
@@ -363,21 +363,21 @@ fn take_overflow(d: &mut Document, to: NodeId, from: &TextObject) {
     tail.set_paragraph_styles(rest.paras.clone());
     if let Some(NodeKind::Text(t)) = d.node_mut(to).map(|n| &mut n.kind) {
         let head = (**t).clone();
-        t.runs = vectorcraft_text::thread::story(&[&head, &tail]);
-        t.set_paragraph_styles(vectorcraft_text::thread::story_paras(&[&head, &tail], &[]));
+        t.runs = livipen_text::thread::story(&[&head, &tail]);
+        t.set_paragraph_styles(livipen_text::thread::story_paras(&[&head, &tail], &[]));
         refresh_bounds(t);
     }
 }
 
 /// A closed path converted to an empty area-type frame with `style`.
-fn frame_from_path(n: &Node, style: vectorcraft_doc::CharStyle, system_layout: bool) -> Option<Node> {
+fn frame_from_path(n: &Node, style: livipen_doc::CharStyle, system_layout: bool) -> Option<Node> {
     let NodeKind::Path { path, .. } = &n.kind else { return None };
     if !path.subpaths.first().is_some_and(|s| s.closed) {
         return None;
     }
-    let mut t = TextObject::point(vectorcraft_geom::Point::ZERO, "", style);
+    let mut t = TextObject::point(livipen_geom::Point::ZERO, "", style);
     t.kind = TextKind::Area { frame: path.clone() };
-    t.xf = vectorcraft_geom::Affine::IDENTITY;
+    t.xf = livipen_geom::Affine::IDENTITY;
     t.system_layout = system_layout;
     refresh_bounds(&mut t);
     Some(Node::new(n.id, NodeKind::Text(Box::new(t))))
@@ -453,8 +453,8 @@ fn add(s: &mut Session, p: &Value) -> Result<Value> {
             let [x, y, w, h] = finite_numbers(v)
                 .filter(|[_, _, w, h]| *w > 0.0 && *h > 0.0)
                 .ok_or_else(|| bad(C, "`rect` must be [x, y, width, height] with a positive size"))?;
-            let frame = vectorcraft_geom::shapes::rectangle(vectorcraft_geom::Rect::new(0.0, 0.0, w, h));
-            (NodeId(0), Some(empty_frame(src, style.clone(), TextKind::Area { frame }, vectorcraft_geom::Affine::translate((x, y)))))
+            let frame = livipen_geom::shapes::rectangle(livipen_geom::Rect::new(0.0, 0.0, w, h));
+            (NodeId(0), Some(empty_frame(src, style.clone(), TextKind::Area { frame }, livipen_geom::Affine::translate((x, y)))))
         }
         (None, None, Some(v)) => {
             let [x, y] = finite_numbers(v).ok_or_else(|| bad(C, "`at` must be [x, y]"))?;
@@ -464,7 +464,7 @@ fn add(s: &mut Session, p: &Value) -> Result<Value> {
                 TextKind::Point => return Err(bad(C, "`from` must be area type or type on a path")),
             };
             let b = shape.bounds().map(|b| src.xf.transform_rect_bbox(b)).ok_or_else(|| bad(C, "`from` has an empty frame"))?;
-            let xf = vectorcraft_geom::Affine::translate((x - b.x0, y - b.y0)) * src.xf;
+            let xf = livipen_geom::Affine::translate((x - b.x0, y - b.y0)) * src.xf;
             (NodeId(0), Some(empty_frame(src, style.clone(), src.kind.clone(), xf)))
         }
         _ => return Err(bad(C, "give one of `to`, `rect` or `at`")),
@@ -510,7 +510,7 @@ fn add(s: &mut Session, p: &Value) -> Result<Value> {
 
 /// An empty frame of `kind` (area type or type on a path) placed by `xf`, with the type options of
 /// `src`.
-fn empty_frame(src: &TextObject, style: vectorcraft_doc::CharStyle, kind: TextKind, xf: vectorcraft_geom::Affine) -> TextObject {
+fn empty_frame(src: &TextObject, style: livipen_doc::CharStyle, kind: TextKind, xf: livipen_geom::Affine) -> TextObject {
     let mut t = src.clone();
     t.runs = vec![TextRun { text: String::new(), style, inline: None }];
     t.set_all_paras(src.para_at(0).clone());
@@ -542,7 +542,7 @@ fn release(s: &mut Session, _: &Value) -> Result<Value> {
             for t in &sources {
                 story.extend(t.runs.iter().cloned());
             }
-            let paras = vectorcraft_text::thread::story_paras(&sources.iter().collect::<Vec<_>>(), &[]);
+            let paras = livipen_text::thread::story_paras(&sources.iter().collect::<Vec<_>>(), &[]);
             let style = story.first().map(|r| r.style.clone()).unwrap_or_default();
             let first_para = paras.first().cloned().unwrap_or_default();
             for id in &out {
@@ -566,7 +566,7 @@ fn release(s: &mut Session, _: &Value) -> Result<Value> {
             if let Some(first) = keep.first()
                 && let Some(NodeKind::Text(t)) = d.node_mut(*first).map(|n| &mut n.kind)
             {
-                vectorcraft_text::edit::normalize(&mut story);
+                livipen_text::edit::normalize(&mut story);
                 t.runs = story;
                 t.set_paragraph_styles(paras);
                 // It starts the story, also when it is left alone and so out of a thread.
@@ -683,7 +683,7 @@ mod tests {
     /// around an ellipse, with one style, a style change every 10 words and a style change at every
     /// word: 21 characters typed into the first frame, then 200 moves of a rectangle below the
     /// frames and 200 frames of a drag of it.
-    /// Run with `cargo test --release -p vectorcraft-engine --lib threaded_story_edit_timing -- --ignored --nocapture`.
+    /// Run with `cargo test --release -p livipen-engine --lib threaded_story_edit_timing -- --ignored --nocapture`.
     #[test]
     #[ignore = "manual timing probe; wall-clock performance depends on machine load"]
     fn threaded_story_edit_timing() {
@@ -762,7 +762,7 @@ mod tests {
     }
 
     /// Bounds of area type `id`'s frame on the page.
-    fn frame_box(s: &Session, id: u64) -> vectorcraft_geom::Rect {
+    fn frame_box(s: &Session, id: u64) -> livipen_geom::Rect {
         let Some(t) = text_of(&s.doc().unwrap().doc, NodeId(id)) else { panic!("not area type") };
         let TextKind::Area { frame } = &t.kind else { panic!("not area type") };
         t.xf.transform_rect_bbox(frame.bounds().unwrap())
@@ -783,9 +783,9 @@ mod tests {
         assert!(matches!(s.doc().unwrap().doc.node(NodeId(b)).unwrap().kind, NodeKind::Path { .. }), "undo gives the path back");
 
         let c = new_id(s.execute("text.thread.add", &json!({"from": a, "at": [400, 200]})).unwrap());
-        assert_eq!(frame_box(&s, c), vectorcraft_geom::Rect::new(400.0, 200.0, 550.0, 260.0), "the first frame's size, its top-left at the click");
+        assert_eq!(frame_box(&s, c), livipen_geom::Rect::new(400.0, 200.0, 550.0, 260.0), "the first frame's size, its top-left at the click");
         let d = new_id(s.execute("text.thread.add", &json!({"from": c, "rect": [10, 100, 300, 150]})).unwrap());
-        assert_eq!(frame_box(&s, d), vectorcraft_geom::Rect::new(10.0, 100.0, 310.0, 250.0));
+        assert_eq!(frame_box(&s, d), livipen_geom::Rect::new(10.0, 100.0, 310.0, 250.0));
         assert_eq!(threads(&s), [[a, c, d]], "each new frame comes after the one it was threaded from");
         assert_eq!(format!("{}{}{}", text(&s, a), text(&s, c), text(&s, d)), TEXT.repeat(4));
         assert!(!text(&s, d).is_empty());
@@ -805,7 +805,7 @@ mod tests {
         let (mut s, a, b) = setup();
         let c = new_id(s.execute("text.thread.add", &json!({"from": a, "at": [400, 200], "before": true})).unwrap());
         assert_eq!(threads(&s), [[c, a]]);
-        assert_eq!(frame_box(&s, c), vectorcraft_geom::Rect::new(400.0, 200.0, 550.0, 260.0), "the clicked frame's size at the click");
+        assert_eq!(frame_box(&s, c), livipen_geom::Rect::new(400.0, 200.0, 550.0, 260.0), "the clicked frame's size at the click");
         assert!(TEXT.repeat(4).starts_with(&text(&s, c)) && !text(&s, c).is_empty(), "the story starts in the new frame: {:?}", text(&s, c));
         assert_eq!(format!("{}{}", text(&s, c), text(&s, a)), TEXT.repeat(4));
         assert_eq!(s.doc().unwrap().selection.objects, [NodeId(a), NodeId(c)]);
@@ -1104,7 +1104,7 @@ mod tests {
         let shown = [a, b, c].map(|id| text(&s, id));
         let laid = {
             let Some(t) = text_of(&s.doc().unwrap().doc, NodeId(c)) else { panic!("not area type") };
-            vectorcraft_text::layout(vectorcraft_text::FontDb::global(), t)
+            livipen_text::layout(livipen_text::FontDb::global(), t)
         };
         assert!(laid.overflow, "the last frame has more text than it shows");
         let end = laid.lines.last().map_or(0, |l| l.end);
@@ -1162,7 +1162,7 @@ mod tests {
         let shown = [a, b, c].map(|id| text(&s, id));
         let laid = {
             let Some(t) = text_of(&s.doc().unwrap().doc, NodeId(c)) else { panic!("not area type") };
-            vectorcraft_text::layout(vectorcraft_text::FontDb::global(), t)
+            livipen_text::layout(livipen_text::FontDb::global(), t)
         };
         assert!(laid.overflow, "the last frame has more text than it shows");
         let end = laid.lines.last().map_or(0, |l| l.end);
@@ -1181,7 +1181,7 @@ mod tests {
     fn first_line(s: &Session, id: u64) -> (bool, f64, usize) {
         let Some(t) = text_of(&s.doc().unwrap().doc, NodeId(id)) else { panic!("not area type") };
         let TextKind::Area { frame } = &t.kind else { panic!("not area type") };
-        let lay = vectorcraft_text::layout(vectorcraft_text::FontDb::global(), t);
+        let lay = livipen_text::layout(livipen_text::FontDb::global(), t);
         let l = &lay.lines[0];
         let x = lay.glyphs[l.glyph_start..l.glyph_end].iter().find(|g| g.len > 0).map_or(f64::NAN, |g| g.origin.x);
         let markers = lay.markers.iter().filter(|m| lay.glyphs[m.glyphs.start].line == 0).count();
@@ -1205,14 +1205,14 @@ mod tests {
         s.execute("text.editRange", &json!({"id": a, "start": 0, "end": 0, "insert": "NEW "})).unwrap();
         assert_eq!(first_line(&s, b), (true, 0.0, 0));
         // Saved and opened: a native file re-flows its threads, a restored document keeps its text.
-        for name in ["thread.vectorcraft", "thread.eps"] {
+        for name in ["thread.livipen", "thread.eps"] {
             let bytes = if name.ends_with(".eps") {
                 let r = s.execute("document.exportEps", &json!({})).unwrap();
-                vectorcraft_format::base64_decode(r["dataBase64"].as_str().unwrap()).unwrap()
+                livipen_format::base64_decode(r["dataBase64"].as_str().unwrap()).unwrap()
             } else {
-                vectorcraft_format::save(&s.doc().unwrap().doc, false)
+                livipen_format::save(&s.doc().unwrap().doc, false)
             };
-            let r = s.execute("document.open", &json!({"name": name, "dataBase64": vectorcraft_format::base64_encode(&bytes)})).unwrap();
+            let r = s.execute("document.open", &json!({"name": name, "dataBase64": livipen_format::base64_encode(&bytes)})).unwrap();
             assert_eq!(r["restored"], name.ends_with(".eps"), "{r}");
             assert_eq!(threads(&s), [[a, b]], "{name}");
             assert_eq!((first_line(&s, a), first_line(&s, b)), ((false, 24.0, 0), (true, 0.0, 0)), "{name}");
@@ -1294,7 +1294,7 @@ mod tests {
         assert!(!continues(&s, b));
         {
             let NodeKind::Text(t) = &s.doc().unwrap().doc.node(NodeId(b)).unwrap().kind else { panic!("not text") };
-            let lay = vectorcraft_text::layout(vectorcraft_text::FontDb::global(), t);
+            let lay = livipen_text::layout(livipen_text::FontDb::global(), t);
             let g = lay.glyphs.iter().find(|g| g.len > 0).unwrap();
             let x = (t.xf * g.origin).x - left;
             assert!((x - 24.0).abs() < 1e-6, "{x}");
@@ -1359,7 +1359,7 @@ mod tests {
         let shown = [a, b, c].map(|id| text(&s, id));
         let laid = {
             let Some(t) = text_of(&s.doc().unwrap().doc, NodeId(c)) else { panic!("not area type") };
-            vectorcraft_text::layout(vectorcraft_text::FontDb::global(), t)
+            livipen_text::layout(livipen_text::FontDb::global(), t)
         };
         assert!(laid.overflow, "the last frame has more text than it shows");
         let end = laid.lines.last().map_or(0, |l| l.end);
@@ -1388,11 +1388,11 @@ mod tests {
         assert!(shown[0].ends_with("Item 7\n") && shown[1].starts_with("The quick"), "{shown:?}");
         let Some(t) = text_of(&s.doc().unwrap().doc, NodeId(c)).cloned() else { panic!("not area type") };
         assert_eq!(t.list_count, 7);
-        let laid = vectorcraft_text::layout(vectorcraft_text::FontDb::global(), &t);
+        let laid = livipen_text::layout(livipen_text::FontDb::global(), &t);
         assert_eq!(laid.markers.first().map(|m| m.text.as_str()), Some("VIII."));
         assert!(laid.overflow, "the last frame has more text than it shows");
         let end = laid.lines.last().map_or(0, |l| l.end);
-        let from_one = vectorcraft_text::layout(vectorcraft_text::FontDb::global(), &TextObject { list_count: 0, ..t });
+        let from_one = livipen_text::layout(livipen_text::FontDb::global(), &TextObject { list_count: 0, ..t });
         assert_ne!(from_one.lines.last().map_or(0, |l| l.end), end, "counted from 1, the frame would show other text");
         let hidden = shown[1][end..].trim_start_matches(' ');
         s.execute("select.set", &json!({"ids": [c]})).unwrap();
@@ -1490,7 +1490,7 @@ mod tests {
     #[test]
     fn a_thread_saved_with_differing_frames_opens_with_the_first_frames_setting() {
         let (mut s, a, b) = quoted_thread();
-        for (first, name) in [(true, "old.vectorcraft"), (false, "old.vectorcraft"), (true, "old.eps"), (false, "old.eps")] {
+        for (first, name) in [(true, "old.livipen"), (false, "old.livipen"), (true, "old.eps"), (false, "old.eps")] {
             for (id, on) in [(a, first), (b, !first)] {
                 let doc = std::sync::Arc::make_mut(&mut s.doc_mut().unwrap().doc);
                 let Some(NodeKind::Text(t)) = doc.node_mut(NodeId(id)).map(|n| &mut n.kind) else { panic!("not text") };
@@ -1498,11 +1498,11 @@ mod tests {
             }
             let bytes = if name.ends_with(".eps") {
                 let r = s.execute("document.exportEps", &json!({})).unwrap();
-                vectorcraft_format::base64_decode(r["dataBase64"].as_str().unwrap()).unwrap()
+                livipen_format::base64_decode(r["dataBase64"].as_str().unwrap()).unwrap()
             } else {
-                vectorcraft_format::save(&s.doc().unwrap().doc, false)
+                livipen_format::save(&s.doc().unwrap().doc, false)
             };
-            let r = s.execute("document.open", &json!({"name": name, "dataBase64": vectorcraft_format::base64_encode(&bytes)})).unwrap();
+            let r = s.execute("document.open", &json!({"name": name, "dataBase64": livipen_format::base64_encode(&bytes)})).unwrap();
             assert_eq!(r["restored"], name.ends_with(".eps"), "{r}");
             assert_eq!(threads(&s), [[a, b]], "{name}");
             assert_eq!((optical(&s, a), optical(&s, b)), ((first, first), (first, first)), "{name}, first frame {first}");
@@ -1525,7 +1525,7 @@ mod tests {
         s.execute("text.setFormat", &json!({"ids": [a, b], "list": "number"})).unwrap();
         let numbers = |s: &Session, id: u64| {
             let Some(NodeKind::Text(t)) = s.doc().unwrap().doc.node(NodeId(id)).map(|n| &n.kind) else { panic!("text") };
-            vectorcraft_text::layout(vectorcraft_text::FontDb::global(), t).markers.iter().map(|m| m.text.clone()).collect::<Vec<_>>()
+            livipen_text::layout(livipen_text::FontDb::global(), t).markers.iter().map(|m| m.text.clone()).collect::<Vec<_>>()
         };
         let all = |from: usize| (from..=10).map(|n| format!("{n}.")).collect::<Vec<_>>();
         let first = numbers(&s, a);
@@ -1535,9 +1535,9 @@ mod tests {
         s.execute("text.editRange", &json!({"id": a, "start": 0, "end": 0, "insert": "Item 0\n"})).unwrap();
         assert_eq!([numbers(&s, a), numbers(&s, b)].concat(), [vec!["1.".to_string()], all(2), vec!["11.".to_string()]].concat());
         s.execute("edit.undo", &json!({})).unwrap();
-        let reopened = vectorcraft_format::load(&vectorcraft_format::save(&s.doc().unwrap().doc, false)).unwrap();
+        let reopened = livipen_format::load(&livipen_format::save(&s.doc().unwrap().doc, false)).unwrap();
         let Some(NodeKind::Text(back)) = reopened.node(NodeId(b)).map(|n| &n.kind) else { panic!("text") };
-        let after: Vec<String> = vectorcraft_text::layout(vectorcraft_text::FontDb::global(), back).markers.iter().map(|m| m.text.clone()).collect();
+        let after: Vec<String> = livipen_text::layout(livipen_text::FontDb::global(), back).markers.iter().map(|m| m.text.clone()).collect();
         assert_eq!(after, all(first.len() + 1), "reopened");
         // A pasted copy of the second frame is in no thread.
         s.execute("select.set", &json!({"ids": [b]})).unwrap();
@@ -1656,7 +1656,7 @@ mod tests {
         let copy = s.execute("edit.duplicate", &json!({"dx": 200})).unwrap()["ids"][0].as_u64().unwrap();
         let laid = |s: &Session, id: u64| {
             let Some(t) = text_of(&s.doc().unwrap().doc, NodeId(id)) else { panic!("area type") };
-            let lay = vectorcraft_text::layout(vectorcraft_text::FontDb::global(), t);
+            let lay = livipen_text::layout(livipen_text::FontDb::global(), t);
             (lay.markers[0].text.clone(), lay.lines.len(), lay.bounds, t.cached_bounds.unwrap())
         };
         let (number, lines, _, _) = laid(&s, b);
@@ -1678,7 +1678,7 @@ mod tests {
         assert!(threads(&s).is_empty());
         assert_eq!(text(&s, b), TEXT.repeat(4));
         let Some(t) = text_of(&s.doc().unwrap().doc, NodeId(b)) else { panic!("area type") };
-        let bounds = vectorcraft_text::layout(vectorcraft_text::FontDb::global(), t).bounds;
+        let bounds = livipen_text::layout(livipen_text::FontDb::global(), t).bounds;
         let cached = t.cached_bounds.unwrap();
         assert!((cached.y0 - bounds.y0).abs() < 1e-6 && (cached.y1 - bounds.y1).abs() < 1e-6, "{cached:?} {bounds:?}");
     }

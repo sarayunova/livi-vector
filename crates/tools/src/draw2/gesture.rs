@@ -13,9 +13,9 @@
 //! one command on release. With Shift held, the Blob Brush's points stay on the horizontal or
 //! vertical line through the press point.
 
+use livipen_doc::NodeId;
+use livipen_geom::Point;
 use serde_json::{Value, json};
-use vectorcraft_doc::NodeId;
-use vectorcraft_geom::Point;
 
 use super::{FEEDBACK, points_json, polyline};
 use crate::guides::DrawSnap;
@@ -161,7 +161,7 @@ impl GestureTool {
         if self.straight
             && let Some(&start) = self.points.first()
         {
-            return start + vectorcraft_geom::constrain_angle_from(p - start, 45.0, cx.constrain_angle);
+            return start + livipen_geom::constrain_angle_from(p - start, 45.0, cx.constrain_angle);
         }
         let Some(&start) = self.points.first().filter(|_| self.id == "blobBrush" && m.shift) else {
             self.shift_raw.clear();
@@ -170,13 +170,13 @@ impl GestureTool {
         };
         self.shift_next = Some(p);
         // The press point is on both lines: the points dragged before stay on theirs.
-        if (p - start).hypot() < vectorcraft_geom::EPS {
+        if (p - start).hypot() < livipen_geom::EPS {
             return start;
         }
-        let d = vectorcraft_geom::constrain_angle_from(p - start, 90.0, cx.constrain_angle);
+        let d = livipen_geom::constrain_angle_from(p - start, 90.0, cx.constrain_angle);
         // `line` is the line's angle, measured counterclockwise on screen as the Constrain Angle is measured.
         let line = (-d.y).atan2(d.x).to_degrees();
-        let on_line = |q: Point| start + vectorcraft_geom::constrain_angle_from(q - start, 180.0, line);
+        let on_line = |q: Point| start + livipen_geom::constrain_angle_from(q - start, 180.0, line);
         if self.shift_line != Some(line) {
             for (q, raw) in self.points.iter_mut().skip(1).rev().zip(self.shift_raw.iter().rev()) {
                 *q = on_line(*raw);
@@ -595,7 +595,7 @@ impl Tool for GestureTool {
 mod tests {
     use super::*;
     use crate::testutil::*;
-    use vectorcraft_doc::Selection;
+    use livipen_doc::Selection;
 
     fn drag(t: &mut GestureTool, cx: &ToolContext, pts: &[(f64, f64)], m: Mods) -> Vec<Vec<Action>> {
         let mut v = vec![t.pointer(cx, &PointerEvent::new(PointerKind::Down, pts[0].0, pts[0].1))];
@@ -934,11 +934,11 @@ mod tests {
         let (mut d, _) = doc_with_rect();
         let l = d.layers[0].id;
         let id = d.alloc_id();
-        let line = vectorcraft_geom::PathData::from_bezpath(&vectorcraft_geom::BezPath::from_vec(vec![
-            vectorcraft_geom::PathEl::MoveTo(Point::new(300.0, 300.0)),
-            vectorcraft_geom::PathEl::LineTo(Point::new(400.0, 300.0)),
+        let line = livipen_geom::PathData::from_bezpath(&livipen_geom::BezPath::from_vec(vec![
+            livipen_geom::PathEl::MoveTo(Point::new(300.0, 300.0)),
+            livipen_geom::PathEl::LineTo(Point::new(400.0, 300.0)),
         ]));
-        d.insert(Some(l), 1, vectorcraft_doc::Node::path(id, line, vectorcraft_doc::Appearance::default_art())).unwrap();
+        d.insert(Some(l), 1, livipen_doc::Node::path(id, line, livipen_doc::Appearance::default_art())).unwrap();
         let mut s = Selection::default();
         s.set([id]);
         let p = paint();
@@ -1089,11 +1089,11 @@ mod tests {
         }
         let l = d.layers[0].id;
         let id = d.alloc_id();
-        let line = vectorcraft_geom::PathData::from_bezpath(&vectorcraft_geom::BezPath::from_vec(vec![
-            vectorcraft_geom::PathEl::MoveTo(Point::new(300.0, 300.0)),
-            vectorcraft_geom::PathEl::LineTo(Point::new(400.0, 300.0)),
+        let line = livipen_geom::PathData::from_bezpath(&livipen_geom::BezPath::from_vec(vec![
+            livipen_geom::PathEl::MoveTo(Point::new(300.0, 300.0)),
+            livipen_geom::PathEl::LineTo(Point::new(400.0, 300.0)),
         ]));
-        d.insert(Some(l), 1, vectorcraft_doc::Node::path(id, line, vectorcraft_doc::Appearance::default_art())).unwrap();
+        d.insert(Some(l), 1, livipen_doc::Node::path(id, line, livipen_doc::Appearance::default_art())).unwrap();
         let mut s = Selection::default();
         s.set([id]);
         let mut cx = cx(&d, &s, &p);
@@ -1129,11 +1129,11 @@ mod tests {
         let (mut d, _) = doc_with_rect();
         let l = d.layers[0].id;
         let id = d.alloc_id();
-        let line = vectorcraft_geom::PathData::from_bezpath(&vectorcraft_geom::BezPath::from_vec(vec![
-            vectorcraft_geom::PathEl::MoveTo(Point::new(300.0, 300.0)),
-            vectorcraft_geom::PathEl::LineTo(Point::new(400.0, 300.0)),
+        let line = livipen_geom::PathData::from_bezpath(&livipen_geom::BezPath::from_vec(vec![
+            livipen_geom::PathEl::MoveTo(Point::new(300.0, 300.0)),
+            livipen_geom::PathEl::LineTo(Point::new(400.0, 300.0)),
         ]));
-        d.insert(Some(l), 1, vectorcraft_doc::Node::path(id, line, vectorcraft_doc::Appearance::default_art())).unwrap();
+        d.insert(Some(l), 1, livipen_doc::Node::path(id, line, livipen_doc::Appearance::default_art())).unwrap();
         let mut s = Selection::default();
         s.set([id]);
         let p = paint();

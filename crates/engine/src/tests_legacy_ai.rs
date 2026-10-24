@@ -28,7 +28,7 @@ fn three_boards() -> Session {
     s
 }
 
-fn layer_names(d: &vectorcraft_doc::Document) -> Vec<String> {
+fn layer_names(d: &livipen_doc::Document) -> Vec<String> {
     d.layers.iter().map(|l| l.name.clone().unwrap_or_default()).collect()
 }
 
@@ -59,7 +59,7 @@ fn each_artboard_is_a_file_that_opens_with_its_layers() {
     s.execute("document.open", &json!({"path": files[0]})).unwrap();
     let d = &s.doc().unwrap().doc;
     let group = &d.layers[0].children().unwrap()[0];
-    assert!(matches!(&group.kind, vectorcraft_doc::NodeKind::Group { children, clip: false } if children.len() == 2), "{:?}", group.kind);
+    assert!(matches!(&group.kind, livipen_doc::NodeKind::Group { children, clip: false } if children.len() == 2), "{:?}", group.kind);
     assert!(d.layers[1].children().unwrap().is_empty());
 }
 
@@ -85,7 +85,7 @@ fn the_default_stays_pdf_compatible_and_other_versions_are_refused() {
     let mut s = three_boards();
     for p in [json!({"format": "ai"}), json!({"format": "ai", "aiVersion": "pdf"})] {
         let r = s.execute("file.saveCopy", &p).unwrap();
-        let bytes = vectorcraft_format::base64_decode(r["dataBase64"].as_str().unwrap()).unwrap();
+        let bytes = livipen_format::base64_decode(r["dataBase64"].as_str().unwrap()).unwrap();
         assert!(bytes.starts_with(b"%PDF"), "{p}");
     }
     assert!(s.execute("file.saveCopy", &json!({"format": "ai", "aiVersion": "3"})).is_err());
@@ -107,7 +107,7 @@ fn transparency_and_appearances_are_written_as_plain_art_and_type_as_text() {
     let w = warnings(&r);
     assert!(w.iter().any(|w| w.contains("written opaque")), "{w:?}");
     assert!(!w.iter().any(|w| w.contains("type") && w.contains("outlines")), "{w:?}");
-    let bytes = vectorcraft_format::base64_decode(r["dataBase64"].as_str().unwrap()).unwrap();
+    let bytes = livipen_format::base64_decode(r["dataBase64"].as_str().unwrap()).unwrap();
     let text = String::from_utf8(bytes.clone()).unwrap();
     // No transparency operators: version 7 has none.
     assert!(!text.contains(" Xy\n"), "{text}");
@@ -121,10 +121,10 @@ fn transparency_and_appearances_are_written_as_plain_art_and_type_as_text() {
 }
 
 /// The plain text of every text object of `d`.
-fn texts(d: &vectorcraft_doc::Document) -> Vec<String> {
+fn texts(d: &livipen_doc::Document) -> Vec<String> {
     let mut out = vec![];
     d.walk(|n| {
-        if let vectorcraft_doc::NodeKind::Text(t) = &n.kind {
+        if let livipen_doc::NodeKind::Text(t) = &n.kind {
             out.push(t.plain_text());
         }
     });
@@ -141,7 +141,7 @@ fn type_can_be_written_as_outlines() {
     let d = &s.doc().unwrap().doc;
     assert!(texts(d).is_empty());
     let mut paths = 0;
-    d.walk(|n| paths += usize::from(matches!(n.kind, vectorcraft_doc::NodeKind::Compound { .. } | vectorcraft_doc::NodeKind::Path { .. })));
+    d.walk(|n| paths += usize::from(matches!(n.kind, livipen_doc::NodeKind::Compound { .. } | livipen_doc::NodeKind::Path { .. })));
     assert!(paths > 0);
     assert!(s.execute("file.saveCopy", &json!({"format": "ai", "aiVersion": "7", "outlineText": "yes"})).is_err());
     let v = s.execute("file.formatOptions", &json!({"format": "ai"})).unwrap();
@@ -209,10 +209,10 @@ const RADIAL_AND_LINEAR: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" widt
 #[test]
 fn a_radial_gradient_is_written_with_its_highlight() {
     let mut s = Session::new();
-    let svg = vectorcraft_format::base64_encode(RADIAL_AND_LINEAR.as_bytes());
+    let svg = livipen_format::base64_encode(RADIAL_AND_LINEAR.as_bytes());
     s.execute("document.open", &json!({"name": "t_radial.svg", "dataBase64": svg})).unwrap();
     let r = s.execute("file.saveCopy", &json!({"format": "ai", "aiVersion": "7"})).unwrap();
-    let text = String::from_utf8(vectorcraft_format::base64_decode(r["dataBase64"].as_str().unwrap()).unwrap()).unwrap();
+    let text = String::from_utf8(livipen_format::base64_decode(r["dataBase64"].as_str().unwrap()).unwrap()).unwrap();
     assert!(text.contains("\n%AI5_BeginGradient: (Gradient)\n(Gradient) 1 2 Bd\n[\n"), "{text}");
     assert!(text.contains("\nBb\n0 0 0 0 Bh\n1 (Gradient) 100 100 0 80 1 0 0 1 0 0 Bg\nf\n0 BB\n"), "{text}");
     assert!(text.contains("\nBb\n1 (Gradient 2) 220 180 0 160 1 0 0 1 0 0 Bg\nf\n0 BB\n"), "{text}");
@@ -221,17 +221,17 @@ fn a_radial_gradient_is_written_with_its_highlight() {
     let d = &s.doc().unwrap().doc;
     let mut found = vec![];
     d.walk(|n| {
-        if let vectorcraft_color::Paint::Gradient(g) = n.appearance.fill_paint() {
+        if let livipen_color::Paint::Gradient(g) = n.appearance.fill_paint() {
             found.push(*g);
         }
     });
     let [radial, linear] = found.as_slice() else { panic!("{found:#?}") };
-    let navy = vectorcraft_color::Color::rgb(27.0 / 255.0, 42.0 / 255.0, 107.0 / 255.0);
-    use vectorcraft_color::GradientKind::{Linear, Radial};
+    let navy = livipen_color::Color::rgb(27.0 / 255.0, 42.0 / 255.0, 107.0 / 255.0);
+    use livipen_color::GradientKind::{Linear, Radial};
     for (g, kind, start, end) in [(radial, Radial, (100.0, 100.0), (180.0, 100.0)), (linear, Linear, (220.0, 20.0), (380.0, 20.0))] {
         assert_eq!(g.gradient.kind, kind);
         let [a, b] = g.gradient.stops.as_slice() else { panic!("{g:?}") };
-        assert_eq!((a.offset, b.offset, a.color), (0.0, 1.0, vectorcraft_color::Color::rgb(1.0, 1.0, 1.0)), "{g:?}");
+        assert_eq!((a.offset, b.offset, a.color), (0.0, 1.0, livipen_color::Color::rgb(1.0, 1.0, 1.0)), "{g:?}");
         assert!(b.color.to_rgb().iter().zip(navy.to_rgb()).all(|(x, y)| (x - y).abs() < 1e-3), "{g:?}");
         let geom = g.geom.unwrap();
         assert!((geom.start.x - start.0).abs() < 1e-3 && (geom.start.y - start.1).abs() < 1e-3, "{geom:?}");
@@ -251,10 +251,10 @@ fn a_radial_gradient_is_written_with_its_highlight() {
 #[test]
 fn a_radial_gradient_lists_its_stops_from_the_first() {
     let mut s = Session::new();
-    let svg = vectorcraft_format::base64_encode(RADIAL_AND_LINEAR.as_bytes());
+    let svg = livipen_format::base64_encode(RADIAL_AND_LINEAR.as_bytes());
     s.execute("document.open", &json!({"name": "t_radial.svg", "dataBase64": svg})).unwrap();
     let r = s.execute("file.saveCopy", &json!({"format": "ai", "aiVersion": "7"})).unwrap();
-    let text = String::from_utf8(vectorcraft_format::base64_decode(r["dataBase64"].as_str().unwrap()).unwrap()).unwrap();
+    let text = String::from_utf8(livipen_format::base64_decode(r["dataBase64"].as_str().unwrap()).unwrap()).unwrap();
     // Each `%_Bs` line of a definition as its RGB color (0-255) and ramp point.
     let listed = |head: &str| -> Vec<([u8; 3], String)> {
         let def = text.split(head).nth(1).and_then(|t| t.split("BD\n").next()).unwrap_or_else(|| panic!("no {head:?} in\n{text}"));
@@ -287,25 +287,25 @@ fn shadow_over_square() -> Session {
     s.execute("shape.rectangle", &json!({"x": 10, "y": 10, "width": 40, "height": 40})).unwrap();
     s.execute("paint.setFill", &json!({"color": "#ff0000"})).unwrap();
     for (bytes, at) in [(png(40, 40, [0, 0, 0, 128]), [50, 30]), (png(20, 20, [0, 0, 255, 255]), [150, 50])] {
-        let p = json!({"name": "i.png", "dataBase64": vectorcraft_format::base64_encode(&bytes), "at": at});
+        let p = json!({"name": "i.png", "dataBase64": livipen_format::base64_encode(&bytes), "at": at});
         s.execute("file.place", &p).unwrap();
     }
     s
 }
 
 /// The colour `d` shows at (`x`, `y`), over white.
-fn colour_at(d: &vectorcraft_doc::Document, x: f64, y: f64) -> [u8; 3] {
-    let px = vectorcraft_render::Renderer::new().render_region(d, vectorcraft_geom::Rect::new(x, y, x + 1.0, y + 1.0), 1.0, true).pixels;
+fn colour_at(d: &livipen_doc::Document, x: f64, y: f64) -> [u8; 3] {
+    let px = livipen_render::Renderer::new().render_region(d, livipen_geom::Rect::new(x, y, x + 1.0, y + 1.0), 1.0, true).pixels;
     [px[0], px[1], px[2]]
 }
 
-fn images(d: &vectorcraft_doc::Document) -> (usize, usize) {
+fn images(d: &livipen_doc::Document) -> (usize, usize) {
     let (mut all, mut clipped) = (0, 0);
     d.walk(|n| {
-        if let vectorcraft_doc::NodeKind::Group { children, clip: true } = &n.kind {
-            clipped += children.iter().filter(|c| matches!(c.kind, vectorcraft_doc::NodeKind::Image(_))).count();
+        if let livipen_doc::NodeKind::Group { children, clip: true } = &n.kind {
+            clipped += children.iter().filter(|c| matches!(c.kind, livipen_doc::NodeKind::Image(_))).count();
         }
-        all += usize::from(matches!(n.kind, vectorcraft_doc::NodeKind::Image(_)));
+        all += usize::from(matches!(n.kind, livipen_doc::NodeKind::Image(_)));
     });
     (all, clipped)
 }
@@ -322,7 +322,7 @@ fn a_transparent_image_is_flattened_with_the_art_under_it_which_stays() {
     // The square is still there, under an opaque image clipped to the transparent one's place;
     // the opaque image stays as it was.
     let mut squares = 0;
-    d.walk(|n| squares += usize::from(matches!(n.kind, vectorcraft_doc::NodeKind::Path { clipping: false, .. })));
+    d.walk(|n| squares += usize::from(matches!(n.kind, livipen_doc::NodeKind::Path { clipping: false, .. })));
     assert_eq!(squares, 1);
     assert_eq!(images(d), (2, 1));
     let after = [colour_at(d, 40.0, 30.0), colour_at(d, 60.0, 30.0)];
@@ -451,9 +451,9 @@ const SEE_THROUGH_IMAGE: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" xmln
 fn a_clipped_or_flattened_image_is_written_as_the_specification_shows_it() {
     for (svg, layer, paths) in [(CLIPPED_IMAGE, "clipped-image", 2), (SEE_THROUGH_IMAGE, "alpha-image", 1)] {
         let mut s = Session::new();
-        s.execute("document.open", &json!({"name": "t.svg", "dataBase64": vectorcraft_format::base64_encode(svg.as_bytes())})).unwrap();
+        s.execute("document.open", &json!({"name": "t.svg", "dataBase64": livipen_format::base64_encode(svg.as_bytes())})).unwrap();
         let r = s.execute("file.saveCopy", &json!({"format": "ai", "aiVersion": "7"})).unwrap();
-        let bytes = vectorcraft_format::base64_decode(r["dataBase64"].as_str().unwrap()).unwrap();
+        let bytes = livipen_format::base64_decode(r["dataBase64"].as_str().unwrap()).unwrap();
         let text = String::from_utf8(bytes).unwrap();
         let lines: Vec<&str> = text.lines().collect();
         let xi: Vec<usize> = (0..lines.len()).filter(|i| lines[*i].ends_with(" XI")).collect();
@@ -474,7 +474,7 @@ fn a_clipped_or_flattened_image_is_written_as_the_specification_shows_it() {
         assert_eq!(layer_names(d), [layer, "above"]);
         assert_eq!(images(d), (1, 1), "{layer}");
         let mut drawn = 0;
-        d.walk(|n| drawn += usize::from(matches!(n.kind, vectorcraft_doc::NodeKind::Path { clipping: false, .. })));
+        d.walk(|n| drawn += usize::from(matches!(n.kind, livipen_doc::NodeKind::Path { clipping: false, .. })));
         assert_eq!(drawn, paths, "{layer}");
         assert_eq!(colour_at(d, 300.0, 100.0), [247, 148, 29], "{layer}");
         assert_ne!(colour_at(d, 100.0, 100.0), [255, 255, 255], "{layer}");
@@ -511,12 +511,12 @@ fn checker(a: [u8; 4], b: [u8; 4]) -> Vec<u8> {
 /// A blue square (40–168) under a square at `opacity` filled with a pattern whose 32 pt tile is the
 /// image `tile`, grouped.
 fn pattern_over_blue(tile: &[u8], opacity: f32) -> Session {
-    let href = format!("data:image/png;base64,{}", vectorcraft_format::base64_encode(tile));
+    let href = format!("data:image/png;base64,{}", livipen_format::base64_encode(tile));
     let svg = format!(
         r##"<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="200" height="200" viewBox="0 0 200 200"><defs><pattern id="p" patternUnits="userSpaceOnUse" width="32" height="32"><image width="32" height="32" xlink:href="{href}"/></pattern></defs><g><rect x="40" y="40" width="128" height="128" fill="#0000ff"/><rect x="40" y="40" width="128" height="128" fill="url(#p)" opacity="{opacity}"/></g></svg>"##
     );
     let mut s = Session::new();
-    s.execute("document.open", &json!({"name": "p.svg", "dataBase64": vectorcraft_format::base64_encode(svg.as_bytes())})).unwrap();
+    s.execute("document.open", &json!({"name": "p.svg", "dataBase64": livipen_format::base64_encode(svg.as_bytes())})).unwrap();
     s
 }
 
@@ -565,13 +565,13 @@ fn an_opaque_image_pattern_is_written_as_its_tiles() {
 /// A square (40–168) with two pattern fills of 32 pt image tiles: a red and blue checkerboard,
 /// with a green checkerboard with see-through squares over it.
 fn two_pattern_fills() -> Session {
-    let see_through = vectorcraft_format::base64_encode(&checker([0, 200, 0, 255], [255, 255, 255, 0]));
-    let opaque = vectorcraft_format::base64_encode(&checker([200, 0, 0, 255], [0, 0, 200, 255]));
+    let see_through = livipen_format::base64_encode(&checker([0, 200, 0, 255], [255, 255, 255, 0]));
+    let opaque = livipen_format::base64_encode(&checker([200, 0, 0, 255], [0, 0, 200, 255]));
     let svg = format!(
         r##"<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="200" height="200" viewBox="0 0 200 200"><defs><pattern id="p" patternUnits="userSpaceOnUse" width="32" height="32"><image width="32" height="32" xlink:href="data:image/png;base64,{see_through}"/></pattern><pattern id="q" patternUnits="userSpaceOnUse" width="32" height="32"><image width="32" height="32" xlink:href="data:image/png;base64,{opaque}"/></pattern></defs><rect x="40" y="40" width="128" height="128" fill="url(#q)"/><rect x="40" y="40" width="128" height="128" fill="url(#p)"/></svg>"##
     );
     let mut s = Session::new();
-    s.execute("document.open", &json!({"name": "p.svg", "dataBase64": vectorcraft_format::base64_encode(svg.as_bytes())})).unwrap();
+    s.execute("document.open", &json!({"name": "p.svg", "dataBase64": livipen_format::base64_encode(svg.as_bytes())})).unwrap();
     // Move the opaque pattern fill under the see-through one, on the second rectangle.
     let d = std::sync::Arc::make_mut(&mut s.doc_mut().unwrap().doc);
     let ids: Vec<NodeId> = d.layers[0].children().unwrap().iter().map(|n| n.id).collect();
@@ -632,13 +632,13 @@ fn only_the_transparent_pattern_fill_of_a_leaf_is_expanded() {
     let mut images = 0;
     d.walk(|n| {
         for i in &n.appearance.items {
-            if let vectorcraft_doc::appearance::AppearanceItem::Fill(f) = i
-                && let vectorcraft_color::Paint::Pattern { pattern, .. } = &f.paint
+            if let livipen_doc::appearance::AppearanceItem::Fill(f) = i
+                && let livipen_color::Paint::Pattern { pattern, .. } = &f.paint
             {
                 patterns.push(pattern.clone());
             }
         }
-        images += usize::from(matches!(n.kind, vectorcraft_doc::NodeKind::Image(_)));
+        images += usize::from(matches!(n.kind, livipen_doc::NodeKind::Image(_)));
     });
     assert_eq!(patterns.len(), 1, "{patterns:?}");
     assert!(images > 0);

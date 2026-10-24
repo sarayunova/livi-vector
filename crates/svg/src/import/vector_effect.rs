@@ -6,9 +6,9 @@
 
 use std::collections::HashSet;
 
+use livipen_doc::TextObject;
+use livipen_geom::Affine;
 use usvg::roxmltree;
-use vectorcraft_doc::TextObject;
-use vectorcraft_geom::Affine;
 
 use super::css::{Styles, XNode};
 use super::{Edits, href};

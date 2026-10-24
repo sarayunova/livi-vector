@@ -2,11 +2,11 @@
 //! The second click of a double-click on an object does not fit another artboard, and that
 //! double-click does not open Artboard Options. Empty artboard space still does.
 
+use livipen_doc::NodeId;
+use livipen_engine::{Session, UiRequest, ViewInfo};
+use livipen_geom::Rect;
+use livipen_tools::{Mods, PointerEvent, PointerKind, ToolKey};
 use serde_json::json;
-use vectorcraft_doc::NodeId;
-use vectorcraft_engine::{Session, UiRequest, ViewInfo};
-use vectorcraft_geom::Rect;
-use vectorcraft_tools::{Mods, PointerEvent, PointerKind, ToolKey};
 
 fn fixture(x: f64, y: f64) -> (Session, NodeId) {
     let mut s = Session::new();

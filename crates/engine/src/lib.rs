@@ -1,4 +1,4 @@
-//! The VectorCraft engine façade.
+//! The Livi Pen engine façade.
 //!
 //! Every user-visible action is a command with a stable id (`object.group`, `select.same.fillColor`,
 //! `shape.rectangle`…) and JSON parameters. The egui UI, the CLI, the control channel and the MCP
@@ -20,11 +20,11 @@ pub mod units;
 
 use std::sync::Arc;
 
+use livipen_color::{Color, GradientPaint, Paint};
+use livipen_doc::{Document, NodeId, NodeKind, Selection};
+use livipen_geom::Affine;
+use livipen_tools::{PaintDefaults, Tool};
 use serde_json::Value;
-use vectorcraft_color::{Color, GradientPaint, Paint};
-use vectorcraft_doc::{Document, NodeId, NodeKind, Selection};
-use vectorcraft_geom::Affine;
-use vectorcraft_tools::{PaintDefaults, Tool};
 
 pub use cmd::EyedropperOptions;
 pub use cmd::clipboard::Clipboard;
@@ -35,11 +35,11 @@ pub use cmd::pathops::auto_simplify_level;
 pub use cmd::rasterfx::{export_pdf, flatten_raster_effects};
 pub use cmd::{CommandInfo, CommandSpec, command_specs, find_command};
 pub use journal::Journal;
+pub use livipen_doc as doc;
+pub use livipen_doc::cancel;
+pub use livipen_pathops::{SIMPLIFY_LEVEL, simplify_level_tolerance};
+pub use livipen_tools as tools;
 pub use tooling::{UiRequest, ViewInfo};
-pub use vectorcraft_doc as doc;
-pub use vectorcraft_doc::cancel;
-pub use vectorcraft_pathops::{SIMPLIFY_LEVEL, simplify_level_tolerance};
-pub use vectorcraft_tools as tools;
 
 #[derive(Debug, thiserror::Error)]
 pub enum EngineError {
@@ -69,8 +69,8 @@ impl From<cancel::Cancelled> for EngineError {
     }
 }
 
-impl From<vectorcraft_doc::DocError> for EngineError {
-    fn from(e: vectorcraft_doc::DocError) -> Self {
+impl From<livipen_doc::DocError> for EngineError {
+    fn from(e: livipen_doc::DocError) -> Self {
         EngineError::Other(e.to_string())
     }
 }
@@ -106,7 +106,7 @@ pub struct NamedStep {
     pub template: &'static str,
     /// The name in the placeholder, as the document holds it (a style's name).
     pub name: String,
-    /// The name is one VectorCraft gives (`[Normal Character Style]`), not one the user typed.
+    /// The name is one Livi Pen gives (`[Normal Character Style]`), not one the user typed.
     pub built_in: bool,
 }
 
@@ -387,7 +387,7 @@ pub struct DocState {
     pub converted: bool,
     /// The view saved into native files (`Document::last_view`); the UI keeps it current before a
     /// save and restores it when the document opens.
-    pub view: Option<vectorcraft_doc::SavedView>,
+    pub view: Option<livipen_doc::SavedView>,
     /// Restored by Data Recovery: the title says "[Recovered]" and Save asks where to save it
     /// (suggesting `path`, the file it was copied from) instead of overwriting that file.
     pub recovered: bool,
@@ -471,15 +471,15 @@ pub struct RecalledSelection {
     id: Option<u64>,
     /// Each version of the saved selections (identified by its allocation), with the id of each saved
     /// selection in it.
-    versions: Vec<(std::sync::Weak<Vec<vectorcraft_doc::SavedSelection>>, Vec<u64>)>,
+    versions: Vec<(std::sync::Weak<Vec<livipen_doc::SavedSelection>>, Vec<u64>)>,
     /// The last id given.
     last: u64,
 }
 
 impl RecalledSelection {
     /// The ids of `list`'s saved selections; a version not met before gets new ones.
-    pub(crate) fn ids(&mut self, list: &vectorcraft_doc::Shared<Vec<vectorcraft_doc::SavedSelection>>) -> Vec<u64> {
-        let version = vectorcraft_doc::Shared::downgrade(list);
+    pub(crate) fn ids(&mut self, list: &livipen_doc::Shared<Vec<livipen_doc::SavedSelection>>) -> Vec<u64> {
+        let version = livipen_doc::Shared::downgrade(list);
         if let Some((_, ids)) = self.versions.iter().find(|(v, _)| v.ptr_eq(&version)) {
             return ids.clone();
         }
@@ -493,19 +493,19 @@ impl RecalledSelection {
         self.last
     }
     /// Keep `ids` as those of `list`'s saved selections, dropping versions nothing holds any more.
-    pub(crate) fn remember(&mut self, list: &vectorcraft_doc::Shared<Vec<vectorcraft_doc::SavedSelection>>, ids: Vec<u64>) {
-        let version = vectorcraft_doc::Shared::downgrade(list);
+    pub(crate) fn remember(&mut self, list: &livipen_doc::Shared<Vec<livipen_doc::SavedSelection>>, ids: Vec<u64>) {
+        let version = livipen_doc::Shared::downgrade(list);
         self.versions.retain(|(v, _)| v.strong_count() > 0 && !v.ptr_eq(&version));
         self.versions.push((version, ids));
     }
     /// Recall the saved selection at `index` in `list`.
-    pub(crate) fn recall(&mut self, list: &vectorcraft_doc::Shared<Vec<vectorcraft_doc::SavedSelection>>, index: usize) {
+    pub(crate) fn recall(&mut self, list: &livipen_doc::Shared<Vec<livipen_doc::SavedSelection>>, index: usize) {
         self.id = self.ids(list).get(index).copied();
     }
     /// Where the recalled saved selection is in `list`, if `list` holds it.
-    pub fn index_in(&self, list: &vectorcraft_doc::Shared<Vec<vectorcraft_doc::SavedSelection>>) -> Option<usize> {
+    pub fn index_in(&self, list: &livipen_doc::Shared<Vec<livipen_doc::SavedSelection>>) -> Option<usize> {
         let id = self.id?;
-        let version = vectorcraft_doc::Shared::downgrade(list);
+        let version = livipen_doc::Shared::downgrade(list);
         let (_, ids) = self.versions.iter().find(|(v, _)| v.ptr_eq(&version))?;
         ids.iter().position(|&x| x == id).filter(|&i| i < list.len())
     }
@@ -571,7 +571,7 @@ impl DocState {
             uid: NEXT_DOC_UID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
             mask_view: None,
             transparency_grid,
-            format: "vectorcraft",
+            format: "livipen",
             save_options: Default::default(),
             save_artboards: vec![],
             converted: false,
@@ -688,7 +688,7 @@ impl DocState {
                 let then = before.unwrap_or(doc);
                 let was: std::collections::HashSet<NodeId> =
                     was.iter().filter_map(|o| then.layer_object(*o)).map(|n| n.id).filter(|o| old.contains(o)).collect();
-                let selected: Vec<(NodeId, &vectorcraft_doc::Node)> =
+                let selected: Vec<(NodeId, &livipen_doc::Node)> =
                     self.selection.objects.iter().filter_map(|o| doc.layer_object(*o).map(|n| (*o, n))).collect();
                 // One walk of the document before the edit finds where the selected objects were;
                 // the objects the edit made aren't in it.
@@ -782,7 +782,7 @@ impl DocState {
 }
 
 /// Coordinates beyond this (points) are rejected: ~1,400 m, far past Illustrator's large canvas.
-pub use vectorcraft_doc::MAX_COORD;
+pub use livipen_doc::MAX_COORD;
 
 /// The commands that act on the active artboard (#693), which the app passes as their `artboard`:
 /// Paste in Place, in Front and in Back paste onto it, Align to Artboard aligns to it, Distribute
@@ -882,9 +882,9 @@ pub(crate) fn deselect_hidden(menu: &cmd::menucmds::MenuState, d: &Document, sel
     guides || slices
 }
 
-/// The error of an edit that would nest objects deeper than [`vectorcraft_doc::MAX_DEPTH`].
+/// The error of an edit that would nest objects deeper than [`livipen_doc::MAX_DEPTH`].
 pub const TOO_DEEP: &str = "objects can't be nested more than 32 deep";
-const _: () = assert!(vectorcraft_doc::MAX_DEPTH == 32, "TOO_DEEP (and its catalog rows) names the cap");
+const _: () = assert!(livipen_doc::MAX_DEPTH == 32, "TOO_DEEP (and its catalog rows) names the cap");
 
 /// Cheap sanity check after an edit: artboards and the objects just touched (the selection) must
 /// have finite, in-range geometry, so saved files always reload and renderers never see NaN/∞.
@@ -897,7 +897,7 @@ fn doc_sane(d: &Document, sel: &Selection) -> bool {
         && objects_in_range(d, &sel.objects)
 }
 
-fn rect_in_range(r: vectorcraft_geom::Rect) -> bool {
+fn rect_in_range(r: livipen_geom::Rect) -> bool {
     [r.x0, r.y0, r.x1, r.y1].iter().all(|v| v.is_finite() && v.abs() <= MAX_COORD)
 }
 
@@ -1106,7 +1106,7 @@ pub struct Prefs {
     /// Width profiles saved to the Stroke panel's Profile list (`stroke.widthProfile.*`). Not a
     /// Preferences dialog field, so it has no [`cmd::prefscmds::PREF_SPECS`] row.
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub width_profiles: Vec<vectorcraft_doc::SavedProfile>,
+    pub width_profiles: Vec<livipen_doc::SavedProfile>,
     /// General → Use Japanese Crop Marks: the style of Create Trim Marks and Effect → Crop Marks.
     pub japanese_crop_marks: bool,
     /// Appearance panel → New Art Has Basic Appearance (on): new art takes one fill and stroke;
@@ -1126,13 +1126,13 @@ pub struct Prefs {
     /// Edit → PDF Presets: the user's presets (the built-in ones aren't stored). A local library,
     /// not a Preferences dialog field: resetting the preferences keeps it; `pdf.preset.*` edit it.
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub pdf_presets: Vec<vectorcraft_pdf::PdfPreset>,
+    pub pdf_presets: Vec<livipen_pdf::PdfPreset>,
     /// File → Export for Screens: the user's batch export presets (`document.exportPresets.*`;
     /// the built-in ones aren't stored). A local library, not a Preferences dialog field.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub screen_export_presets: Vec<cmd::fileio::ScreenExportPreset>,
     // File Handling (continued)
-    /// Where Save as Template and New from Template start ("" = `Documents/VectorCraft Templates`).
+    /// Where Save as Template and New from Template start ("" = `Documents/Livi Pen Templates`).
     pub templates_folder: String,
     /// Open older native files as "<name> [Converted]" so Save asks for a new name.
     pub append_converted: bool,
@@ -1157,7 +1157,7 @@ pub struct Prefs {
     /// One Corner Radius field sets every corner of a live rectangle (off: a field per corner).
     pub single_corner_radius: bool,
     /// The tools' persistent options by store (a tool id, or a store a family shares: `liquify`
-    /// holds the Liquify tools' Global Brush Dimensions), see [`vectorcraft_tools::settings`]:
+    /// holds the Liquify tools' Global Brush Dimensions), see [`livipen_tools::settings`]:
     /// kept across tool switches and saved with the preferences. Not a Preferences dialog field:
     /// resetting the preferences keeps them; `tool.setOption` edits them.
     #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
@@ -1166,16 +1166,16 @@ pub struct Prefs {
     /// library, not a Preferences dialog field: resetting the preferences keeps it;
     /// `perspective.presets.*` edit it.
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub perspective_presets: Vec<vectorcraft_tools::distort::perspective::GridDefinition>,
+    pub perspective_presets: Vec<livipen_tools::distort::perspective::GridDefinition>,
     /// Blend Options set with no blend selected: what new blends start with
     /// (`object.blend.options`; none: Smooth Color, Align to Page). A tool setting, not a
     /// Preferences dialog field: it has no [`cmd::prefscmds::PREF_SPECS`] row and resetting the
     /// preferences keeps it.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub blend_options: Option<vectorcraft_doc::live::BlendDefaults>,
+    pub blend_options: Option<livipen_doc::live::BlendDefaults>,
     /// Perspective Grid Options (double-click the Perspective Grid tool): whether the Plane
     /// Switching Widget shows and where (`perspective.widget.options`).
-    pub perspective_widget: vectorcraft_tools::distort::perspective::widget::WidgetOptions,
+    pub perspective_widget: livipen_tools::distort::perspective::widget::WidgetOptions,
     /// What names and codes in other apps' shortcut sets stand for, as the user confirmed them on
     /// import (`importMatches.*`). A local library, not a Preferences dialog field: resetting the
     /// preferences keeps it.
@@ -1252,7 +1252,7 @@ impl Default for Prefs {
             object_highlighting: true,
             transform_tools_guides: true,
             construction_guides: true,
-            construction_angles: s(vectorcraft_tools::guides::DEFAULT_CONSTRUCTION_ANGLES),
+            construction_angles: s(livipen_tools::guides::DEFAULT_CONSTRUCTION_ANGLES),
             anchor_path_labels: true,
             measurement_labels: true,
             spacing_guides: true,
@@ -1308,7 +1308,7 @@ impl Default for Prefs {
             touch_gestures: true,
             override_char_color: true,
             pattern_tile_edge_color: {
-                let [r, g, b] = vectorcraft_doc::LAYER_COLORS[0].1;
+                let [r, g, b] = livipen_doc::LAYER_COLORS[0].1;
                 Color::rgb8(r, g, b).to_hex()
             },
             eyedropper: Default::default(),
@@ -1360,7 +1360,7 @@ pub struct Session {
     pub(crate) last_view: ViewInfo,
     /// The selection tools' measurements for the active document as it is: a pointer move or a
     /// cursor asked for again over an unchanged document and selection measures nothing again.
-    pub(crate) preview_memo: vectorcraft_tools::select::PreviewMemo,
+    pub(crate) preview_memo: livipen_tools::select::PreviewMemo,
     depth: u32,
     /// Set when the active tool panicked (see [`guard`]); reported by the next tool event.
     tool_panic: Option<EngineError>,
@@ -1464,7 +1464,7 @@ pub struct Session {
     previewing: bool,
     /// Envelope Options with no envelope selected: the options and fidelity new envelopes get
     /// (`None`: the reference app's defaults, fidelity 50); not saved.
-    pub(crate) envelope_defaults: Option<(vectorcraft_doc::live::EnvelopeOptions, f64)>,
+    pub(crate) envelope_defaults: Option<(livipen_doc::live::EnvelopeOptions, f64)>,
     /// The Liquify stroke the last live preview applied, which the next sample of the drag goes on
     /// from ([`cmd::distortcmds::LiquifyStroke`]).
     pub(crate) liquify_stroke: Option<Box<cmd::distortcmds::LiquifyStroke>>,
@@ -1474,9 +1474,9 @@ pub struct Session {
     /// a move ([`Session::pointer_held`]).
     pub(crate) pointer_held: bool,
     /// A guide being dragged out of a ruler ([`Session::ruler_guide`]).
-    pub(crate) ruler_guide: Option<vectorcraft_tools::rulerguide::NewGuide>,
+    pub(crate) ruler_guide: Option<livipen_tools::rulerguide::NewGuide>,
     /// Which selected type overflows its frame, for the ports every tool but the Type tools shows.
-    pub(crate) port_marks: vectorcraft_tools::text::PortMarks,
+    pub(crate) port_marks: livipen_tools::text::PortMarks,
     /// The last search for the files of missing fonts (`text.findFontFiles`), until another
     /// starts; dropping it stops it.
     pub(crate) font_search: Option<cmd::fontfiles::FontSearch>,
@@ -1488,7 +1488,7 @@ pub struct Session {
     pub search_rules: Option<cmd::findfiles::Rules>,
     /// Canvas feedback cached for the pending deferred preview ([`Session::overlays`]); cleared
     /// when the preview params change or the interaction ends.
-    pub(crate) deferred_overlay_cache: Option<(String, Value, Vec<vectorcraft_tools::Overlay>)>,
+    pub(crate) deferred_overlay_cache: Option<(String, Value, Vec<livipen_tools::Overlay>)>,
     /// The walker threads a folder search starts; `None`: [`cmd::findfiles::threads`]. Tests set
     /// it.
     pub search_threads: Option<usize>,
@@ -1514,18 +1514,18 @@ impl Session {
     /// documents, and where an image's effects draw its fills and strokes, for clicks.
     pub fn new() -> Self {
         // Placed documents are read by the native format's loader.
-        vectorcraft_doc::placed_document::set_loader(cmd::place::document::read_document);
-        vectorcraft_doc::placed_document::set_file_reader(cmd::place::document::read_file_again);
-        vectorcraft_doc::placed_document::set_read_check(|path| file_access::check_read(path).is_ok());
+        livipen_doc::placed_document::set_loader(cmd::place::document::read_document);
+        livipen_doc::placed_document::set_file_reader(cmd::place::document::read_file_again);
+        livipen_doc::placed_document::set_read_check(|path| file_access::check_read(path).is_ok());
         // The background workers of placed documents read files in the scope that asked.
-        vectorcraft_render::placed_document::set_scope_capture(|| {
+        livipen_render::placed_document::set_scope_capture(|| {
             let scope = file_access::ScopeHandle::capture();
             Box::new(move |f: &mut dyn FnMut()| scope.run(f))
         });
         // Clicks find an image's own fills and strokes where their effects draw them.
-        vectorcraft_doc::hit::set_image_paint(vectorcraft_render::effects::image_paint);
+        livipen_doc::hit::set_image_paint(livipen_render::effects::image_paint);
         // OpenType SVG glyphs are drawn as the SVG importer reads their documents.
-        vectorcraft_text::set_svg_glyph_reader(vectorcraft_svg::glyph_art);
+        livipen_text::set_svg_glyph_reader(livipen_svg::glyph_art);
         Self {
             docs: vec![],
             active: None,
@@ -1534,7 +1534,7 @@ impl Session {
             fill_active: true,
             clipboard: Clipboard::default(),
             journal: Journal::default(),
-            tool: vectorcraft_tools::create("selection"),
+            tool: livipen_tools::create("selection"),
             lender: None,
             last_selection_tool: None,
             last_view: ViewInfo::default(),
@@ -2456,8 +2456,8 @@ impl Session {
 
 /// Lay out the type in tree `n` (opacity mask art included) whose bounds aren't cached. Only the
 /// nodes on the way to such type are copied.
-fn refresh_tree_text_bounds(n: &mut Arc<vectorcraft_doc::Node>) {
-    fn stale(n: &vectorcraft_doc::Node) -> bool {
+fn refresh_tree_text_bounds(n: &mut Arc<livipen_doc::Node>) {
+    fn stale(n: &livipen_doc::Node) -> bool {
         matches!(&n.kind, NodeKind::Text(t) if t.cached_bounds.is_none())
             || n.extras().mask.as_deref().is_some_and(|m| stale(&m.art))
             || n.children().is_some_and(|ch| ch.iter().any(|c| stale(c)))
@@ -2479,7 +2479,7 @@ fn refresh_tree_text_bounds(n: &mut Arc<vectorcraft_doc::Node>) {
     }
 }
 
-/// Held by the tests that add fonts to the shared [`vectorcraft_text::FontDb::global`] for as long
+/// Held by the tests that add fonts to the shared [`livipen_text::FontDb::global`] for as long
 /// as they run: adding a font clears the database's caches, which would change how another such
 /// test's type resolves between its layout and its export.
 #[cfg(test)]

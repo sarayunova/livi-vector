@@ -2,8 +2,8 @@
 //! commands: as the renderer draws them and as Expand Appearance bakes them, and files saved
 //! before the options existed looking the same.
 
+use livipen_doc::Node;
 use serde_json::{Value, json};
-use vectorcraft_doc::Node;
 
 use super::*;
 
@@ -30,10 +30,10 @@ fn stroked_square(s: &mut Session) -> NodeId {
     id
 }
 
-fn render(s: &Session) -> vectorcraft_render::Rendered {
+fn render(s: &Session) -> livipen_render::Rendered {
     let doc = s.doc().unwrap().doc.clone();
-    let opts = vectorcraft_render::RenderOptions { background: Some([255, 255, 255, 255]), ..Default::default() };
-    vectorcraft_render::Renderer::new().render(&doc, 200, 200, vectorcraft_geom::Affine::IDENTITY, &opts)
+    let opts = livipen_render::RenderOptions { background: Some([255, 255, 255, 255]), ..Default::default() };
+    livipen_render::Renderer::new().render(&doc, 200, 200, livipen_geom::Affine::IDENTITY, &opts)
 }
 
 fn dark(px: [u8; 4]) -> bool {
@@ -161,7 +161,7 @@ fn live_copies_and_their_expanded_art_paint_alike() {
     // them.
     fn pieces(n: &Node) -> usize {
         match n.children() {
-            Some(c) if !matches!(n.kind, vectorcraft_doc::NodeKind::Compound { .. }) => c.iter().map(|c| pieces(c)).sum(),
+            Some(c) if !matches!(n.kind, livipen_doc::NodeKind::Compound { .. }) => c.iter().map(|c| pieces(c)).sum(),
             _ => 1,
         }
     }

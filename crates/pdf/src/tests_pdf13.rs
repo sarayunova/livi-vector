@@ -1,10 +1,10 @@
 //! Compatibility PDF 1.3: which standards allow it, the header and metadata that say so, the
 //! writer refusing transparency (the app flattens it first) and 40-bit RC4 encryption.
 
+use livipen_color::{BlendMode, Color, Paint};
+use livipen_doc::{Appearance, Document, Node};
+use livipen_geom::{Rect, shapes};
 use serde_json::json;
-use vectorcraft_color::{BlendMode, Color, Paint};
-use vectorcraft_doc::{Appearance, Document, Node};
-use vectorcraft_geom::{Rect, shapes};
 
 use crate::*;
 

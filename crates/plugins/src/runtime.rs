@@ -235,7 +235,7 @@ impl Plugin {
     }
 
     /// Calls `f` with at most `fuel` instructions, in slices, checking the deadline and the
-    /// caller's cancellation ([`vectorcraft_doc::cancel`]) between them.
+    /// caller's cancellation ([`livipen_doc::cancel`]) between them.
     fn call<P: WasmParams, R: WasmResults>(&self, live: &mut Live, f: &TypedFunc<P, R>, params: P, fuel: u64, deadline: &Deadline) -> Result<R> {
         let mut left = fuel;
         let give = left.min(FUEL_SLICE);
@@ -252,7 +252,7 @@ impl Plugin {
                         return Err(Error::Limit("instruction budget".into()));
                     }
                     deadline.check()?;
-                    vectorcraft_doc::cancel::check().map_err(|_| Error::Cancelled)?;
+                    livipen_doc::cancel::check().map_err(|_| Error::Cancelled)?;
                     let give = left.min(FUEL_SLICE.max(need));
                     left -= give;
                     live.store.set_fuel(give).map_err(wasm_err)?;

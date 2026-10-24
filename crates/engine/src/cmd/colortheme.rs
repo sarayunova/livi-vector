@@ -2,12 +2,12 @@
 //! preferences (no online service). `colorTheme.addToSwatches` adds a theme to the Swatches panel as a
 //! colour group.
 
+use livipen_color::Color;
+use livipen_color::harmony::{Harmony, THEME_SIZE};
+use livipen_color::recolor::ColorKey;
+use livipen_tools::params::color_json;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use vectorcraft_color::Color;
-use vectorcraft_color::harmony::{Harmony, THEME_SIZE};
-use vectorcraft_color::recolor::ColorKey;
-use vectorcraft_tools::params::color_json;
 
 use super::*;
 

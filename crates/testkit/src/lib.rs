@@ -1,4 +1,4 @@
-//! VectorCraft test helpers.
+//! Livi Pen test helpers.
 //!
 //! - [`fixtures`]: sessions and documents in known states (empty, single/multi selection, a "rich"
 //!   document touching most node kinds), plus a [`fixtures::DocBuilder`] for building documents
@@ -6,7 +6,7 @@
 //! - [`strategies`]: proptest strategies for geometry and for engine command sequences ([`strategies::Op`]), and
 //!   junk-parameter generators for fuzzing the command registry.
 //! - [`invariants`]: structural checks for documents and sessions, and round-trip checks
-//!   (`.vectorcraft`, SVG, `document.inspect`).
+//!   (`.livipen`, SVG, `document.inspect`).
 //! - [`raster`]: rendering helpers and image comparison with a perceptual tolerance.
 //! - [`geom`]: geometry assertions (approximate equality, curve sampling, Hausdorff distance).
 //! - [`pdf`]: hand-written PDF files (page boxes, colour spaces, encryption) for import tests.
@@ -34,16 +34,16 @@ pub mod raster;
 pub mod strategies;
 pub mod tiff;
 
+pub use livipen_engine::{Session, doc::NodeId};
 pub use serde_json::{Value, json};
-pub use vectorcraft_engine::{Session, doc::NodeId};
 /// Re-exports so dependents without direct dependencies (e.g. app test crates) can use them.
-pub use {vectorcraft_doc as doc, vectorcraft_format as format, vectorcraft_render as render, vectorcraft_svg as svg};
+pub use {livipen_doc as doc, livipen_format as format, livipen_render as render, livipen_svg as svg};
 
 /// A per-process temporary directory for test output (created on first use). It is made with
 /// `create_dir` (owner-only on Unix), and a directory that already exists is reused only when it is a
 /// real directory, not a link, with no access for others and writable by this user: one pre-made in a shared temp folder is refused.
 pub fn temp_dir(tag: &str) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("vectorcraft-testkit-{tag}-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("livipen-testkit-{tag}-{}", std::process::id()));
     // Unix sets the mode on it; elsewhere it stays as made.
     #[cfg_attr(not(unix), allow(unused_mut))]
     let mut b = std::fs::DirBuilder::new();

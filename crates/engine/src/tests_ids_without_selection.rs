@@ -92,7 +92,7 @@ fn doc_with_type() -> (Session, [u64; 4], u64) {
 fn run_fresh(
     cmd: &str,
     params: &serde_json::Value,
-) -> (std::result::Result<serde_json::Value, String>, Option<std::sync::Arc<vectorcraft_doc::Document>>) {
+) -> (std::result::Result<serde_json::Value, String>, Option<std::sync::Arc<livipen_doc::Document>>) {
     let (mut s, ..) = doc_with_type();
     let r = s.execute(cmd, params).map_err(|e| e.to_string());
     (r, s.doc().ok().map(|d| d.doc.clone()))

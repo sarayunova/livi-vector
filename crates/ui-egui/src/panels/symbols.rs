@@ -7,14 +7,14 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use egui::{Sense, Stroke, StrokeKind, Ui, vec2};
+use livipen_doc::{Document, Node, NodeKind};
+use livipen_engine::cmd::swatchlib::LibraryInfo;
+use livipen_engine::cmd::symbollib::{self, SymbolLibrary};
 use serde_json::{Value, json};
-use vectorcraft_doc::{Document, Node, NodeKind};
-use vectorcraft_engine::cmd::swatchlib::LibraryInfo;
-use vectorcraft_engine::cmd::symbollib::{self, SymbolLibrary};
 
 use super::library_panel::{self, LibraryKind, LibraryRef, Row};
 use super::{pstate, set_pstate};
-use crate::VectorcraftApp;
+use crate::LiviPenApp;
 use crate::menus::Item;
 use crate::theme::Tokens;
 use crate::widgets::{self, PanelDrag, menu_item};
@@ -23,7 +23,7 @@ use crate::widgets::{self, PanelDrag, menu_item};
 /// art it shows: its own and `resources`, [`resources_key`] of `doc`.
 fn thumb(ui: &Ui, doc: &Document, resources: u64, name: &str, size: f32) -> Option<egui::TextureHandle> {
     thread_local! {
-        static RENDERER: RefCell<vectorcraft_render::Renderer> = RefCell::new(vectorcraft_render::Renderer::new());
+        static RENDERER: RefCell<livipen_render::Renderer> = RefCell::new(livipen_render::Renderer::new());
         static CACHE: crate::graphics::TexCache<HashMap<(usize, u64, String, u32), egui::TextureHandle>> = crate::graphics::TexCache::default();
     }
     let sym = doc.symbols.iter().find(|s| s.name == name)?;
@@ -62,13 +62,13 @@ pub(crate) fn resources_key(doc: &Document) -> u64 {
 /// Symbol `name` of `doc` rendered `px` pixels wide: an instance at its natural size, alone on a
 /// copy of `doc` that keeps its resources (the symbols it nests, patterns, images, swatches,
 /// brushes, graphic styles) but none of its art.
-fn render_thumb(r: &mut vectorcraft_render::Renderer, doc: &Document, name: &str, px: u32) -> Option<vectorcraft_render::Rendered> {
+fn render_thumb(r: &mut livipen_render::Renderer, doc: &Document, name: &str, px: u32) -> Option<livipen_render::Rendered> {
     let (w, h) = symbol_size(doc, name);
     let mut d = doc.clone();
     let layer = d.alloc_id();
-    d.layers = vec![Arc::new(Node::layer(layer, "Preview", vectorcraft_doc::LayerColor::Preset(0)))];
+    d.layers = vec![Arc::new(Node::layer(layer, "Preview", livipen_doc::LayerColor::Preset(0)))];
     let id = d.alloc_id();
-    let xf = vectorcraft_geom::Affine::scale_non_uniform(w / 20.0, h / 20.0);
+    let xf = livipen_geom::Affine::scale_non_uniform(w / 20.0, h / 20.0);
     d.insert(Some(layer), 0, Node::new(id, NodeKind::SymbolInstance { symbol: name.into(), xf })).ok()?;
     r.render_thumbnail(&d, id, px)
 }
@@ -82,11 +82,11 @@ pub(crate) fn chip(ui: &Ui, doc: &Document, resources: u64, r: egui::Rect, name:
     }
 }
 
-fn current(app: &mut VectorcraftApp) -> Option<String> {
+fn current(app: &mut LiviPenApp) -> Option<String> {
     app.run("symbol.list", json!({})).ok().and_then(|v| v["current"].as_str().map(str::to_string))
 }
 
-fn has_instances_selected(app: &VectorcraftApp) -> bool {
+fn has_instances_selected(app: &LiviPenApp) -> bool {
     app.session.active().is_some_and(|st| {
         st.selection.objects.iter().any(|id| {
             let mut any = false;
@@ -98,7 +98,7 @@ fn has_instances_selected(app: &VectorcraftApp) -> bool {
     })
 }
 
-pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
+pub fn show(app: &mut LiviPenApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let Some(doc) = app.session.active().map(|d| d.doc.clone()) else { return };
     let names: Vec<String> = doc.symbols.iter().map(|s| s.name.clone()).collect();
@@ -196,7 +196,7 @@ pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
     });
 }
 
-pub fn menu(app: &mut VectorcraftApp, ui: &mut Ui) {
+pub fn menu(app: &mut LiviPenApp, ui: &mut Ui) {
     let sel = current(app);
     let has_sel = app.session.active().is_some_and(|d| !d.selection.is_empty());
     let inst = has_instances_selected(app);
@@ -235,7 +235,7 @@ pub fn menu(app: &mut VectorcraftApp, ui: &mut Ui) {
 }
 
 /// Save Symbol Library… for the document's symbols (`names`: the one selected in the panel).
-fn save_library(app: &mut VectorcraftApp, names: Vec<String>) {
+fn save_library(app: &mut LiviPenApp, names: Vec<String>) {
     if let Err(e) = app.run("ui.saveSymbolLibrary", json!({ "names": names })) {
         app.status(e);
     }
@@ -272,20 +272,20 @@ impl LibraryKind for SymbolLibraries {
     type Lib = Arc<Vec<LibSymbol>>;
     type Item = LibSymbol;
 
-    fn list(app: &VectorcraftApp) -> Vec<LibraryRef> {
+    fn list(app: &LiviPenApp) -> Vec<LibraryRef> {
         let libs = symbollib::libraries(&app.session).into_iter();
         libs.map(|l| LibraryRef { submenu: library_panel::submenu(l.category), id: l.id, name: l.name }).collect()
     }
-    fn get(app: &VectorcraftApp, id: &str) -> Option<(String, Self::Lib)> {
+    fn get(app: &LiviPenApp, id: &str) -> Option<(String, Self::Lib)> {
         let (info, lib) = symbollib::library(&app.session, id)?;
         let resources = resources_key(&lib.doc);
         let shown = (0..lib.len()).map(|index| LibSymbol { lib: lib.clone(), index, resources }).collect();
         Some((info.name, Arc::new(shown)))
     }
-    fn find(app: &VectorcraftApp, key: &str) -> library_panel::Found {
+    fn find(app: &LiviPenApp, key: &str) -> library_panel::Found {
         symbollib::library(&app.session, key).map(|(info, lib)| (info.id, info.name, lib.len()))
     }
-    fn path(app: &VectorcraftApp, id: &str) -> Option<String> {
+    fn path(app: &LiviPenApp, id: &str) -> Option<String> {
         app.session.symbol_libraries.path(id).map(str::to_string)
     }
     fn rows<'a>(lib: &'a Self::Lib, query: &str) -> Vec<Row<'a, LibSymbol>> {
@@ -293,7 +293,7 @@ impl LibraryKind for SymbolLibraries {
         lib.iter().filter(|s| found(s.name())).map(|s| Row { name: s.name(), item: Some(s) }).collect()
     }
     /// The symbol's art on white, as the Symbols panel shows it.
-    fn draw(_: &VectorcraftApp, ui: &Ui, r: egui::Rect, s: &LibSymbol, selected: bool, hovered: bool) {
+    fn draw(_: &LiviPenApp, ui: &Ui, r: egui::Rect, s: &LibSymbol, selected: bool, hovered: bool) {
         chip(ui, &s.lib.doc, s.resources, r, s.name());
         super::graphic_styles::outline(ui, r, selected, hovered);
     }
@@ -305,17 +305,17 @@ impl LibraryKind for SymbolLibraries {
         crate::i18n::fmt(tl!("{w} × {h} pt"), &[("w", &num(w)), ("h", &num(h))])
     }
     /// Adds the symbol to the document's Symbols, as the current symbol.
-    fn click(app: &mut VectorcraftApp, _: &Ui, id: &str, name: &str) {
+    fn click(app: &mut LiviPenApp, _: &Ui, id: &str, name: &str) {
         add(app, json!({"library": id, "name": name}));
     }
-    fn add(app: &mut VectorcraftApp, id: &str, names: Vec<String>) {
+    fn add(app: &mut LiviPenApp, id: &str, names: Vec<String>) {
         add(app, json!({"library": id, "names": names}));
     }
     /// Dragged onto the canvas, the symbol is added and an instance placed where it is dropped.
     fn drag(id: &str, name: &str) -> Option<PanelDrag> {
         Some(PanelDrag::LibrarySymbol { library: id.to_string(), name: name.to_string() })
     }
-    fn menu_tail(app: &mut VectorcraftApp, ui: &mut Ui) {
+    fn menu_tail(app: &mut LiviPenApp, ui: &mut Ui) {
         ui.separator();
         // As a command, so its file dialog, shown off the UI thread, loads the library when it
         // answers.
@@ -333,7 +333,7 @@ impl LibraryKind for SymbolLibraries {
 }
 
 /// Run `symbol.addFromLibrary` with `p`; a failure goes to the status bar.
-fn add(app: &mut VectorcraftApp, p: Value) {
+fn add(app: &mut LiviPenApp, p: Value) {
     if let Err(e) = app.run("symbol.addFromLibrary", p) {
         app.status(e);
     }
@@ -341,26 +341,25 @@ fn add(app: &mut VectorcraftApp, p: Value) {
 
 /// Symbol `name`'s natural size in `doc`.
 fn symbol_size(doc: &Document, name: &str) -> (f64, f64) {
-    let size = doc.unknown.get(vectorcraft_doc::SYMBOL_SIZES).and_then(|m| m.get(name));
-    size.and_then(|v| Some((v.get(0)?.as_f64()?, v.get(1)?.as_f64()?)))
-        .unwrap_or((2.0 * vectorcraft_doc::SYMBOL_HALF, 2.0 * vectorcraft_doc::SYMBOL_HALF))
+    let size = doc.unknown.get(livipen_doc::SYMBOL_SIZES).and_then(|m| m.get(name));
+    size.and_then(|v| Some((v.get(0)?.as_f64()?, v.get(1)?.as_f64()?))).unwrap_or((2.0 * livipen_doc::SYMBOL_HALF, 2.0 * livipen_doc::SYMBOL_HALF))
 }
 
 /// `window.symbolLibrary {library}`: open a symbol library in its own panel (`library` null closes
 /// every symbol library panel).
-pub(crate) fn open_library(app: &mut VectorcraftApp, p: &Value) -> Result<Value, String> {
+pub(crate) fn open_library(app: &mut LiviPenApp, p: &Value) -> Result<Value, String> {
     library_panel::open_command::<SymbolLibraries>(app, p)
 }
 
 /// `symbol.loadLibrary` params, then open the library in its panel.
-pub(crate) fn load_library(app: &mut VectorcraftApp, params: Value) -> Result<Value, String> {
+pub(crate) fn load_library(app: &mut LiviPenApp, params: Value) -> Result<Value, String> {
     let r = app.run("symbol.loadLibrary", params)?;
     open_library(app, &json!({ "library": r["library"] }))
 }
 
 /// Other Library…: load the symbols of the document at `path`, else of one picked in an open
 /// dialog.
-pub(crate) fn other_library(app: &mut VectorcraftApp, path: Option<String>) -> Result<Value, String> {
+pub(crate) fn other_library(app: &mut LiviPenApp, path: Option<String>) -> Result<Value, String> {
     match library_panel::pick_library_file(app, path, library_panel::library_pick_filters(SymbolLibraries::KIND))? {
         Some(path) => load_library(app, json!({ "path": path })),
         None => Ok(Value::Null),
@@ -371,7 +370,7 @@ pub(crate) fn other_library(app: &mut VectorcraftApp, path: Option<String>) -> R
 pub(crate) const USER_SLOT: &str = "window.userSymbolLibrary";
 
 /// The User Defined library slot `id` (`window.userSymbolLibrary3`) stands for.
-pub(crate) fn user_library(app: &VectorcraftApp, id: &str) -> Option<LibraryInfo> {
+pub(crate) fn user_library(app: &LiviPenApp, id: &str) -> Option<LibraryInfo> {
     library_panel::user_slot(id, USER_SLOT, symbollib::libraries(&app.session))
 }
 
@@ -404,13 +403,13 @@ pub(crate) fn window_menu() -> Vec<Item> {
 #[cfg(test)]
 mod tests {
     use egui::{Pos2, Rect, pos2};
-    use vectorcraft_doc::NodeId;
-    use vectorcraft_engine::Session;
+    use livipen_doc::NodeId;
+    use livipen_engine::Session;
 
     use super::*;
 
     /// One headless frame of the panel, 236 pt wide as in the dock.
-    fn frame(ctx: &egui::Context, app: &mut VectorcraftApp, events: Vec<egui::Event>) {
+    fn frame(ctx: &egui::Context, app: &mut LiviPenApp, events: Vec<egui::Event>) {
         let raw = egui::RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(236.0, 400.0))), events, ..Default::default() };
         let mut out = ctx.run_ui(raw, |ui| show(app, ui));
         out.textures_delta.clear();
@@ -420,13 +419,13 @@ mod tests {
         egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() }
     }
 
-    fn symbols(app: &mut VectorcraftApp) -> Vec<String> {
+    fn symbols(app: &mut LiviPenApp) -> Vec<String> {
         let list = app.run("symbol.list", json!({})).unwrap();
         list["symbols"].as_array().unwrap().iter().map(|s| s["name"].as_str().unwrap_or_default().to_string()).collect()
     }
 
     /// Pixels of `img` that something paints opaquely, and those of them that are red.
-    fn painted(img: &vectorcraft_render::Rendered) -> (usize, usize) {
+    fn painted(img: &livipen_render::Rendered) -> (usize, usize) {
         let painted: Vec<&[u8; 4]> = img.pixels.as_chunks::<4>().0.iter().filter(|p| p[3] > 200).collect();
         let red = painted.iter().filter(|p| p[0] > 150 && p[1] < 80 && p[2] < 80).count();
         (painted.len(), red)
@@ -447,8 +446,8 @@ mod tests {
         // Other art of the document stays out of the preview.
         s.execute("shape.ellipse", &json!({"x": 0, "y": 0, "width": 200, "height": 200})).unwrap();
         s.execute("paint.setFill", &json!({"color": "#0000ff"})).unwrap();
-        let lib = vectorcraft_engine::cmd::symbollib::SymbolLibrary::from_document(&s.doc().unwrap().doc, &["Badge".into()], "Kit".into()).unwrap();
-        let mut r = vectorcraft_render::Renderer::new();
+        let lib = livipen_engine::cmd::symbollib::SymbolLibrary::from_document(&s.doc().unwrap().doc, &["Badge".into()], "Kit".into()).unwrap();
+        let mut r = livipen_render::Renderer::new();
         for doc in [&*s.doc().unwrap().doc, &lib.doc] {
             let img = render_thumb(&mut r, doc, "Badge", 32).expect("a thumbnail");
             let (painted, red) = painted(&img);
@@ -458,7 +457,7 @@ mod tests {
 
     #[test]
     fn art_dropped_on_the_panel_becomes_a_symbol_and_a_symbol_drags_out() {
-        let mut app = VectorcraftApp::new(Session::new(), Default::default());
+        let mut app = LiviPenApp::new(Session::new(), Default::default());
         app.run("file.new", json!({"width": 200, "height": 100})).unwrap();
         let id = app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 30, "height": 20})).unwrap()["id"].as_u64().unwrap();
         // Selected, as art dragged off the canvas is.
@@ -483,7 +482,7 @@ mod tests {
     }
 
     /// One headless frame of the panel menu; returns its painted labels.
-    fn menu_frame(ctx: &egui::Context, app: &mut VectorcraftApp, events: Vec<egui::Event>) -> Vec<(String, Rect)> {
+    fn menu_frame(ctx: &egui::Context, app: &mut LiviPenApp, events: Vec<egui::Event>) -> Vec<(String, Rect)> {
         let raw = egui::RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(236.0, 400.0))), events, ..Default::default() };
         let mut out = ctx.run_ui(raw, |ui| menu(app, ui));
         out.textures_delta.clear();
@@ -492,7 +491,7 @@ mod tests {
 
     #[test]
     fn new_symbol_asks_for_symbol_options_before_making_the_symbol() {
-        let mut app = VectorcraftApp::new(Session::new(), Default::default());
+        let mut app = LiviPenApp::new(Session::new(), Default::default());
         app.run("file.new", json!({"width": 200, "height": 100})).unwrap();
         app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 30, "height": 20})).unwrap();
         let ctx = egui::Context::default();
@@ -554,7 +553,7 @@ mod tests {
         let chord = crate::shortcuts::parse("F8").expect("parses");
         assert_eq!((chord.modifiers, chord.logical_key), (egui::Modifiers::NONE, egui::Key::F8));
         assert_eq!(crate::menus::pretty_shortcut("F8"), "F8");
-        let mut app = VectorcraftApp::new(Session::new(), Default::default());
+        let mut app = LiviPenApp::new(Session::new(), Default::default());
         let listed = app.run("shortcuts.list", json!({"query": "ui.symbolOptions"})).unwrap();
         let rows: Vec<_> = listed.as_array().expect("rows").iter().map(|r| (r["label"].clone(), r["default"].clone())).collect();
         assert_eq!(rows, [(json!("Symbol Options…"), json!("F8"))], "Keyboard Shortcuts lists it");
@@ -568,21 +567,21 @@ mod tests {
     /// status bar says that nothing is selected.
     #[test]
     fn f8_opens_symbol_options_for_a_new_symbol_as_new_symbol_does() {
-        fn press(app: &mut VectorcraftApp) {
+        fn press(app: &mut LiviPenApp) {
             let ctx = egui::Context::default();
             let ev = egui::Event::Key { key: egui::Key::F8, physical_key: None, pressed: true, repeat: false, modifiers: Default::default() };
             let mut out = ctx.run_ui(egui::RawInput { events: vec![ev], ..Default::default() }, |ui| crate::shortcuts::handle(app, ui.ctx()));
             out.textures_delta.clear();
         }
         /// A document with one selected rectangle.
-        fn one_rect() -> VectorcraftApp {
-            let mut app = VectorcraftApp::new(Session::new(), Default::default());
+        fn one_rect() -> LiviPenApp {
+            let mut app = LiviPenApp::new(Session::new(), Default::default());
             app.run("file.new", json!({"width": 200, "height": 100})).unwrap();
             app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 30, "height": 20})).unwrap();
             app
         }
         /// Click the panel menu's New Symbol… item.
-        fn click_new_symbol(app: &mut VectorcraftApp) {
+        fn click_new_symbol(app: &mut LiviPenApp) {
             let ctx = egui::Context::default();
             crate::theme::install_fonts(&ctx);
             let labels = menu_frame(&ctx, app, vec![]);
@@ -590,7 +589,7 @@ mod tests {
             menu_frame(&ctx, app, vec![egui::Event::PointerMoved(item), button(item, true)]);
             menu_frame(&ctx, app, vec![button(item, false)]);
         }
-        let dialog = |app: &VectorcraftApp| app.ui.dialog.as_ref().map(|d| (d.kind.clone(), d.fields.clone()));
+        let dialog = |app: &LiviPenApp| app.ui.dialog.as_ref().map(|d| (d.kind.clone(), d.fields.clone()));
         let mut keyed = one_rect();
         press(&mut keyed);
         let mut clicked = one_rect();
@@ -635,8 +634,8 @@ mod tests {
     fn an_imported_symbols_thumbnail_frames_its_whole_art() {
         // The symbol of the SVG import tests: an orange 20 × 20 square from (0, 0) with a white dot.
         let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="200" height="120"><defs><symbol id="Star" data-name="Gold Star"><path d="M0 0H20V20H0Z" fill="#e0a000"/><circle cx="10" cy="10" r="4" fill="#fff"/></symbol></defs><use href="#Star" x="20" y="30"/></svg>"##;
-        let mut app = VectorcraftApp::new(Session::new(), Default::default());
-        app.run("document.open", json!({"name": "star.svg", "dataBase64": vectorcraft_format::base64_encode(svg.as_bytes())})).unwrap();
+        let mut app = LiviPenApp::new(Session::new(), Default::default());
+        app.run("document.open", json!({"name": "star.svg", "dataBase64": livipen_format::base64_encode(svg.as_bytes())})).unwrap();
         let ctx = egui::Context::default();
         let raw = egui::RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(236.0, 400.0))), ..Default::default() };
         let mut out = ctx.run_ui(raw, |ui| show(&mut app, ui));

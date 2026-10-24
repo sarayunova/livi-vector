@@ -5,13 +5,13 @@
 
 use std::sync::{Mutex, MutexGuard};
 
+use livipen_color::cms;
+use livipen_engine::Session;
+use livipen_engine::cmd::colormgmt::{PROFILES_KEY, doc_profiles};
+use livipen_geom::Affine;
+use livipen_render::{RenderOptions, Renderer};
+use livipen_testkit::fixtures::{exec, id_of, rect, select, session};
 use serde_json::json;
-use vectorcraft_color::cms;
-use vectorcraft_engine::Session;
-use vectorcraft_engine::cmd::colormgmt::{PROFILES_KEY, doc_profiles};
-use vectorcraft_geom::Affine;
-use vectorcraft_render::{RenderOptions, Renderer};
-use vectorcraft_testkit::fixtures::{exec, id_of, rect, select, session};
 
 /// The active Color Settings: one test at a time.
 fn settings() -> MutexGuard<'static, ()> {
@@ -51,7 +51,7 @@ fn legacy_profile_name_resolves_in_commands_and_files() {
     // A document saved by an older version names the profile the old way.
     let mut d = (*s.doc().unwrap().doc).clone();
     d.unknown.insert(PROFILES_KEY.into(), json!({"rgb": old, "cmyk": null}));
-    let back = vectorcraft_format::load(&vectorcraft_format::save(&d, false)).unwrap();
+    let back = livipen_format::load(&livipen_format::save(&d, false)).unwrap();
     assert_eq!(doc_profiles(&back), (Some(cms::WIDE_GAMUT_RGB.to_string()), None));
     cms::set_active(&before).unwrap();
 }
@@ -68,8 +68,8 @@ fn separations_preview_draws_through_new_color_settings() {
     // The proof and Overprint Preview options the canvas takes from the view state the
     // commands set.
     let canvas = || RenderOptions {
-        proof: vectorcraft_render::proof::active_proof(),
-        overprint_preview: vectorcraft_render::proof::overprint_preview_on(),
+        proof: livipen_render::proof::active_proof(),
+        overprint_preview: livipen_render::proof::overprint_preview_on(),
         background: Some([255, 255, 255, 255]),
         ..Default::default()
     };
@@ -132,12 +132,12 @@ fn raster_effects_draw_through_new_color_settings() {
 /// its own yet) draws it.
 #[test]
 fn pattern_tiles_draw_through_new_color_settings() {
+    use livipen_color::{Color, Paint};
+    use livipen_doc::pattern::{PatternDef, pattern_paint};
+    use livipen_doc::{Appearance, Document, Node};
+    use livipen_geom::Rect;
+    use livipen_geom::shapes::rectangle;
     use std::sync::Arc;
-    use vectorcraft_color::{Color, Paint};
-    use vectorcraft_doc::pattern::{PatternDef, pattern_paint};
-    use vectorcraft_doc::{Appearance, Document, Node};
-    use vectorcraft_geom::Rect;
-    use vectorcraft_geom::shapes::rectangle;
     let _g = settings();
     let old = cms::active_settings();
     let mut d = Document::new(200.0, 100.0);
@@ -268,10 +268,10 @@ fn effect_art_draws_through_new_color_settings() {
 /// into the working space, so the sampled fill shows as the pixel it was picked from.
 #[test]
 fn the_eyedropper_takes_an_image_pixel_into_the_working_rgb_space() {
-    use vectorcraft_color::Color;
-    use vectorcraft_doc::{ImageBlob, ImageObject, Node, NodeKind};
-    use vectorcraft_engine::ViewInfo;
-    use vectorcraft_tools::{PointerEvent, PointerKind};
+    use livipen_color::Color;
+    use livipen_doc::{ImageBlob, ImageObject, Node, NodeKind};
+    use livipen_engine::ViewInfo;
+    use livipen_tools::{PointerEvent, PointerKind};
     let _g = settings();
     let old = cms::active_settings();
     let mut s = session();
@@ -284,7 +284,7 @@ fn the_eyedropper_takes_an_image_pixel_into_the_working_rgb_space() {
         let id = d.alloc_id();
         let xf = Affine::translate((300.0, 0.0)) * Affine::scale(100.0);
         let im = ImageObject { key: "px".into(), width: 1, height: 1, xf, link: None, placement: Default::default(), pixels: None };
-        d.insert(Some(l), 0, Node::new(id, NodeKind::Image(Box::new(im)))).map_err(|e| vectorcraft_engine::EngineError::Other(e.to_string()))
+        d.insert(Some(l), 0, Node::new(id, NodeKind::Image(Box::new(im)))).map_err(|e| livipen_engine::EngineError::Other(e.to_string()))
     })
     .unwrap();
     let dst = rect(&mut s, 10.0, 10.0, 50.0, 50.0);
@@ -304,10 +304,10 @@ fn the_eyedropper_takes_an_image_pixel_into_the_working_rgb_space() {
 /// that show the colors the gradient shows there.
 #[test]
 fn a_freeform_gradient_expands_with_its_rgb_values_in_the_working_rgb_space() {
-    use vectorcraft_color::freeform::spread_scale;
-    use vectorcraft_color::{Color, Paint};
-    use vectorcraft_doc::NodeKind;
-    use vectorcraft_geom::Rect;
+    use livipen_color::freeform::spread_scale;
+    use livipen_color::{Color, Paint};
+    use livipen_doc::NodeKind;
+    use livipen_geom::Rect;
     let _g = settings();
     let old = cms::active_settings();
     cms::set_active(&cms::ColorSettings { rgb: cms::WIDE_GAMUT_RGB.into(), ..old.clone() }).unwrap();

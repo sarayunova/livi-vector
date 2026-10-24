@@ -22,9 +22,9 @@ use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use vectorcraft_doc::color::Paint;
-use vectorcraft_doc::{Appearance, AppearanceItem, Document, Node, NodeId, NodeKind, OrientedBox, Selection, SymbolBoxes};
-use vectorcraft_geom::{Affine, PathData, Rect, Shape, union_opt};
+use livipen_doc::color::Paint;
+use livipen_doc::{Appearance, AppearanceItem, Document, Node, NodeId, NodeKind, OrientedBox, Selection, SymbolBoxes};
+use livipen_geom::{Affine, PathData, Rect, Shape, union_opt};
 
 use crate::group::has_own_paint;
 use crate::reshape::{geometry_effects, leaf_geometry};

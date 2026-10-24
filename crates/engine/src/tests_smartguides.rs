@@ -1,10 +1,10 @@
 //! Smart Guides for the drawing tools, driven through the session (#506): where the Rectangle
 //! tool's corners and the Pen's anchors land, and the guides they show.
 
+use livipen_doc::NodeId;
+use livipen_geom::{Point, Rect};
+use livipen_tools::{Mods, Overlay, PointerEvent, PointerKind};
 use serde_json::json;
-use vectorcraft_doc::NodeId;
-use vectorcraft_geom::{Point, Rect};
-use vectorcraft_tools::{Mods, Overlay, PointerEvent, PointerKind};
 
 use super::*;
 use crate::tooling::ViewInfo;

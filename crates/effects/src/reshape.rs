@@ -13,9 +13,9 @@
 
 use std::sync::Arc;
 
-use vectorcraft_doc::live::Hooks;
-use vectorcraft_doc::{Appearance, AppearanceItem, Document, Effect, Node, NodeId, NodeKind};
-use vectorcraft_geom::{Affine, BezPath, FillRule, PathData, Rect, Shape, shapes};
+use livipen_doc::live::Hooks;
+use livipen_doc::{Appearance, AppearanceItem, Document, Effect, Node, NodeId, NodeKind};
+use livipen_geom::{Affine, BezPath, FillRule, PathData, Rect, Shape, shapes};
 
 use crate::{Budget, GeomContext, apply_one, is_geometry, merged_params};
 
@@ -140,7 +140,7 @@ pub fn image_paint(n: &Node) -> Vec<(BezPath, FillRule, AppearanceItem)> {
 
 /// The glyph outlines of type `t` in text space with its underline and strikethrough bars: one
 /// path per run, and all of them as one.
-pub(crate) fn glyph_outlines(t: &vectorcraft_doc::TextObject) -> (Vec<kurbo::BezPath>, kurbo::BezPath) {
+pub(crate) fn glyph_outlines(t: &livipen_doc::TextObject) -> (Vec<kurbo::BezPath>, kurbo::BezPath) {
     let (runs, all, ..) = laid_out(t);
     (runs, all)
 }
@@ -148,9 +148,9 @@ pub(crate) fn glyph_outlines(t: &vectorcraft_doc::TextObject) -> (Vec<kurbo::Bez
 /// [`glyph_outlines`], the bounds of `t`'s layout in text space, and its colour glyphs, which have
 /// no outlines, placed in the document with their runs: bitmap glyphs (emoji) as images holding
 /// their pixels, then COLR and SVG glyphs as their art, as the renderer paints them.
-fn laid_out(t: &vectorcraft_doc::TextObject) -> (Vec<kurbo::BezPath>, kurbo::BezPath, Rect, Vec<(usize, Node)>) {
-    let db = vectorcraft_text::FontDb::global();
-    let layout = vectorcraft_text::layout(db, t);
+fn laid_out(t: &livipen_doc::TextObject) -> (Vec<kurbo::BezPath>, kurbo::BezPath, Rect, Vec<(usize, Node)>) {
+    let db = livipen_text::FontDb::global();
+    let layout = livipen_text::layout(db, t);
     let mut runs = vec![kurbo::BezPath::new(); t.runs.len()];
     let mut all = kurbo::BezPath::new();
     // Ruby (furigana) glyphs are painted with their base text's run, as the renderer paints them.
@@ -161,7 +161,7 @@ fn laid_out(t: &vectorcraft_doc::TextObject) -> (Vec<kurbo::BezPath>, kurbo::Bez
         all.extend(g.outline.iter());
     }
     // Underline and strikethrough bars, painted as their run's type is (#847).
-    for (run, bar) in vectorcraft_text::decorations(&layout, db, t) {
+    for (run, bar) in livipen_text::decorations(&layout, db, t) {
         if let Some(r) = runs.get_mut(run) {
             r.extend(bar.iter());
         }
@@ -179,12 +179,12 @@ fn laid_out(t: &vectorcraft_doc::TextObject) -> (Vec<kurbo::BezPath>, kurbo::Bez
 /// weights and dashes and transforms its pattern tiles; its unplaced gradients are first fixed to
 /// the layout's bounds in text space. The object's own unplaced gradients are fixed to the
 /// bounding box of those bounds in the document. The group is marked as type's outlines
-/// ([`vectorcraft_doc::NodeExtras::type_outlines`]).
+/// ([`livipen_doc::NodeExtras::type_outlines`]).
 pub fn outline_text(n: &Node) -> Option<Node> {
     let NodeKind::Text(t) = &n.kind else { return None };
     let (runs, all, bounds, colours) = laid_out(t);
     let path = |bp: &kurbo::BezPath| PathData::from_bezpath(bp).transformed(t.xf);
-    let scaling = vectorcraft_doc::Scaling { strokes: true, patterns: true, ..Default::default() };
+    let scaling = livipen_doc::Scaling { strokes: true, patterns: true, ..Default::default() };
     let mut children: Vec<Arc<Node>> = vec![];
     for (i, (bp, run)) in runs.iter().zip(&t.runs).enumerate() {
         // Colour glyphs paint themselves, under their run's fill, as the renderer paints them.
@@ -252,7 +252,7 @@ pub fn outline_art(doc: Option<&Document>, n: &Node, symbol_art: Option<&Node>) 
             one.appearance.effects.clear();
             Node::group(n.id, vec![Arc::new(one)])
         }
-        _ if vectorcraft_doc::live::is_live(n) => evaluated(doc, n),
+        _ if livipen_doc::live::is_live(n) => evaluated(doc, n),
         _ => return None,
     };
     outline_nested_text(&mut art, false);
@@ -260,7 +260,7 @@ pub fn outline_art(doc: Option<&Document>, n: &Node, symbol_art: Option<&Node>) 
     art.blend = Default::default();
     art.isolate = false;
     // One element: its pieces never knock each other out.
-    art.knockout = vectorcraft_doc::Knockout::Off;
+    art.knockout = livipen_doc::Knockout::Off;
     art.extras_mut().mask = None;
     art.appearance.effects.clear();
     Some(art)
@@ -268,10 +268,10 @@ pub fn outline_art(doc: Option<&Document>, n: &Node, symbol_art: Option<&Node>) 
 
 /// `n` with every live object in it evaluated, type inside them outlined ([`outline_text`]). The
 /// Repeats among them count the Repeats in the art of `doc`'s symbols that their instances show
-/// toward their instance budget ([`vectorcraft_doc::RepeatSpec::expand`]).
+/// toward their instance budget ([`livipen_doc::RepeatSpec::expand`]).
 pub(crate) fn evaluated(doc: Option<&Document>, n: &Node) -> Node {
     let hook: &dyn Fn(&Node) -> Option<Node> = &outline_text;
-    vectorcraft_doc::live::expand_deep_hooks(n, Hooks { outline: Some(hook), symbols: doc, ..Default::default() })
+    livipen_doc::live::expand_deep_hooks(n, Hooks { outline: Some(hook), symbols: doc, ..Default::default() })
 }
 
 /// Replace type anywhere inside `n` by its outlines, as art that keeps the type's look
@@ -377,7 +377,7 @@ pub(crate) fn as_art(doc: Option<&Document>, n: &Node, symbol_art: Option<&Node>
     out.blend = n.blend;
     out.isolate = n.isolate;
     // One element: its pieces never knock each other out.
-    out.knockout = vectorcraft_doc::Knockout::Off;
+    out.knockout = livipen_doc::Knockout::Off;
     out.knockout_shape = n.knockout_shape;
     out.extras_mut().mask = n.extras().mask.clone();
     out.appearance.effects = n.appearance.effects.iter().filter(|e| !is_geometry(&e.id)).cloned().collect();
@@ -386,13 +386,13 @@ pub(crate) fn as_art(doc: Option<&Document>, n: &Node, symbol_art: Option<&Node>
 
 /// Map every path under `art` (and its gradients) through the projective map `h`, curves split
 /// finely enough to follow it.
-fn project_leaves(art: &mut Node, h: &vectorcraft_geom::Homography) {
-    let f = |p: vectorcraft_geom::Point| h.apply(p).unwrap_or(p);
+fn project_leaves(art: &mut Node, h: &livipen_geom::Homography) {
+    let f = |p: livipen_geom::Point| h.apply(p).unwrap_or(p);
     let piece = art.geometric_bounds().map_or(1.0, |b| (b.width().max(b.height()) / 64.0).max(0.25));
-    let project = |path: &mut PathData| *path = vectorcraft_doc::live::map_nonlinear(path, piece, f);
+    let project = |path: &mut PathData| *path = livipen_doc::live::map_nonlinear(path, piece, f);
     for_each_leaf(art, &mut |leaf| {
         leaf.pin_gradients();
-        leaf.appearance.warp_gradients(&|p| h.affine_at(p).unwrap_or(vectorcraft_geom::Affine::IDENTITY));
+        leaf.appearance.warp_gradients(&|p| h.affine_at(p).unwrap_or(livipen_geom::Affine::IDENTITY));
         match &mut leaf.kind {
             NodeKind::Path { path, live, .. } => {
                 project(path);
@@ -462,7 +462,7 @@ pub(crate) fn reshape_leaves_within(art: &mut Node, fx: &[&Effect], budget: Budg
                     return;
                 }
                 if gradient {
-                    let made = copy_leaf(leaf, &path, m, copies, vectorcraft_doc::Scaling::default(), room);
+                    let made = copy_leaf(leaf, &path, m, copies, livipen_doc::Scaling::default(), room);
                     used = used.minus(before).plus(made);
                     return;
                 }
@@ -495,7 +495,7 @@ const MAX_STROKE_SCALE: f64 = 1.0e6;
 /// `k` times, each copy an object of its own ([`copy_leaf`], within `budget`). With Transform
 /// Objects off the geometry stays and the options apply once. Returns what the leaf costs after.
 fn transform_leaf(leaf: &mut Node, path: &PathData, m: Affine, copies: usize, options: crate::distort::TransformOptions, budget: Budget) -> Budget {
-    let scaling = vectorcraft_doc::Scaling {
+    let scaling = livipen_doc::Scaling {
         strokes: options.strokes,
         effects: options.strokes.then_some(crate::scale_effect as fn(&mut Effect, f64)),
         patterns: options.patterns,
@@ -503,13 +503,13 @@ fn transform_leaf(leaf: &mut Node, path: &PathData, m: Affine, copies: usize, op
     };
     if !options.objects {
         if options.strokes
-            && let Some(k) = vectorcraft_doc::Scaling::factor(m).filter(|k| k.is_finite() && *k > 0.0)
+            && let Some(k) = livipen_doc::Scaling::factor(m).filter(|k| k.is_finite() && *k > 0.0)
         {
             leaf.appearance.scale_strokes(k);
             leaf.appearance.scale_effects(k, crate::scale_effect);
         }
         if options.patterns {
-            vectorcraft_doc::pattern::transform_pattern_paints(leaf, m);
+            livipen_doc::pattern::transform_pattern_paints(leaf, m);
         }
         return Budget::of(path);
     }
@@ -532,7 +532,7 @@ fn transform_leaf(leaf: &mut Node, path: &PathData, m: Affine, copies: usize, op
 /// others'. The copies stop where [`crate::distort::transform_within`]'s would, before they pass
 /// `budget`, and before one's strokes would scale past [`MAX_STROKE_SCALE`]. Returns what the
 /// copies cost, the original included.
-fn copy_leaf(leaf: &mut Node, path: &PathData, m: Affine, copies: usize, scaling: vectorcraft_doc::Scaling, budget: Budget) -> Budget {
+fn copy_leaf(leaf: &mut Node, path: &PathData, m: Affine, copies: usize, scaling: livipen_doc::Scaling, budget: Budget) -> Budget {
     let mut made = Budget::of(path);
     let mut placements: Vec<Arc<Node>> = vec![Arc::new(leaf.clone())];
     let mut xf = Affine::IDENTITY;
@@ -543,7 +543,7 @@ fn copy_leaf(leaf: &mut Node, path: &PathData, m: Affine, copies: usize, scaling
         if !budget.fits(made.plus(cost)) {
             break;
         }
-        if scaling.strokes && vectorcraft_doc::Scaling::factor(xf).is_some_and(|k| !(k.is_finite() && k <= MAX_STROKE_SCALE)) {
+        if scaling.strokes && livipen_doc::Scaling::factor(xf).is_some_and(|k| !(k.is_finite() && k <= MAX_STROKE_SCALE)) {
             break;
         }
         let mut copy = leaf.clone();
@@ -602,13 +602,13 @@ fn follow_boxes(ap: &mut Appearance, from: Rect, to: Rect) {
     for i in &mut ap.items {
         match i {
             AppearanceItem::Fill(f) => {
-                if let vectorcraft_doc::color::Paint::Gradient(g) = &mut f.paint {
+                if let livipen_doc::color::Paint::Gradient(g) = &mut f.paint {
                     g.transform(box_map(from, to));
                 }
             }
             AppearanceItem::Stroke(s) => {
                 let m = box_map(s.paint_bounds(from), s.paint_bounds(to));
-                if let vectorcraft_doc::color::Paint::Gradient(g) = &mut s.paint {
+                if let livipen_doc::color::Paint::Gradient(g) = &mut s.paint {
                     g.transform(m);
                 }
             }
@@ -618,7 +618,7 @@ fn follow_boxes(ap: &mut Appearance, from: Rect, to: Rect) {
 
 /// The map that takes box `from` onto box `to` along each axis (along an axis `from` has no extent
 /// on, a move from its center to `to`'s).
-fn box_map(from: Rect, to: Rect) -> vectorcraft_geom::Affine {
+fn box_map(from: Rect, to: Rect) -> livipen_geom::Affine {
     let axis = |a0: f64, a1: f64, b0: f64, b1: f64| {
         if (a1 - a0).abs() > 1e-12 {
             let s = (b1 - b0) / (a1 - a0);
@@ -629,7 +629,7 @@ fn box_map(from: Rect, to: Rect) -> vectorcraft_geom::Affine {
     };
     let (sx, tx) = axis(from.x0, from.x1, to.x0, to.x1);
     let (sy, ty) = axis(from.y0, from.y1, to.y0, to.y1);
-    vectorcraft_geom::Affine::new([sx, 0.0, 0.0, sy, tx, ty])
+    livipen_geom::Affine::new([sx, 0.0, 0.0, sy, tx, ty])
 }
 
 /// Apply the Transform effect's map `m` to every image and symbol instance under `n`, as

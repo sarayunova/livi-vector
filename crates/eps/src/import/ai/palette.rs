@@ -15,7 +15,7 @@
 //! Anything else in the section (an operator it doesn't know) is left alone: the swatches around
 //! it still come in.
 
-use vectorcraft_color::Color;
+use livipen_color::Color;
 
 use super::lex::{Lexer, Tok};
 use super::obj::V;

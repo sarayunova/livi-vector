@@ -6,7 +6,7 @@
 
 use std::rc::Rc;
 
-use vectorcraft_geom::Affine;
+use livipen_geom::Affine;
 
 use super::graphics::{GState, Out};
 use super::lex::{IMMEDIATE, Lexer};
@@ -1090,7 +1090,7 @@ impl<'a> Interp<'a> {
             Version => self.push(Obj::string(b"3010".to_vec()))?,
             Revision => self.push(Obj::Int(1))?,
             SerialNumber => self.push(Obj::Int(0))?,
-            Product => self.push(Obj::string(b"VectorCraft".to_vec()))?,
+            Product => self.push(Obj::string(b"Livi Pen".to_vec()))?,
             RealTime | UserTime => self.push(Obj::Int(0))?,
             Print | EqPrint | EqEqPrint => {
                 self.pop()?;

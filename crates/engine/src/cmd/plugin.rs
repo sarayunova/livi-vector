@@ -1,12 +1,12 @@
-//! `plugin.*` commands: sandboxed WebAssembly plug-ins (`vectorcraft-plugins`).
+//! `plugin.*` commands: sandboxed WebAssembly plug-ins (`livipen-plugins`).
 //!
 //! Plug-ins are installed with `plugin.install` (kept across restarts in the apps' plug-in folder,
 //! [`Session::attach_plugin_store`]) or from every `*.wasm` in the Additional Plug-ins Folder
 //! preference, and listed with `plugin.list` / `plugin.info`. Object filters run
 //! with `plugin.run` on the selected paths and compound paths (one undo step, transactional: a
 //! plug-in that fails leaves the document untouched), and read and write the data they keep with
-//! the document ([`vectorcraft_doc::plugin_data`], theirs alone); live-effect plug-ins are applied
-//! like any effect (`effect.apply {effect: "plugin.<id>"}`) and drawn by `vectorcraft-effects`;
+//! the document ([`livipen_doc::plugin_data`], theirs alone); live-effect plug-ins are applied
+//! like any effect (`effect.apply {effect: "plugin.<id>"}`) and drawn by `livipen-effects`;
 //! exporters add a file format that `document.export` writes (`fileio::plugin_formats`).
 //!
 //! A filter may ask for a heavy budget (`Budget::Heavy`: minutes rather than a minute, for routing,
@@ -16,16 +16,16 @@
 
 use std::sync::{Arc, Mutex};
 
+use livipen_doc::{Effect, Node};
+use livipen_plugins::{Budget, Kind, Plugin, effect, export, objects, registry};
 use serde_json::{Map, Value, json};
-use vectorcraft_doc::{Effect, Node};
-use vectorcraft_plugins::{Budget, Kind, Plugin, effect, export, objects, registry};
 
 use super::*;
 
 /// What a plug-in error looks like to the user. A run the caller cancelled changed nothing.
-fn err(e: vectorcraft_plugins::Error) -> EngineError {
+fn err(e: livipen_plugins::Error) -> EngineError {
     match e {
-        vectorcraft_plugins::Error::Cancelled => EngineError::Cancelled,
+        livipen_plugins::Error::Cancelled => EngineError::Cancelled,
         e => EngineError::Other(e.to_string()),
     }
 }
@@ -68,7 +68,7 @@ fn plugin_params(p: &Value) -> Value {
 
 fn plugin_by_id(cmd: &str, p: &Value) -> Result<Arc<Plugin>> {
     let id = str_param(p, "id").ok_or_else(|| bad(cmd, "missing `id` (see plugin.list)"))?;
-    registry::get(id).ok_or_else(|| err(vectorcraft_plugins::Error::NotFound(id.into())))
+    registry::get(id).ok_or_else(|| err(livipen_plugins::Error::NotFound(id.into())))
 }
 
 /// One run of an object filter, split so the plug-in can compute away from the session: made from
@@ -128,7 +128,7 @@ impl FilterRun {
         let parent = st.insertion_parent();
         let bounds = st.doc.bounds_of(&inputs, false);
         let board = bounds.and_then(|b| st.doc.artboard_at(b.center())).and_then(|i| st.doc.artboards.get(i)).or(st.doc.artboards.first());
-        let rect = |r: vectorcraft_geom::Rect| json!([r.x0, r.y0, r.x1, r.y1]);
+        let rect = |r: livipen_geom::Rect| json!([r.x0, r.y0, r.x1, r.y1]);
         // What the plug-in keeps with the document, as it last wrote it.
         let data = st.doc.plugin_data(&m.id).cloned().unwrap_or(Value::Null);
         params["_context"] = json!({"mode": "filter", "bounds": bounds.map(rect), "artboard": board.map(|a| rect(a.rect)), "documentData": data});
@@ -161,7 +161,7 @@ impl FilterRun {
     }
 
     /// Runs the plug-in → its output, or why it failed or stopped. It touches no document, so it
-    /// can run on any thread; inside a [`vectorcraft_doc::cancel::scope`] Cancel stops it between
+    /// can run on any thread; inside a [`livipen_doc::cancel::scope`] Cancel stops it between
     /// two slices of its budget.
     pub fn run(&self) -> Result<Vec<u8>> {
         self.plugin.run(&self.input, &self.params).map_err(err)
@@ -220,7 +220,7 @@ fn run(s: &mut Session, p: &Value) -> Result<Value> {
 /// Texturizer) comes as the effect stores it, never as a file to read: a plug-in can't have the
 /// host read one.
 fn admit_effects(fx: &[Effect], n: &Node) -> std::result::Result<Vec<Effect>, String> {
-    use vectorcraft_render::effects;
+    use livipen_render::effects;
     const C: &str = "plugin.run";
     let mut out = Vec::with_capacity(fx.len());
     for (j, e) in fx.iter().enumerate() {
@@ -270,8 +270,8 @@ fn load_given(c: &str, p: &Value) -> Result<(Plugin, Vec<u8>)> {
             if data.len() > MAX_DATA_CHARS {
                 return Err(bad(c, "`dataBase64` is larger than the module limit"));
             }
-            let bytes = vectorcraft_format::base64_decode(data).ok_or_else(|| bad(c, "`dataBase64` is not valid base64"))?;
-            let plugin = Plugin::load(&bytes, vectorcraft_plugins::Limits::default()).map_err(err)?;
+            let bytes = livipen_format::base64_decode(data).ok_or_else(|| bad(c, "`dataBase64` is not valid base64"))?;
+            let plugin = Plugin::load(&bytes, livipen_plugins::Limits::default()).map_err(err)?;
             let plugin = match str_param(p, "name") {
                 Some(name) => plugin.with_source(name),
                 None => plugin,
@@ -294,7 +294,7 @@ fn install(s: &mut Session, p: &Value) -> Result<Value> {
     }
     // A heavy plug-in is installed once the user agrees: whoever installs it asks them first.
     if plugin.manifest().budget == Budget::Heavy && !p.get("allowHeavy").and_then(Value::as_bool).unwrap_or(false) {
-        let (minutes, times) = vectorcraft_plugins::heavy_terms();
+        let (minutes, times) = livipen_plugins::heavy_terms();
         return Err(bad(
             C,
             format!(
@@ -317,7 +317,7 @@ fn inspect(_: &mut Session, p: &Value) -> Result<Value> {
 #[cfg(not(target_arch = "wasm32"))]
 fn load_path(path: &str) -> Result<(Plugin, Vec<u8>)> {
     crate::file_access::check_read(path).map_err(EngineError::Other)?;
-    let limits = vectorcraft_plugins::Limits::default();
+    let limits = livipen_plugins::Limits::default();
     let bytes = crate::store::read_capped(std::path::Path::new(path), limits.max_module_bytes as u64).map_err(EngineError::Other)?;
     Ok((Plugin::load(&bytes, limits).map_err(err)?.with_source(path), bytes))
 }
@@ -402,7 +402,7 @@ fn info(_: &mut Session, p: &Value) -> Result<Value> {
 fn remove(s: &mut Session, p: &Value) -> Result<Value> {
     let id = str_param(p, "id").ok_or_else(|| bad("plugin.remove", "missing `id`"))?;
     s.unstore_plugin(id);
-    if registry::remove(id) { Ok(json!({"removed": id})) } else { Err(err(vectorcraft_plugins::Error::NotFound(id.into()))) }
+    if registry::remove(id) { Ok(json!({"removed": id})) } else { Err(err(livipen_plugins::Error::NotFound(id.into()))) }
 }
 
 /// This module's commands: `plugin.list`, `.info`, `.run`, `.install`, `.inspect`, `.remove` and

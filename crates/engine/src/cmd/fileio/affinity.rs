@@ -1,6 +1,6 @@
 //! Affinity documents (`.af`, `.afdesign`, `.afphoto`, `.afpub`): the native layers, curves,
 //! shapes, artboards, text, tables, master pages, layer effects and images that
-//! `vectorcraft-affinity` reads, mapped to editable VectorCraft art. Whatever the reader could not map is listed in the warnings. A file whose
+//! `livipen-affinity` reads, mapped to editable Livi Pen art. Whatever the reader could not map is listed in the warnings. A file whose
 //! native document can't be read opens as its embedded preview instead, with a warning that says
 //! why, and can't be placed.
 
@@ -8,14 +8,14 @@ use std::io::Cursor;
 use std::sync::Arc;
 
 use kurbo::{Affine, BezPath, Point, Rect, Vec2};
+use livipen_affinity::model::{self as af, Align as AfAlign, Blend, Kind, Pixels};
+use livipen_affinity::paint::{self as ap, Cap, GradientKind as AfKind, Join};
+use livipen_color::{BlendMode, Color, Gradient, GradientGeom, GradientKind, GradientPaint, GradientStop, Paint};
+use livipen_doc::appearance::{Appearance, AppearanceItem, Dash, Effect, FillLayer, LineCap, LineJoin, StrokeAlign, StrokeLayer};
+use livipen_doc::geom::{FillRule, PathData, shapes};
+use livipen_doc::text::{CharStyle, FirstBaseline, Justify, TextKind, TextObject, TextRun, VerticalAlign};
+use livipen_doc::{Artboard, Document, ImageObject, LayerColor, Node, NodeKind, OpacityMask};
 use serde_json::json;
-use vectorcraft_affinity::model::{self as af, Align as AfAlign, Blend, Kind, Pixels};
-use vectorcraft_affinity::paint::{self as ap, Cap, GradientKind as AfKind, Join};
-use vectorcraft_color::{BlendMode, Color, Gradient, GradientGeom, GradientKind, GradientPaint, GradientStop, Paint};
-use vectorcraft_doc::appearance::{Appearance, AppearanceItem, Dash, Effect, FillLayer, LineCap, LineJoin, StrokeAlign, StrokeLayer};
-use vectorcraft_doc::geom::{FillRule, PathData, shapes};
-use vectorcraft_doc::text::{CharStyle, FirstBaseline, Justify, TextKind, TextObject, TextRun, VerticalAlign};
-use vectorcraft_doc::{Artboard, Document, ImageObject, LayerColor, Node, NodeKind, OpacityMask};
 
 use super::load::{err, raster_doc};
 use crate::Result;
@@ -29,7 +29,7 @@ pub(super) struct Imported {
 }
 
 pub(super) fn import(name: &str, bytes: &[u8]) -> Result<Imported> {
-    match vectorcraft_affinity::read(bytes, vectorcraft_affinity::Limits::default()) {
+    match livipen_affinity::read(bytes, livipen_affinity::Limits::default()) {
         Ok(d) => {
             let mut b = Builder::new(72.0 / d.dpi);
             b.document(&d)?;
@@ -46,8 +46,8 @@ pub(super) fn import(name: &str, bytes: &[u8]) -> Result<Imported> {
 }
 
 /// The embedded preview, for files whose native document can't be read.
-fn preview(name: &str, bytes: &[u8], native: &vectorcraft_affinity::Error) -> Result<(Document, String)> {
-    let p = vectorcraft_affinity::preview(bytes).map_err(|e| err(format!("{native}; its embedded preview can't be read either ({e})")))?;
+fn preview(name: &str, bytes: &[u8], native: &livipen_affinity::Error) -> Result<(Document, String)> {
+    let p = livipen_affinity::preview(bytes).map_err(|e| err(format!("{native}; its embedded preview can't be read either ({e})")))?;
     // `raster_doc` normally probes PNG dimensions and keeps its encoded bytes. Verify this
     // untrusted preview's complete pixels first, so corrupt data cannot create a blank image.
     let mut reader = image::ImageReader::with_format(Cursor::new(p.png), image::ImageFormat::Png);
@@ -82,9 +82,9 @@ struct Builder {
     /// The document's CMYK profile, until [`Builder::document_cmyk`] makes its table.
     cmyk_profile: Option<Vec<u8>>,
     /// That table, once made (`Some(None)`: there is none).
-    cmyk_lut: Option<Option<Arc<vectorcraft_color::cms::CmykLut>>>,
+    cmyk_lut: Option<Option<Arc<livipen_color::cms::CmykLut>>>,
     /// The working CMYK profile's table, once a CMYK pixel layer needs it.
-    working_cmyk: Option<Arc<vectorcraft_color::cms::CmykLut>>,
+    working_cmyk: Option<Arc<livipen_color::cms::CmykLut>>,
     /// What baking colour and gradient overlays may still take ([`overlay::MAX_WORK`]).
     overlay_work: u64,
     /// What copying master pages onto the pages that show them may still take.
@@ -173,7 +173,7 @@ impl Builder {
             cmyk_profile: None,
             cmyk_lut: None,
             working_cmyk: None,
-            overlay_work: vectorcraft_affinity::overlay::MAX_WORK,
+            overlay_work: livipen_affinity::overlay::MAX_WORK,
             copy_left: MAX_MASTER_COPIES,
             master_parts: std::collections::HashMap::new(),
         }
@@ -415,19 +415,19 @@ impl Builder {
             Blend::Color => BlendMode::Color,
             Blend::Luminosity => BlendMode::Luminosity,
             _ => {
-                self.warn("blend modes VectorCraft doesn't have (Add, Linear Light, Vivid Light, Pin Light, Hard Mix, Subtract, Darker/Lighter Colour, Average, Negation, Reflect, Glow, Erase) import as Normal");
+                self.warn("blend modes Livi Pen doesn't have (Add, Linear Light, Vivid Light, Pin Light, Hard Mix, Subtract, Darker/Lighter Colour, Average, Negation, Reflect, Glow, Erase) import as Normal");
                 BlendMode::Normal
             }
         }
     }
 
-    /// `n` with its colour and gradient overlays baked into its paint and pixels (VectorCraft has
+    /// `n` with its colour and gradient overlays baked into its paint and pixels (Livi Pen has
     /// no overlay effect).
     fn overlaid<'n>(&mut self, n: &'n af::Node) -> std::borrow::Cow<'n, af::Node> {
         // Each kind of message once, however often it is heard.
         let mut warnings: Vec<String> = Vec::new();
         let mut work = self.overlay_work;
-        let out = vectorcraft_affinity::overlay::apply(n, &mut work, &mut |w| {
+        let out = livipen_affinity::overlay::apply(n, &mut work, &mut |w| {
             if !warnings.iter().any(|x| x == w) {
                 warnings.push(w.to_string());
             }
@@ -439,19 +439,19 @@ impl Builder {
         out
     }
 
-    /// One Affinity node (and its subtree) as VectorCraft art; `to_doc` maps document pixels to
+    /// One Affinity node (and its subtree) as Livi Pen art; `to_doc` maps document pixels to
     /// points. `layer_level`: the node is directly in a spread or a layer, so a layer stays a layer.
     fn node(&mut self, n: &af::Node, to_doc: Affine, boards: &mut Vec<(String, Rect)>, layer_level: bool, depth: usize) -> Option<Arc<Node>> {
         if depth > MAX_DEPTH {
             self.warn("objects nested too deeply (left out)");
             return None;
         }
-        // VectorCraft documents stay within `MAX_COORD` of the origin (renderers and exports rely
+        // Livi Pen documents stay within `MAX_COORD` of the origin (renderers and exports rely
         // on it): objects reaching beyond it are left out.
         if let Some(b) = af::kind_bounds(&n.kind) {
             let r = to_doc.transform_rect_bbox(rect_of(b));
             if ![r.x0, r.y0, r.x1, r.y1].iter().all(|v| v.is_finite() && v.abs() <= crate::MAX_COORD) {
-                self.warn("objects beyond the document range VectorCraft supports (left out)");
+                self.warn("objects beyond the document range Livi Pen supports (left out)");
                 return None;
             }
         }
@@ -467,7 +467,7 @@ impl Builder {
             ));
         }
         let child_level = matches!(n.kind, Kind::Layer) && layer_level;
-        let embeds = n.class == vectorcraft_affinity::stream::Tag::of(b"EmbN");
+        let embeds = n.class == livipen_affinity::stream::Tag::of(b"EmbN");
         self.embedded += usize::from(embeds);
         let children: Vec<Arc<Node>> = n.children.iter().filter_map(|c| self.node(c, to_doc, boards, child_level, depth + 1)).collect();
         self.embedded -= usize::from(embeds);
@@ -497,7 +497,7 @@ impl Builder {
                     p.appearance = appearance.into();
                     p
                 } else {
-                    // A shape clips its children: VectorCraft's clipping path keeps its paint, its
+                    // A shape clips its children: Livi Pen's clipping path keeps its paint, its
                     // fill behind the clipped art and its stroke over it, as Affinity draws it.
                     let mut clip = Node::new(self.doc.alloc_id(), NodeKind::Path { path: data, rule, live: None, clipping: true, guide: false });
                     clip.appearance = appearance.into();
@@ -595,8 +595,8 @@ impl Builder {
         Some(Arc::new(out))
     }
 
-    /// Drop shadows, inner shadows and outer glows as VectorCraft's Stylize effects. Affinity's
-    /// blur radius sets the same Gaussian as VectorCraft's blur (σ = half of it), and its angle
+    /// Drop shadows, inner shadows and outer glows as Livi Pen's Stylize effects. Affinity's
+    /// blur radius sets the same Gaussian as Livi Pen's blur (σ = half of it), and its angle
     /// is the direction the shadow goes in.
     fn effects(&mut self, effects: &[af::Effect]) -> Vec<Effect> {
         let k = self.k;
@@ -898,7 +898,7 @@ impl Builder {
                     self.warn("text frames whose last lines hang out of them (made taller so the lines show)");
                 }
                 // Affinity shows a line in a frame shorter than it (#1423); here none of it would draw.
-                if vectorcraft_text::fit_first_line(vectorcraft_text::FontDb::global(), &mut obj) {
+                if livipen_text::fit_first_line(livipen_text::FontDb::global(), &mut obj) {
                     self.warn("text frames too short for their first line (made taller so the line shows)");
                 }
             }
@@ -910,7 +910,7 @@ impl Builder {
         Some((obj, alpha))
     }
 
-    /// The opacity text takes from its characters' colour: VectorCraft's characters have none of
+    /// The opacity text takes from its characters' colour: Livi Pen's characters have none of
     /// their own, so text whose characters share one becomes an object with that opacity.
     fn text_alpha(&mut self, runs: &[af::TextRun]) -> f32 {
         let alphas: Vec<f64> =
@@ -934,7 +934,7 @@ impl Builder {
         let mut out: Vec<TextRun> = Vec::new();
         let mut paragraph = 0usize;
         // Whether each paragraph here continues the one before after a line break (U+2028):
-        // VectorCraft has no line break inside a paragraph, so the lines become paragraphs.
+        // Livi Pen has no line break inside a paragraph, so the lines become paragraphs.
         let mut continues = vec![false];
         for r in runs {
             for c in r.text.chars() {
@@ -973,7 +973,7 @@ impl Builder {
             }
             out.push(TextRun::new(text, style));
         }
-        // Affinity ends a story with a paragraph mark; VectorCraft's last paragraph has none.
+        // Affinity ends a story with a paragraph mark; Livi Pen's last paragraph has none.
         if let Some(last) = out.last_mut()
             && last.text.ends_with('\n')
         {
@@ -1007,14 +1007,14 @@ impl Builder {
         for i in 0..count {
             let f = formats.get(i).or(formats.last()).copied().unwrap_or_default();
             let pt = |x: f64, k: f64| if (x * k).is_finite() { (x * k).clamp(-5000.0, 5000.0) } else { 0.0 };
-            let mut ps = vectorcraft_doc::text::ParaStyle { justify: justify(f.align), ..Default::default() };
-            // Affinity places the first line and the others from the left edge; VectorCraft's
+            let mut ps = livipen_doc::text::ParaStyle { justify: justify(f.align), ..Default::default() };
+            // Affinity places the first line and the others from the left edge; Livi Pen's
             // first-line indent is relative to its left indent.
             ps.left_indent = pt(f.left, h);
             ps.first_line_indent = pt(f.first - f.left, h);
             ps.right_indent = pt(f.right, h);
             // Between two paragraphs Affinity keeps the larger of the space after the first and
-            // before the second; VectorCraft adds them.
+            // before the second; Livi Pen adds them.
             let (mut before, mut after) = (pt(f.space_before, v).max(0.0), pt(f.space_after, v).max(0.0));
             // The lines of one Affinity paragraph: no space between them, and the first-line
             // indent only on its first.
@@ -1036,7 +1036,7 @@ impl Builder {
                 first_runs.get(i).and_then(|r| obj.runs.get(*r)).map_or(("", ""), |r| (r.style.font_family.as_str(), r.style.font_style.as_str()));
             let gap = *gaps.entry((family, style)).or_insert_with(|| line_gap(family, style));
             let ratio = (1.0 + gap) * f.auto_leading;
-            // Affinity documents use tiny factors for spacer paragraphs (0.15 of a line); VectorCraft
+            // Affinity documents use tiny factors for spacer paragraphs (0.15 of a line); Livi Pen
             // takes 0–500 %.
             if ratio.is_finite() && (0.01..=5.0).contains(&ratio) {
                 ps.justification.auto_leading = ratio * 100.0;
@@ -1065,14 +1065,14 @@ impl Builder {
         }
         // A family/weight pair cannot identify width variants such as Arial Narrow.
         // Resolve a known PostScript identity to the exact installed family and style.
-        if let Some((family, face_style)) = vectorcraft_text::FontDb::global().by_postscript_name(&r.postscript) {
+        if let Some((family, face_style)) = livipen_text::FontDb::global().by_postscript_name(&r.postscript) {
             style.font_family = family;
             style.font_style = face_style;
         } else {
             style.font_style = font_style(r.weight, r.italic);
         }
         style.features = r.features.clone();
-        if r.features.iter().any(|feature| !vectorcraft_text::OtFeatures::known_tag(feature)) {
+        if r.features.iter().any(|feature| !livipen_text::OtFeatures::known_tag(feature)) {
             self.warn("unsupported text OpenType features (retained but not rendered)");
         }
         style.all_caps = r.all_caps;
@@ -1106,7 +1106,7 @@ impl Builder {
         style
     }
 
-    /// A table: its cells as area type and the lines on their edges, as VectorCraft has no
+    /// A table: its cells as area type and the lines on their edges, as Livi Pen has no
     /// tables.
     fn table(&mut self, t: &af::Table, to_doc: Affine) -> Vec<Arc<Node>> {
         let mut out = Vec::new();
@@ -1144,7 +1144,7 @@ impl Builder {
             let dy = place_cell(&mut obj, rect.width(), rect.height());
             obj.xf = p.place * Affine::translate(rect.origin().to_vec2() + Vec2::new(0.0, dy));
             // A cell's text never vanishes for want of a line's height.
-            vectorcraft_text::fit_first_line(vectorcraft_text::FontDb::global(), &mut obj);
+            livipen_text::fit_first_line(livipen_text::FontDb::global(), &mut obj);
             let alpha = self.text_alpha(&cell.runs);
             let mut n = Node::new(self.doc.alloc_id(), NodeKind::Text(Box::new(obj)));
             n.opacity = alpha;
@@ -1205,7 +1205,7 @@ impl Builder {
         }
         if px.iter().all(|p| p[4] == 255) {
             let inks = px.iter().flat_map(|p| [p[0], p[1], p[2], p[3]]).collect();
-            if let Some(blob) = vectorcraft_doc::cmyk::Inks::new(width, height, inks).and_then(|i| vectorcraft_doc::ImageBlob::cmyk_tiff(&i)) {
+            if let Some(blob) = livipen_doc::cmyk::Inks::new(width, height, inks).and_then(|i| livipen_doc::ImageBlob::cmyk_tiff(&i)) {
                 return Some(Arc::unwrap_or_clone(blob.bytes));
             }
         }
@@ -1213,7 +1213,7 @@ impl Builder {
         let lut = self
             .working_cmyk
             .get_or_insert_with(|| {
-                Arc::new(vectorcraft_color::cms::CmykLut::build(|[c, m, y, k]| {
+                Arc::new(livipen_color::cms::CmykLut::build(|[c, m, y, k]| {
                     let [r, g, b] = Color::cmyk(c, m, y, k).to_rgb();
                     [r, g, b, 0.0]
                 }))
@@ -1232,8 +1232,8 @@ impl Builder {
     /// The document's CMYK profile as a table from ink amounts to sRGB (relative colorimetric,
     /// with black-point compensation, as Affinity's pixel layers convert), made once; `None` when
     /// the document embeds none, or not one that converts.
-    fn document_cmyk(&mut self) -> Option<Arc<vectorcraft_color::cms::CmykLut>> {
-        use vectorcraft_color::cms::{self, CmykLut, IccProfile, Intent};
+    fn document_cmyk(&mut self) -> Option<Arc<livipen_color::cms::CmykLut>> {
+        use livipen_color::cms::{self, CmykLut, IccProfile, Intent};
         if let Some(lut) = &self.cmyk_lut {
             return lut.clone();
         }
@@ -1353,7 +1353,7 @@ fn master_prefix(index: usize) -> String {
 /// A table cell's text `w` × `h` at the origin, placed as Affinity places it. Affinity aligns the
 /// block from the first line's capitals' tops to the last baseline in the cell, and draws it even
 /// where it doesn't fit (centred cells measured on a document's thumbnail: two lines in a cell
-/// shorter than them reach out of it at both ends). VectorCraft aligns the block down to the last
+/// shorter than them reach out of it at both ends). Livi Pen aligns the block down to the last
 /// line's descenders and keeps lines inside the frame: the frame moves by what this returns (down
 /// the cell) and grows where the lines need more room.
 fn place_cell(obj: &mut TextObject, w: f64, h: f64) -> f64 {
@@ -1365,7 +1365,7 @@ fn place_cell(obj: &mut TextObject, w: f64, h: f64) -> f64 {
     let mut tall = obj.clone();
     tall.area.vertical_align = VerticalAlign::Top;
     tall.kind = TextKind::Area { frame: shapes::rectangle(Rect::new(0.0, 0.0, w, h * 4.0 + 10_000.0)) };
-    let lines = vectorcraft_text::layout(vectorcraft_text::FontDb::global(), &tall).lines;
+    let lines = livipen_text::layout(livipen_text::FontDb::global(), &tall).lines;
     let Some(last) = lines.iter().rfind(|l| l.region == 0) else { return 0.0 };
     let (baseline, descent) = (last.baseline, last.descent);
     if !(baseline.is_finite() && descent.is_finite() && h.is_finite()) {
@@ -1374,26 +1374,26 @@ fn place_cell(obj: &mut TextObject, w: f64, h: f64) -> f64 {
     // (A little more than the lines need, for the rounding of the layout.)
     let frame = h.max(baseline + descent + 0.05);
     obj.kind = TextKind::Area { frame: shapes::rectangle(Rect::new(0.0, 0.0, w, frame)) };
-    // Where Affinity has the block's top, less where VectorCraft puts it in the frame.
+    // Where Affinity has the block's top, less where Livi Pen puts it in the frame.
     (h - baseline) * share - (frame - baseline - descent) * share
 }
 
 /// Area type `w` × `h` at the origin whose lines don't all fit. Affinity shows each line whose
-/// baseline is inside the frame, its descenders hanging out of it; VectorCraft's area type leaves
+/// baseline is inside the frame, its descenders hanging out of it; Livi Pen's area type leaves
 /// such a line out. The frame is made taller, from its top, by what those lines need. Whether it was.
 fn fit_lines(obj: &mut TextObject, w: f64, h: f64) -> bool {
-    let db = vectorcraft_text::FontDb::global();
+    let db = livipen_text::FontDb::global();
     if !(w > 0.0 && h > 0.0 && h.is_finite()) {
         return false;
     }
-    let first = vectorcraft_text::layout(db, obj);
+    let first = livipen_text::layout(db, obj);
     if !first.overflow {
         return false;
     }
     // Where the lines go in a frame with room for all of them.
     let mut tall = obj.clone();
     tall.kind = TextKind::Area { frame: shapes::rectangle(Rect::new(0.0, 0.0, w, h * 4.0 + 10_000.0)) };
-    let need = vectorcraft_text::layout(db, &tall)
+    let need = livipen_text::layout(db, &tall)
         .lines
         .iter()
         .filter(|l| l.region == 0 && l.baseline <= h + 1e-6)
@@ -1407,7 +1407,7 @@ fn fit_lines(obj: &mut TextObject, w: f64, h: f64) -> bool {
     // (A little more than they need, for the rounding of the layout.)
     let short = std::mem::replace(&mut obj.kind, TextKind::Area { frame: shapes::rectangle(Rect::new(0.0, 0.0, w, need + 0.05)) });
     // Something else keeps the lines out: as the source has it.
-    if vectorcraft_text::layout(db, obj).lines.len() <= before {
+    if livipen_text::layout(db, obj).lines.len() <= before {
         obj.kind = short;
         return false;
     }
@@ -1433,7 +1433,7 @@ fn share(j: Justify) -> f64 {
 
 /// Artistic text whose paragraphs are aligned differently. Affinity aligns each line within the
 /// width of the longest, and places that block at the anchor by the text's own alignment (its
-/// first paragraph's); VectorCraft's point type aligns each line on the anchor. Indents move the
+/// first paragraph's); Livi Pen's point type aligns each line on the anchor. Indents move the
 /// lines to where Affinity has them and keep their alignment: a centred line centres between its
 /// indents and a right-aligned one ends at its right indent, whatever its width.
 fn align_lines(obj: &mut TextObject) {
@@ -1441,7 +1441,7 @@ fn align_lines(obj: &mut TextObject) {
     if obj.paras.iter().all(|p| share(p.justify) == block) {
         return;
     }
-    let lines = vectorcraft_text::layout(vectorcraft_text::FontDb::global(), obj).lines;
+    let lines = livipen_text::layout(livipen_text::FontDb::global(), obj).lines;
     let w = lines.iter().map(|l| l.x1 - l.x0).filter(|w| w.is_finite()).fold(0.0, f64::max);
     if !(w > 0.0 && w < 1e6) {
         return;
@@ -1476,13 +1476,13 @@ fn justify(a: AfAlign) -> Justify {
     }
 }
 
-/// A font's line gap in em, as VectorCraft will set it (the installed face, or the fallback for
+/// A font's line gap in em, as Livi Pen will set it (the installed face, or the fallback for
 /// a missing one); 0 when no font is loaded.
 fn line_gap(family: &str, style: &str) -> f64 {
     let defaults = CharStyle::default();
     let family = if family.is_empty() { defaults.font_family.as_str() } else { family };
     let style = if style.is_empty() { defaults.font_style.as_str() } else { style };
-    let Some(face) = vectorcraft_text::FontDb::global().face(family, style) else { return 0.0 };
+    let Some(face) = livipen_text::FontDb::global().face(family, style) else { return 0.0 };
     let upem = face.units_per_em();
     let gap = if upem > 0.0 { face.line_gap() / upem } else { 0.0 };
     if gap.is_finite() { gap.clamp(0.0, 2.0) } else { 0.0 }

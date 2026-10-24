@@ -50,15 +50,15 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use kurbo::{Affine, BezPath, PathEl, Point, Rect};
-use vectorcraft_color::gradient::Gradient;
-use vectorcraft_color::swatch::Swatch;
-use vectorcraft_color::{BlendMode, Paint};
-use vectorcraft_doc::cmyk::Inks;
-use vectorcraft_doc::{
+use livipen_color::gradient::Gradient;
+use livipen_color::swatch::Swatch;
+use livipen_color::{BlendMode, Paint};
+use livipen_doc::cmyk::Inks;
+use livipen_doc::{
     Appearance, AppearanceItem, Artboard, ColorMode, Dash, Document, FillLayer, ImageBlob, ImageObject, Knockout, LayerColor, LineCap, LineJoin,
     LinkInfo, Node, NodeId, NodeKind, OpacityMask, PatternDef, StrokeLayer, Unit,
 };
-use vectorcraft_geom::{FillRule, PathData};
+use livipen_geom::{FillRule, PathData};
 
 use super::super::ate::CANVAS_CENTRE;
 use super::lex::{Lexer, Tok};
@@ -211,7 +211,7 @@ fn artboards_read(data: &[u8]) -> Vec<(String, Rect)> {
 /// How many variables and data sets the variable library of the editing data has: XML nodes
 /// (`/XMLNode`) of the `/Document` dictionary, a `variableSets` element holding `variableSet`s, each
 /// with its `variables` (`variable` elements) and `sampleDataSets` (`sampleDataSet` elements).
-/// VectorCraft doesn't read them.
+/// Livi Pen doesn't read them.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct VariableLibrary {
     pub variables: usize,
@@ -323,7 +323,7 @@ struct GState {
 
 impl Default for GState {
     fn default() -> Self {
-        let black = Paint::solid(vectorcraft_color::Color::BLACK);
+        let black = Paint::solid(livipen_color::Color::BLACK);
         Self {
             fill: black.clone(),
             stroke: black,
@@ -612,7 +612,7 @@ const SKIPPED: &[(&str, &str)] = &[
 
 /// The note for a `/ForeignObject` (non-native art, the content of a placed PDF, which the editor
 /// shows but doesn't edit) whose PDF can't be read.
-pub const NON_NATIVE_ART_UNREAD: &str = "non-native art (a placed PDF's content) that VectorCraft can't read is left out";
+pub const NON_NATIVE_ART_UNREAD: &str = "non-native art (a placed PDF's content) that Livi Pen can't read is left out";
 /// The name of the group a `/ForeignObject`'s art comes in as.
 pub const NON_NATIVE_ART: &str = "Non-native art";
 
@@ -1530,8 +1530,8 @@ impl<'a> Reader<'a> {
             return Ok(());
         }
         let target = self.space().transform_rect_bbox(art_box);
-        let opts = vectorcraft_pdf::ImportOptions { layers: false, ..Default::default() };
-        let read = match vectorcraft_pdf::import_with_report(&pdf, &opts) {
+        let opts = livipen_pdf::ImportOptions { layers: false, ..Default::default() };
+        let read = match livipen_pdf::import_with_report(&pdf, &opts) {
             Ok(r) => r,
             Err(e) => {
                 self.warn(&format!("{NON_NATIVE_ART_UNREAD} ({e})"));
@@ -1539,7 +1539,7 @@ impl<'a> Reader<'a> {
             }
         };
         let mut art: Vec<Node> = read.document.layers.iter().filter_map(|l| l.children()).flatten().map(|n| n.as_ref().clone()).collect();
-        let Some(bbox) = art.iter().fold(None, |acc, n| vectorcraft_geom::union_opt(acc, n.geometric_bounds())) else { return Ok(()) };
+        let Some(bbox) = art.iter().fold(None, |acc, n| livipen_geom::union_opt(acc, n.geometric_bounds())) else { return Ok(()) };
         if bbox.width() <= 0.0 || bbox.height() <= 0.0 {
             return Ok(());
         }
@@ -1701,7 +1701,7 @@ impl<'a> Reader<'a> {
         let at = if n.len() <= 10 { 6 } else { 7 };
         let index = n.get(at).copied().unwrap_or(0.0);
         let rgb = |i: usize| n.get(at + i).map_or(0, |v| v.clamp(0.0, 255.0) as u8);
-        a.color = Some(if (0.0..vectorcraft_doc::LAYER_COLORS.len() as f64).contains(&index) && index.fract() == 0.0 {
+        a.color = Some(if (0.0..livipen_doc::LAYER_COLORS.len() as f64).contains(&index) && index.fract() == 0.0 {
             LayerColor::Preset(index as u8)
         } else {
             LayerColor::Custom([rgb(1), rgb(2), rgb(3)])
@@ -1739,8 +1739,8 @@ impl<'a> Reader<'a> {
         // Registration (`Xs`, `Xz`) says nothing of the document's colour model.
         let registration = matches!(w, "Xs" | "XS" | "Xz" | "XZ");
         match p.color().filter(|_| !registration) {
-            Some(vectorcraft_color::Color::Rgb { .. }) => self.rgb_colors += 1,
-            Some(vectorcraft_color::Color::Cmyk { .. }) => self.cmyk_colors += 1,
+            Some(livipen_color::Color::Rgb { .. }) => self.rgb_colors += 1,
+            Some(livipen_color::Color::Cmyk { .. }) => self.cmyk_colors += 1,
             _ => {}
         }
         if let Some(n) = named {
@@ -2102,12 +2102,12 @@ impl<'a> Reader<'a> {
     fn image_from(&mut self, vals: Vec<V>, data: &[u8]) -> Result<(), String> {
         let space = self.raster.as_ref().and_then(|r| r.space.clone()).unwrap_or_default();
         let Some(m) = vals.iter().find_map(|v| if let V::Arr(a) = v { Some(Self::nums(a)) } else { None }) else {
-            self.warn("an image VectorCraft can't read was left out");
+            self.warn("an image Livi Pen can't read was left out");
             return Ok(());
         };
         let n = Self::nums(&vals);
         let [_, _, _, _, w, h, bits, kind, alpha, _, binary, ..] = n.as_slice() else {
-            self.warn("an image VectorCraft can't read was left out");
+            self.warn("an image Livi Pen can't read was left out");
             return Ok(());
         };
         let (w, h) = (*w as u64, *h as u64);
@@ -2116,7 +2116,7 @@ impl<'a> Reader<'a> {
             return Ok(());
         }
         if w == 0 || h == 0 || ![1.0, 8.0].contains(bits) {
-            self.warn("an image VectorCraft can't read was left out");
+            self.warn("an image Livi Pen can't read was left out");
             return Ok(());
         }
         let channels: usize = match space.as_str() {
@@ -2180,12 +2180,12 @@ impl<'a> Reader<'a> {
             }
         }
         let Some(img) = image::RgbaImage::from_raw(w as u32, h as u32, rgba) else {
-            self.warn("an image VectorCraft can't read was left out");
+            self.warn("an image Livi Pen can't read was left out");
             return Ok(());
         };
         let mut png = vec![];
         if img.write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).is_err() {
-            self.warn("an image VectorCraft can't read was left out");
+            self.warn("an image Livi Pen can't read was left out");
             return Ok(());
         }
         self.add_raster(ImageBlob::new("image/png", png), None, &m, (w as u32, h as u32))
@@ -2199,13 +2199,13 @@ impl<'a> Reader<'a> {
         // downwards, (u, -v): pixels → (u, -v) → art space. Flipping the matrix's result instead
         // gives the same place only when the image isn't rotated (b = c = 0).
         let [a, b, c, d, tx, ty] = m else {
-            self.warn("an image VectorCraft can't read was left out");
+            self.warn("an image Livi Pen can't read was left out");
             return Ok(());
         };
         let to_doc = self.space();
         let xf = to_doc * Affine::new([*a, *b, *c, *d, *tx, *ty]) * FLIP;
         if !xf.as_coeffs().iter().all(|v| v.is_finite()) || xf.determinant().abs() < 1e-12 {
-            self.warn("an image VectorCraft can't read was left out");
+            self.warn("an image Livi Pen can't read was left out");
             return Ok(());
         }
         let mask = alpha.and_then(|a| self.alpha_mask(a, w, h, xf));
@@ -2335,11 +2335,11 @@ impl<'a> Reader<'a> {
     fn finish(mut self) -> Result<Structure, String> {
         if !self.unknown.is_empty() {
             let ops: Vec<String> = self.unknown.iter().map(|o| format!("`{o}`")).collect();
-            self.unsupported.insert(format!("operators VectorCraft doesn't know ({})", ops.join(", ")));
+            self.unsupported.insert(format!("operators Livi Pen doesn't know ({})", ops.join(", ")));
         }
         if !self.unsupported.is_empty() {
             let list: Vec<&str> = self.unsupported.iter().map(String::as_str).collect();
-            return Err(format!("it has {}, which VectorCraft doesn't read from it yet", join_and(&list)));
+            return Err(format!("it has {}, which Livi Pen doesn't read from it yet", join_and(&list)));
         }
         if self.doc.layers.is_empty() {
             return Err("it has no layers".into());
@@ -2384,7 +2384,7 @@ impl<'a> Reader<'a> {
         }
         if self.color_model.unwrap_or(self.cmyk_colors > self.rgb_colors) {
             doc.color_mode = ColorMode::Cmyk;
-            let (swatches, groups) = vectorcraft_color::default_swatches(ColorMode::Cmyk.model());
+            let (swatches, groups) = livipen_color::default_swatches(ColorMode::Cmyk.model());
             (doc.swatches, doc.swatch_groups) = (swatches.into(), groups.into());
         }
         if let Some(u) = self.ruler_units.and_then(ruler_unit) {
@@ -2398,7 +2398,7 @@ impl<'a> Reader<'a> {
                 let (paint, global, spot) = match e.cell {
                     Cell::Color { color, global, spot } => (Paint::solid(color), global, spot),
                     Cell::Gradient(g) => {
-                        let mut gp = vectorcraft_color::gradient::GradientPaint::new(self.gradients.get(&g)?.clone());
+                        let mut gp = livipen_color::gradient::GradientPaint::new(self.gradients.get(&g)?.clone());
                         gp.swatch = Some(e.name.clone());
                         (Paint::Gradient(Box::new(gp)), false, false)
                     }
@@ -2414,7 +2414,7 @@ impl<'a> Reader<'a> {
             let groups: Vec<_> = palette
                 .groups
                 .into_iter()
-                .map(|(name, s)| vectorcraft_color::swatch::SwatchGroup { name, swatches: s.into_iter().filter_map(swatch).collect() })
+                .map(|(name, s)| livipen_color::swatch::SwatchGroup { name, swatches: s.into_iter().filter_map(swatch).collect() })
                 .collect();
             (doc.swatches, doc.swatch_groups) = (swatches.into(), groups.into());
         }
@@ -2615,7 +2615,7 @@ fn styled(object: &Node, look: &Node, st: &super::style::ArtStyle, paints: &Styl
                     (None, 1, Some(own)) => own.paint.clone(),
                     _ => {
                         let gradient = name.as_ref().and_then(|n| paints.gradients.get(n))?;
-                        let mut g = vectorcraft_color::gradient::GradientPaint::new(gradient.clone());
+                        let mut g = livipen_color::gradient::GradientPaint::new(gradient.clone());
                         // Fitted to the object's bounds at its angle (art space turns counter-clockwise, as the document's angles do).
                         g.angle = *angle;
                         Paint::Gradient(Box::new(g))
@@ -2759,7 +2759,7 @@ fn two(v: &str) -> Option<(f64, f64)> {
 /// A CMYK sample in RGB.
 fn cmyk_rgb([c, m, y, k]: [u8; 4]) -> [u8; 3] {
     let f = |v: u8| f32::from(v) / 255.0;
-    let rgb = vectorcraft_color::Color::cmyk(f(c), f(m), f(y), f(k)).to_rgba8(1.0);
+    let rgb = livipen_color::Color::cmyk(f(c), f(m), f(y), f(k)).to_rgba8(1.0);
     [rgb[0], rgb[1], rgb[2]]
 }
 

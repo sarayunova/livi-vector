@@ -501,7 +501,7 @@ pub fn mono(size: f32) -> FontId {
 
 /// Installs the interface's fonts and binds the families the panels and dialogs draw in
 /// ([`FONT_UI`], [`FONT_UI_SEMIBOLD`], [`FONT_MONO`]). egui panics drawing text in a family no font
-/// is bound to, so every context that shows them needs this once: [`crate::VectorcraftApp::logic`]
+/// is bound to, so every context that shows them needs this once: [`crate::LiviPenApp::logic`]
 /// calls it on its first frame, and an embedder that draws the panels or dialogs without it calls
 /// it when it makes the context. It replaces the context's font definitions: add other fonts after
 /// it, or keep these families in definitions of one's own. Without the `interface-fonts` feature
@@ -550,7 +550,7 @@ fn interface_faces(_fonts: &mut FontDefinitions) -> (Vec<&'static str>, Vec<&'st
 }
 
 /// The egui name of a craft-fonts face.
-pub(crate) fn craft_font_name(f: &vectorcraft_text::CraftFont) -> String {
+pub(crate) fn craft_font_name(f: &livipen_text::CraftFont) -> String {
     format!("craft-fonts {} {}", f.family, f.style)
 }
 
@@ -559,13 +559,13 @@ pub(crate) fn craft_font_name(f: &vectorcraft_text::CraftFont) -> String {
 /// adds: BIZ UDPGothic first (bold first in the semibold family), then the Mincho faces, then Noto
 /// Sans Georgian.
 fn add_craft_fonts(fonts: &mut FontDefinitions) {
-    for f in vectorcraft_text::CRAFT_FONTS.iter().filter(|f| f.is_japanese() || f.is_georgian()) {
+    for f in livipen_text::CRAFT_FONTS.iter().filter(|f| f.is_japanese() || f.is_georgian()) {
         fonts.font_data.insert(craft_font_name(f), Arc::new(FontData::from_static(f.bytes)));
     }
     for (family, stack) in fonts.families.iter_mut() {
         let bold = *family == FontFamily::Name(FONT_UI_SEMIBOLD.into());
-        stack.extend(vectorcraft_text::craft_fonts::japanese_ui_fonts(bold).into_iter().map(craft_font_name));
-        stack.extend(vectorcraft_text::craft_fonts::georgian_ui_fonts().into_iter().map(craft_font_name));
+        stack.extend(livipen_text::craft_fonts::japanese_ui_fonts(bold).into_iter().map(craft_font_name));
+        stack.extend(livipen_text::craft_fonts::georgian_ui_fonts().into_iter().map(craft_font_name));
     }
 }
 

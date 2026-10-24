@@ -1,15 +1,15 @@
 //! The menu bar (Illustrator's menu tree) and UI-level commands.
 //!
-//! Items bound to a command id run through [`VectorcraftApp::run`]. Items not implemented yet are
+//! Items bound to a command id run through [`LiviPenApp::run`]. Items not implemented yet are
 //! listed (disabled, with their shortcut) so the full surface is visible and discoverable; the
 //! parity tracker drives them to "done".
 
 use serde::Serialize;
 use serde_json::{Value, json};
 
-use vectorcraft_engine::cmd::fileio::SaveMode;
+use livipen_engine::cmd::fileio::SaveMode;
 
-use crate::VectorcraftApp;
+use crate::LiviPenApp;
 use crate::io;
 use crate::panels::character::Face;
 use crate::state::{DockTab, next_zoom};
@@ -183,7 +183,7 @@ pub const UI_COMMANDS: &[(&str, &str, &str, &str)] = &[
         "shortcuts.preset",
         "Keyboard Shortcut Set",
         "",
-        "{name: \"VectorCraft Defaults\" | \"Classic Defaults\"} (names of earlier versions are accepted)",
+        "{name: \"Livi Pen Defaults\" | \"Classic Defaults\"} (names of earlier versions are accepted)",
     ),
     ("shortcuts.export", "Export Keyboard Shortcuts…", "", "{path?}"),
     ("shortcuts.import", "Import Keyboard Shortcuts…", "", "{path? | data?}"),
@@ -553,9 +553,9 @@ pub const UI_COMMANDS: &[(&str, &str, &str, &str)] = &[
         "",
         "{} opens the Save PDF dialog; with params = document.exportPdf options written to path (asked when missing; viewAfterSaving opens the file) → {path, bytes, warnings}",
     ),
-    ("help.about", "About VectorCraft", "", "{}"),
+    ("help.about", "About Livi Pen", "", "{}"),
     ("help.commandPalette", "Search Commands…", "Cmd+Shift+/", "{}"),
-    ("app.quit", "Quit VectorCraft", "Cmd+Q", "{}"),
+    ("app.quit", "Quit Livi Pen", "Cmd+Q", "{}"),
     (
         "ui.swatchOptions",
         "Swatch Options…",
@@ -919,7 +919,7 @@ pub const UI_COMMANDS: &[(&str, &str, &str, &str)] = &[
         "ui.pdfPresetDialog",
         "PDF Preset",
         "",
-        "{name?: a saved preset to edit | preset?: the preset a new one starts from (default VectorCraft Default)} open the preset editor (dialog `pdfPreset`: the Save PDF dialog's option fields plus `name` and `description`); OK runs pdf.preset.save and returns to PDF Presets",
+        "{name?: a saved preset to edit | preset?: the preset a new one starts from (default Livi Pen Default)} open the preset editor (dialog `pdfPreset`: the Save PDF dialog's option fields plus `name` and `description`); OK runs pdf.preset.save and returns to PDF Presets",
     ),
     ("file.openRecent11", "Open Recent File 11", "", "{}"),
     ("file.openRecent12", "Open Recent File 12", "", "{}"),
@@ -1246,7 +1246,7 @@ pub(crate) fn opt_bool(p: &Value, key: &str) -> Result<Option<bool>, String> {
 /// `params` has only keys the params description of engine command `id` names, or the parameter
 /// error naming the one it doesn't (#1442). The UI's own commands aren't checked yet: their
 /// descriptions haven't been audited against what they read.
-pub fn check_params(session: &vectorcraft_engine::Session, id: &str, params: &Value) -> Result<(), String> {
+pub fn check_params(session: &livipen_engine::Session, id: &str, params: &Value) -> Result<(), String> {
     if UI_COMMANDS.iter().any(|c| c.0 == id) {
         return Ok(());
     }
@@ -1256,7 +1256,7 @@ pub fn check_params(session: &vectorcraft_engine::Session, id: &str, params: &Va
 /// Runs `id` when the UI runs it itself: one of [`UI_COMMANDS`], or an engine command the UI
 /// handles its own way (a Window menu panel item that toggles, …) → `None` to leave it to the
 /// engine.
-pub fn run_ui_command(app: &mut VectorcraftApp, id: &str, p: &Value) -> Option<Result<Value, String>> {
+pub fn run_ui_command(app: &mut LiviPenApp, id: &str, p: &Value) -> Option<Result<Value, String>> {
     // The Window menu's panel items toggle like its other checked items (#2361); the panel's
     // other ways in (shortcuts, Show Properties Panel, a tool's double-click) only show it.
     if id == "window.panel" && p.get("toggle").and_then(Value::as_bool) == Some(true) && checked(app, id, p) == Some(true) {
@@ -1354,7 +1354,7 @@ pub fn run_ui_command(app: &mut VectorcraftApp, id: &str, p: &Value) -> Option<R
         }
         "file.exportForScreens" => io::export_for_screens(app, p.clone()),
         "file.export.png" if s("path").is_none() => io::target_path(app, None, "png").and_then(|path| {
-            let f = vectorcraft_engine::cmd::fileio::format("png").ok_or("no PNG encoder")?;
+            let f = livipen_engine::cmd::fileio::format("png").ok_or("no PNG encoder")?;
             let mut params = if p.is_object() { p.clone() } else { json!({}) };
             params["format"] = json!("png");
             params["path"] = json!(path);
@@ -1428,7 +1428,7 @@ pub fn run_ui_command(app: &mut VectorcraftApp, id: &str, p: &Value) -> Option<R
         "view.livePaintGaps" => flag(&mut app.ui.view.live_paint_gaps),
         "effect.last" => match app.last_effect.clone() {
             Some((e, params)) => {
-                let label = vectorcraft_effects::effect_info(&e).map(|i| i.label.trim_end_matches('…').to_string()).unwrap_or_else(|| e.clone());
+                let label = livipen_effects::effect_info(&e).map(|i| i.label.trim_end_matches('…').to_string()).unwrap_or_else(|| e.clone());
                 let mut fields = params.as_object().cloned().unwrap_or_default();
                 fields.insert("__effect".into(), json!(e));
                 fields.insert("__label".into(), json!(label));
@@ -1467,7 +1467,7 @@ pub fn run_ui_command(app: &mut VectorcraftApp, id: &str, p: &Value) -> Option<R
                         || d.selection
                             .objects
                             .iter()
-                            .any(|id| matches!(d.doc.node(*id).map(|n| &n.kind), Some(vectorcraft_doc::NodeKind::Path { guide: true, .. })))
+                            .any(|id| matches!(d.doc.node(*id).map(|n| &n.kind), Some(livipen_doc::NodeKind::Path { guide: true, .. })))
                 });
             if hidden_selection {
                 // Deselecting a document that is open cannot fail.
@@ -1499,7 +1499,7 @@ pub fn run_ui_command(app: &mut VectorcraftApp, id: &str, p: &Value) -> Option<R
             let print = app.session.prefs.display_print_size;
             let z = crate::state::zoom_from_display_percent(p.get("zoom").and_then(Value::as_f64).unwrap_or(100.0), print);
             let center =
-                p.get("center").and_then(Value::as_array).and_then(|a| Some(vectorcraft_geom::Point::new(a.first()?.as_f64()?, a.get(1)?.as_f64()?)));
+                p.get("center").and_then(Value::as_array).and_then(|a| Some(livipen_geom::Point::new(a.first()?.as_f64()?, a.get(1)?.as_f64()?)));
             match app.view_mut() {
                 Some(v) => {
                     v.zoom = z.clamp(0.0313, 640.0);
@@ -1540,7 +1540,7 @@ pub fn run_ui_command(app: &mut VectorcraftApp, id: &str, p: &Value) -> Option<R
             };
             match app.view_mut() {
                 Some(v) => {
-                    v.rotation = vectorcraft_geom::normalize_deg(angle);
+                    v.rotation = livipen_geom::normalize_deg(angle);
                     Ok(json!({ "angle": v.rotation }))
                 }
                 None => Err("no document".into()),
@@ -1553,7 +1553,7 @@ pub fn run_ui_command(app: &mut VectorcraftApp, id: &str, p: &Value) -> Option<R
             if st.selection.objects.is_empty() {
                 return Some(Err("nothing selected".into()));
             }
-            let angle = vectorcraft_geom::normalize_deg(st.doc.bbox_angle(&st.selection.objects));
+            let angle = livipen_geom::normalize_deg(st.doc.bbox_angle(&st.selection.objects));
             match app.view_mut() {
                 Some(v) => {
                     v.rotation = angle;
@@ -1690,7 +1690,7 @@ pub fn run_ui_command(app: &mut VectorcraftApp, id: &str, p: &Value) -> Option<R
         },
         "window.newWindow" => Err("New Window isn't available yet: a document opens in one window".into()),
         "tool.select" => match s("tool") {
-            Some(t) if vectorcraft_tools::tool_info(&t).is_some() => {
+            Some(t) if livipen_tools::tool_info(&t).is_some() => {
                 app.select_tool(&t);
                 Ok(json!({"tool": app.session.tool_id()}))
             }
@@ -1702,7 +1702,7 @@ pub fn run_ui_command(app: &mut VectorcraftApp, id: &str, p: &Value) -> Option<R
         "ui.recolorDialog" => crate::dialogs::recolor::open(app, p),
         "ui.cropImage" if !selected_image(app, |_| true) => Err("select an image".into()),
         "ui.cropImage" => {
-            app.select_tool(vectorcraft_tools::cropimage::ID);
+            app.select_tool(livipen_tools::cropimage::ID);
             Ok(json!({"tool": app.session.tool_id()}))
         }
         "ui.paramDialog" => {
@@ -1949,7 +1949,7 @@ pub fn run_ui_command(app: &mut VectorcraftApp, id: &str, p: &Value) -> Option<R
 
 /// `view.goToArtboard`: make artboard `index` (a number, or first / previous / next / last from
 /// the current one) active, synchronizing the Artboard tool when in use, and fit it in the window.
-fn go_to_artboard(app: &mut VectorcraftApp, p: &Value) -> Result<Value, String> {
+fn go_to_artboard(app: &mut LiviPenApp, p: &Value) -> Result<Value, String> {
     let n = app.session.active().map(|d| d.doc.artboards.len()).ok_or("no document open")?;
     let last = n.checked_sub(1).ok_or("the document has no artboards")?;
     let current = app.view().map_or(0, |v| v.artboard).min(last);
@@ -1971,7 +1971,7 @@ fn go_to_artboard(app: &mut VectorcraftApp, p: &Value) -> Result<Value, String> 
 }
 
 /// Checked state for toggle items.
-pub fn checked(app: &VectorcraftApp, id: &str, p: &Value) -> Option<bool> {
+pub fn checked(app: &LiviPenApp, id: &str, p: &Value) -> Option<bool> {
     if id == "app.language" {
         let lang = p.get("lang").and_then(Value::as_str).unwrap_or("");
         let pref = app.session.prefs.interface_language.as_str();
@@ -1992,8 +1992,8 @@ pub fn checked(app: &VectorcraftApp, id: &str, p: &Value) -> Option<bool> {
         for n in st.selection.objects.iter().filter_map(|id| st.doc.node(*id)) {
             n.walk(&mut |c| {
                 if found.is_none()
-                    && let vectorcraft_engine::doc::NodeKind::Text(t) = &c.kind
-                    && (!onpath || matches!(t.kind, vectorcraft_engine::doc::TextKind::OnPath { .. }))
+                    && let livipen_engine::doc::NodeKind::Text(t) = &c.kind
+                    && (!onpath || matches!(t.kind, livipen_engine::doc::TextKind::OnPath { .. }))
                 {
                     found = Some(t);
                 }
@@ -2055,30 +2055,28 @@ pub fn checked(app: &VectorcraftApp, id: &str, p: &Value) -> Option<bool> {
         "window.brightness" => p.get("brightness").and_then(Value::as_str).and_then(Brightness::parse) == Some(app.ui.brightness),
         "view.slices.lock" => app.session.slices_locked(),
         "object.slice.clipToArtboard" => app.session.active().is_some_and(|d| d.doc.slices_clip_to_artboard),
-        "view.proofColors" => vectorcraft_render::proof::view().proof_colors,
-        "view.overprintPreview" => vectorcraft_render::proof::view().overprint,
-        "view.proofSetup" => p.get("target").and_then(Value::as_str) == Some(vectorcraft_render::proof::view().setup.target.id().as_str()),
+        "view.proofColors" => livipen_render::proof::view().proof_colors,
+        "view.overprintPreview" => livipen_render::proof::view().overprint,
+        "view.proofSetup" => p.get("target").and_then(Value::as_str) == Some(livipen_render::proof::view().setup.target.id().as_str()),
         "perspective.grid.snap" => perspective_grid(app).is_some_and(|g| g.snap),
         "perspective.grid.lockStation" => perspective_grid(app).is_some_and(|g| g.lock_station),
         "file.documentColorMode" | "object.convertDocumentColorMode" => {
-            let cmyk = app.session.active().is_some_and(|d| d.doc.color_mode == vectorcraft_engine::doc::ColorMode::Cmyk);
+            let cmyk = app.session.active().is_some_and(|d| d.doc.color_mode == livipen_engine::doc::ColorMode::Cmyk);
             p.get("mode").and_then(Value::as_str) == Some(if cmyk { "cmyk" } else { "rgb" })
         }
         // The ruler context menu lists the document units, the current one checked.
-        "document.setUnits" => {
-            p.get("units").and_then(Value::as_str).and_then(vectorcraft_engine::doc::Unit::named) == Some(app.session.general_unit())
-        }
+        "document.setUnits" => p.get("units").and_then(Value::as_str).and_then(livipen_engine::doc::Unit::named) == Some(app.session.general_unit()),
         _ => return None,
     })
 }
 
 /// The active document's perspective grid (View → Perspective Grid toggles).
-fn perspective_grid(app: &VectorcraftApp) -> Option<vectorcraft_tools::distort::perspective::PerspectiveGrid> {
-    app.session.active().map(|d| vectorcraft_tools::distort::perspective::PerspectiveGrid::current(&d.doc))
+fn perspective_grid(app: &LiviPenApp) -> Option<livipen_tools::distort::perspective::PerspectiveGrid> {
+    app.session.active().map(|d| livipen_tools::distort::perspective::PerspectiveGrid::current(&d.doc))
 }
 
 /// Label for toggles whose text flips (Outline/Preview, Hide/Show …).
-pub fn dynamic_label(app: &VectorcraftApp, id: &str, label: &str) -> String {
+pub fn dynamic_label(app: &LiviPenApp, id: &str, label: &str) -> String {
     let v = &app.ui.view;
     match id {
         "view.outline" => if v.outline { "Preview" } else { "Outline" }.into(),
@@ -2091,7 +2089,7 @@ pub fn dynamic_label(app: &VectorcraftApp, id: &str, label: &str) -> String {
         "view.gradientAnnotator" => if v.gradient_annotator { "Hide Gradient Annotator" } else { "Show Gradient Annotator" }.into(),
         "view.livePaintGaps" => if v.live_paint_gaps { "Hide Live Paint Gaps" } else { "Show Live Paint Gaps" }.into(),
         "effect.last" => match &app.last_effect {
-            Some((e, _)) => format!("Last Effect: {}", vectorcraft_effects::effect_info(e).map(|i| i.label).unwrap_or(e.as_str())),
+            Some((e, _)) => format!("Last Effect: {}", livipen_effects::effect_info(e).map(|i| i.label).unwrap_or(e.as_str())),
             None => label.into(),
         },
         id if id.starts_with("type.recentFont") => {
@@ -2106,7 +2104,7 @@ pub fn dynamic_label(app: &VectorcraftApp, id: &str, label: &str) -> String {
         "view.artboards" => if v.artboards { "Hide Artboards" } else { "Show Artboards" }.into(),
         "view.rulers" => if v.rulers { "Hide Rulers" } else { "Show Rulers" }.into(),
         "view.videoRulers" => if v.video_rulers && v.rulers { "Hide Video Rulers" } else { "Show Video Rulers" }.into(),
-        "view.globalRulers" => if app.session.active().is_some_and(|d| d.doc.rulers == vectorcraft_doc::RulerMode::Global) {
+        "view.globalRulers" => if app.session.active().is_some_and(|d| d.doc.rulers == livipen_doc::RulerMode::Global) {
             "Change to Artboard Rulers"
         } else {
             "Change to Global Rulers"
@@ -2130,8 +2128,8 @@ pub fn dynamic_label(app: &VectorcraftApp, id: &str, label: &str) -> String {
                 st.selection
                     .objects
                     .first()
-                    .and_then(|id| vectorcraft_doc::live::envelope_of(&st.doc, *id))
-                    .is_some_and(|e| matches!(e.kind, vectorcraft_doc::NodeKind::Envelope { editing: true, .. }))
+                    .and_then(|id| livipen_doc::live::envelope_of(&st.doc, *id))
+                    .is_some_and(|e| matches!(e.kind, livipen_doc::NodeKind::Envelope { editing: true, .. }))
             });
             if editing { "Edit Envelope" } else { "Edit Contents" }.into()
         }
@@ -2177,21 +2175,21 @@ fn shows_a_name(id: &str, label: &str) -> bool {
         || saved_selection_slot(id).is_some()
         || matches!(id, "text.setStyle" | "plugin.dialog")
         || (id == "window.workspace" && !crate::workspaces::is_builtin(label))
-        || (matches!(id, "effect.apply" | "effect.dialog") && vectorcraft_effects::plugin_effects().iter().any(|e| e.label == label))
+        || (matches!(id, "effect.apply" | "effect.dialog") && livipen_effects::plugin_effects().iter().any(|e| e.label == label))
 }
 
 /// Does the menu item `id` with `params` list an installed plug-in (an Object › Plug-ins filter or
 /// an Effect › Plug-ins effect), by the plug-in's own name? Told by the item itself, so it holds
 /// while another thread installs or removes plug-ins.
 pub(crate) fn lists_plugin(id: &str, params: &Value) -> bool {
-    id == "plugin.dialog" || params.get("effect").and_then(Value::as_str).and_then(vectorcraft_plugins::effect::plugin_id).is_some()
+    id == "plugin.dialog" || params.get("effect").and_then(Value::as_str).and_then(livipen_plugins::effect::plugin_id).is_some()
 }
 
 /// The label of a menu item as drawn: [`dynamic_label`] in the UI language. Labels assembled
 /// around a name (Undo *Move*, Reset *Essentials*, Last Effect: *Drop Shadow*) are translated as
 /// templates so the name can move; names that are user data (files, views, fonts, custom
 /// workspaces, plug-ins: [`shows_a_name`]) pass through.
-pub fn display_label(app: &VectorcraftApp, id: &str, label: &str) -> String {
+pub fn display_label(app: &LiviPenApp, id: &str, label: &str) -> String {
     let lang = crate::i18n::current();
     let fmt = crate::i18n::fmt;
     match id {
@@ -2211,7 +2209,7 @@ pub fn display_label(app: &VectorcraftApp, id: &str, label: &str) -> String {
         }
         "effect.last" => match &app.last_effect {
             Some((e, _)) => {
-                let name = vectorcraft_effects::effect_info(e).map(|i| i.label).unwrap_or(e.as_str());
+                let name = livipen_effects::effect_info(e).map(|i| i.label).unwrap_or(e.as_str());
                 fmt(tl!("Last Effect: {name}"), &[("name", crate::i18n::tr_id(lang, e, name))])
             }
             None => crate::i18n::tr_id(lang, id, label).to_string(),
@@ -2239,12 +2237,12 @@ fn effect_item_label(id: &str, p: &Value) -> Option<String> {
 /// The label of an item of the canvas context menu's Unlock submenu (`layer.setProps` with one id
 /// and `locked: false`): the object's name as the Layers panel shows it in `lang`
 /// ([`crate::panels::layers::shown_name`]). `None` for any other item, or when the object is gone.
-fn unlock_item_label(app: &VectorcraftApp, id: &str, p: &Value, lang: crate::i18n::Lang) -> Option<String> {
+fn unlock_item_label(app: &LiviPenApp, id: &str, p: &Value, lang: crate::i18n::Lang) -> Option<String> {
     if id != "layer.setProps" || p.get("locked") != Some(&Value::Bool(false)) {
         return None;
     }
     let [one] = p.get("ids")?.as_array()?.as_slice() else { return None };
-    let n = app.session.active()?.doc.node(vectorcraft_doc::NodeId(one.as_u64()?))?;
+    let n = app.session.active()?.doc.node(livipen_doc::NodeId(one.as_u64()?))?;
     Some(crate::panels::layers::shown_name(app, n, lang))
 }
 
@@ -2262,7 +2260,7 @@ fn hidden_when_disabled(id: &str) -> bool {
 
 /// Menu items another item stands in for right now: Envelope Distort's Reset with Warp and Reset
 /// with Mesh take the place of Make with Warp and Make with Mesh while an envelope is selected.
-fn swapped_out(app: &VectorcraftApp, id: &str) -> bool {
+fn swapped_out(app: &LiviPenApp, id: &str) -> bool {
     let reset = match id {
         "object.envelope.makeWithWarp" | "object.envelope.makeWithMesh" => false,
         "object.envelope.resetWithWarp" | "object.envelope.resetWithMesh" => true,
@@ -2306,13 +2304,13 @@ const RECENT_IDS: [&str; io::MAX_RECENT_FILES] = [
 ];
 
 /// The saved selection a `select.recallN` slot names (none past the document's last).
-fn saved_selection_name(app: &VectorcraftApp, id: &str) -> Option<String> {
+fn saved_selection_name(app: &LiviPenApp, id: &str) -> Option<String> {
     let n = saved_selection_slot(id)?.checked_sub(1)?;
     app.session.active()?.doc.saved_selections.get(n).map(|x| x.name.clone())
 }
 
 /// The recent file a `file.openRecentN` slot names (none past the preference's count).
-fn recent_slot<'a>(app: &'a VectorcraftApp, id: &str) -> Option<&'a String> {
+fn recent_slot<'a>(app: &'a LiviPenApp, id: &str) -> Option<&'a String> {
     let n: usize = id.strip_prefix("file.openRecent")?.parse().ok()?;
     io::recent_files(app).get(n.checked_sub(1)?)
 }
@@ -2320,7 +2318,7 @@ fn recent_slot<'a>(app: &'a VectorcraftApp, id: &str) -> Option<&'a String> {
 /// How the menus show item `id` (params `p`) now: (enabled, checked: `Some` for an item that is on
 /// or off), or `None` while they leave it out: an empty slot ([`hidden_when_disabled`]) or an item
 /// another stands in for ([`swapped_out`]).
-pub fn shown_state(app: &VectorcraftApp, id: &str, p: &Value) -> Option<(bool, Option<bool>)> {
+pub fn shown_state(app: &LiviPenApp, id: &str, p: &Value) -> Option<(bool, Option<bool>)> {
     let en = enabled(app, id);
     if (!en && hidden_when_disabled(id)) || swapped_out(app, id) {
         return None;
@@ -2362,7 +2360,7 @@ impl Row<'_> {
 }
 
 /// Item `it` as the menus show it now, or `None` while they leave it out ([`shown_state`]).
-pub fn entry<'a>(app: &VectorcraftApp, it: &'a Item) -> Option<Entry<'a>> {
+pub fn entry<'a>(app: &LiviPenApp, it: &'a Item) -> Option<Entry<'a>> {
     use crate::i18n::t;
     Some(match it {
         Item::Sep => Entry::Sep,
@@ -2396,7 +2394,7 @@ pub fn entry<'a>(app: &VectorcraftApp, it: &'a Item) -> Option<Entry<'a>> {
 /// Changes whenever a plug-in is installed or removed: Object › Plug-ins and Effect › Plug-ins
 /// list them (the command palette's cache follows it).
 pub fn plugin_revision() -> u64 {
-    vectorcraft_plugins::registry::revision()
+    livipen_plugins::registry::revision()
 }
 
 /// View → Perspective Grid → One/Two/Three Point Perspective: the saved-preset slots of each type.
@@ -2425,7 +2423,7 @@ const PERSPECTIVE_SLOTS: [[&str; crate::dialogs::perspective_presets::SLOTS]; 3]
 ];
 
 /// Select → saved selections: the n-th saved selection of the active document.
-const SAVED_SELECTION_IDS: [&str; vectorcraft_engine::doc::SavedSelection::MAX] = [
+const SAVED_SELECTION_IDS: [&str; livipen_engine::doc::SavedSelection::MAX] = [
     "select.recall1",
     "select.recall2",
     "select.recall3",
@@ -2487,7 +2485,7 @@ pub fn shortcut_of(id: &str) -> Option<&'static str> {
 /// tool (its marked text isn't committed yet): Undo/Redo — the native menu takes ⌘Z ahead of the
 /// IME —, the clipboard and the selection.
 /// Clear History also waits: it ends the typing session as Undo does.
-pub(crate) fn waits_for_ime(app: &VectorcraftApp, id: &str) -> bool {
+pub(crate) fn waits_for_ime(app: &LiviPenApp, id: &str) -> bool {
     app.session.tool_composing()
         && (matches!(
             id,
@@ -2498,11 +2496,11 @@ pub(crate) fn waits_for_ime(app: &VectorcraftApp, id: &str) -> bool {
 
 /// Can command `id` run now? An engine command asks the engine, a UI command the app's state;
 /// none that would act on text an input method is still composing.
-pub fn enabled(app: &VectorcraftApp, id: &str) -> bool {
+pub fn enabled(app: &LiviPenApp, id: &str) -> bool {
     if waits_for_ime(app, id) {
         return false;
     }
-    if let Some(c) = vectorcraft_engine::find_command(id) {
+    if let Some(c) = livipen_engine::find_command(id) {
         // The system clipboard's contents can be pasted with an empty internal clipboard.
         return (c.enabled)(&app.session).is_ok() || app.system_paste && id.starts_with("edit.paste");
     }
@@ -2588,20 +2586,20 @@ pub fn enabled(app: &VectorcraftApp, id: &str) -> bool {
 }
 
 /// Is a placed document selected?
-fn selected_placed(app: &VectorcraftApp) -> bool {
+fn selected_placed(app: &LiviPenApp) -> bool {
     app.session.active().is_some_and(|st| {
-        st.selection.objects.iter().any(|id| st.doc.node(*id).is_some_and(|n| matches!(n.kind, vectorcraft_doc::NodeKind::PlacedDocument(_))))
+        st.selection.objects.iter().any(|id| st.doc.node(*id).is_some_and(|n| matches!(n.kind, livipen_doc::NodeKind::PlacedDocument(_))))
     })
 }
 
 /// Is an image `keep` accepts selected?
-fn selected_image(app: &VectorcraftApp, keep: impl Fn(&vectorcraft_doc::ImageObject) -> bool) -> bool {
+fn selected_image(app: &LiviPenApp, keep: impl Fn(&livipen_doc::ImageObject) -> bool) -> bool {
     app.session.active().is_some_and(|st| {
-        st.selection.objects.iter().any(|id| st.doc.node(*id).is_some_and(|n| matches!(&n.kind, vectorcraft_doc::NodeKind::Image(im) if keep(im))))
+        st.selection.objects.iter().any(|id| st.doc.node(*id).is_some_and(|n| matches!(&n.kind, livipen_doc::NodeKind::Image(im) if keep(im))))
     })
 }
 
-/// The in-window and native menu tree. The in-window bar skips the VectorCraft menu (see
+/// The in-window and native menu tree. The in-window bar skips the Livi Pen menu (see
 /// `menu_bar`); the native Mac bar is composed from the whole tree (see `native_menu`).
 /// `english_names` is Preferences › Type › Show Font Names in English (the Type → Font labels
 /// follow it; tests use the default `true`).
@@ -2613,13 +2611,13 @@ pub fn menu_tree_named(english_names: bool) -> Vec<(&'static str, Vec<Item>)> {
     let panel = |label: &'static str, id: &'static str| cp(label, "window.panel", json!({ "panel": id, "toggle": true }));
     vec![
         (
-            // The application menu: About and Discord only. The in-window bar never shows it (File
+            // The application menu: About only. The in-window bar never shows it (File
             // is first there, as in Illustrator); on macOS `native_menu::mac_layout` composes the
             // App menu from this entry and the other menus (About from Help, Settings from Edit,
             // Quit from File, Language and Appearance synthesized). It stays first: `from_tree`
             // gives the first menu the App role.
-            "VectorCraft",
-            vec![c("About VectorCraft", "help.about"), c("Join Our Discord", "help.discord")],
+            "Livi Pen",
+            vec![c("About Livi Pen", "help.about")],
         ),
         (
             "File",
@@ -3267,15 +3265,14 @@ pub fn menu_tree_named(english_names: bool) -> Vec<(&'static str, Vec<Item>)> {
         (
             "Help",
             vec![
-                c("Join Our Discord", "help.discord"),
-                c("ArtCraft Website", "help.website"),
-                c("VectorCraft on getartcraft.com", "help.appPage"),
-                c("VectorCraft on GitHub", "help.github"),
+                c("Livi Website", "help.website"),
+                c("Livi Pen on liviverse.com", "help.appPage"),
+                c("Livi Pen on GitHub", "help.github"),
                 Sep,
                 c("Search Commands…", "help.commandPalette"),
-                todos("VectorCraft Help…", "F1"),
+                todos("Livi Pen Help…", "F1"),
                 Sep,
-                c("About VectorCraft", "help.about"),
+                c("About Livi Pen", "help.about"),
             ],
         ),
     ]
@@ -3312,10 +3309,10 @@ fn arrange_items() -> Vec<Item> {
 
 /// The canvas context menu (right-click): what applies to the selection, or to the view when
 /// nothing is selected. Commands that can't run now are left out rather than greyed out.
-pub fn context_items(app: &VectorcraftApp) -> Vec<Item> {
-    use vectorcraft_doc::NodeKind;
+pub fn context_items(app: &LiviPenApp) -> Vec<Item> {
+    use livipen_doc::NodeKind;
     let Some(st) = app.session.active() else { return vec![] };
-    let roots: Vec<&vectorcraft_doc::Node> = st.selection.objects.iter().filter_map(|id| st.doc.node(*id)).collect();
+    let roots: Vec<&livipen_doc::Node> = st.selection.objects.iter().filter_map(|id| st.doc.node(*id)).collect();
     let any = |f: fn(&NodeKind) -> bool| roots.iter().any(|n| f(&n.kind));
     let several = roots.len() >= 2;
     let mut v = vec![c("Undo", "edit.undo"), c("Redo", "edit.redo"), Sep];
@@ -3409,7 +3406,7 @@ pub fn context_items(app: &VectorcraftApp) -> Vec<Item> {
 
 /// `items` without the commands that can't run now (Undo and Redo stay, greyed out), submenus
 /// left empty, and separators that no longer separate anything.
-fn prune(app: &VectorcraftApp, items: Vec<Item>) -> Vec<Item> {
+fn prune(app: &LiviPenApp, items: Vec<Item>) -> Vec<Item> {
     let mut out: Vec<Item> = Vec::with_capacity(items.len());
     for it in items {
         let it = match it {
@@ -3433,7 +3430,7 @@ fn prune(app: &VectorcraftApp, items: Vec<Item>) -> Vec<Item> {
 }
 
 /// The canvas context menu's popup; the item clicked goes in `clicked`, for [`invoke`].
-pub fn context_menu_body(app: &VectorcraftApp, ui: &mut egui::Ui, clicked: &mut Option<(String, Value)>) {
+pub fn context_menu_body(app: &LiviPenApp, ui: &mut egui::Ui, clicked: &mut Option<(String, Value)>) {
     widgets::menu_scroll(ui, |ui| {
         ui.set_min_width(200.0);
         // Its toggles already say what they do (Show Rulers, Hide Guides): no check-mark gutter.
@@ -3444,12 +3441,12 @@ pub fn context_menu_body(app: &VectorcraftApp, ui: &mut egui::Ui, clicked: &mut 
 /// The document units a right-click on a ruler offers: each runs `document.setUnits`, exactly as
 /// Preferences ▸ Units ▸ General does, with the current one checked ([`checked`]).
 pub fn ruler_unit_items() -> Vec<Item> {
-    vectorcraft_engine::doc::Unit::ALL.iter().map(|u| cp(u.label(), "document.setUnits", json!({ "units": u.label() }))).collect()
+    livipen_engine::doc::Unit::ALL.iter().map(|u| cp(u.label(), "document.setUnits", json!({ "units": u.label() }))).collect()
 }
 
 /// The ruler context menu's popup (right-click a ruler or the origin box); the unit clicked goes in
 /// `clicked`, for [`invoke`].
-pub fn ruler_menu_body(app: &VectorcraftApp, ui: &mut egui::Ui, clicked: &mut Option<(String, Value)>) {
+pub fn ruler_menu_body(app: &LiviPenApp, ui: &mut egui::Ui, clicked: &mut Option<(String, Value)>) {
     widgets::menu_scroll(ui, |ui| {
         ui.set_min_width(160.0);
         render_items(app, ui, &ruler_unit_items(), true, clicked);
@@ -3458,7 +3455,7 @@ pub fn ruler_menu_body(app: &VectorcraftApp, ui: &mut egui::Ui, clicked: &mut Op
 
 /// Render the menu bar.
 /// The in-window menu bar. Returns where its titles end (x): the bar itself takes the full width.
-pub fn menu_bar(app: &mut VectorcraftApp, ui: &mut egui::Ui) -> f32 {
+pub fn menu_bar(app: &mut LiviPenApp, ui: &mut egui::Ui) -> f32 {
     let t = Tokens::get(ui.ctx());
     let ctx = ui.ctx().clone();
     // The press that opens a menu takes the keyboard from a focused text field: the field and its
@@ -3478,8 +3475,8 @@ pub fn menu_bar(app: &mut VectorcraftApp, ui: &mut egui::Ui) -> f32 {
     let mut clicked: Option<(String, Value)> = None;
     let tree = menu_tree_named(app.session.prefs.font_names_in_english);
     // No application menu in the window (as in Illustrator): the bar starts at File on every
-    // platform. The VectorCraft menu stays in the tree: the native Mac bar takes it from there.
-    let tree: Vec<(&str, Vec<Item>)> = tree.into_iter().filter(|(title, _)| *title != "VectorCraft").collect();
+    // platform. The Livi Pen menu stays in the tree: the native Mac bar takes it from there.
+    let tree: Vec<(&str, Vec<Item>)> = tree.into_iter().filter(|(title, _)| *title != "Livi Pen").collect();
     let (end, open) = egui::MenuBar::new()
         .ui(ui, |ui| {
             let mut titles = Vec::with_capacity(tree.len());
@@ -3537,7 +3534,7 @@ fn switch_on_hover(ctx: &egui::Context, titles: &[egui::Response]) -> bool {
 
 /// A top-level menu's popup: as wide as its widest item (label plus shortcut), at least 230 pt;
 /// it scrolls when it is taller than the window.
-fn menu_body(app: &VectorcraftApp, ui: &mut egui::Ui, items: &[Item], clicked: &mut Option<(String, Value)>) {
+fn menu_body(app: &LiviPenApp, ui: &mut egui::Ui, items: &[Item], clicked: &mut Option<(String, Value)>) {
     widgets::menu_scroll(ui, |ui| {
         ui.set_min_width(230.0);
         render_items(app, ui, items, true, clicked);
@@ -3546,7 +3543,7 @@ fn menu_body(app: &VectorcraftApp, ui: &mut egui::Ui, items: &[Item], clicked: &
 
 /// `items` as menu buttons; with `checks`, items that can be on or off show a check mark (or the
 /// room for one).
-fn render_items(app: &VectorcraftApp, ui: &mut egui::Ui, items: &[Item], checks: bool, clicked: &mut Option<(String, Value)>) {
+fn render_items(app: &LiviPenApp, ui: &mut egui::Ui, items: &[Item], checks: bool, clicked: &mut Option<(String, Value)>) {
     let t = Tokens::get(ui.ctx());
     for e in items.iter().filter_map(|it| entry(app, it)) {
         match e {
@@ -3571,7 +3568,7 @@ fn render_items(app: &VectorcraftApp, ui: &mut egui::Ui, items: &[Item], checks:
 
 /// One menu item: its label (with a check mark, or the room for one, under `checks`), its shortcut,
 /// and Type › Font's samples.
-fn render_row(app: &VectorcraftApp, ui: &mut egui::Ui, row: &Row, checks: bool, clicked: &mut Option<(String, Value)>) {
+fn render_row(app: &LiviPenApp, ui: &mut egui::Ui, row: &Row, checks: bool, clicked: &mut Option<(String, Value)>) {
     let sc = row.shortcut.map(pretty_shortcut).unwrap_or_default();
     let Some((id, p)) = row.command else {
         ui.add_enabled_ui(false, |ui| {
@@ -3608,14 +3605,14 @@ fn render_row(app: &VectorcraftApp, ui: &mut egui::Ui, row: &Row, checks: bool, 
 
 /// What the Home screen remembers when it opens (`app.home`): the active document and the
 /// document count. When either changes, the Home screen gives way to the document.
-pub(crate) fn home_key(app: &VectorcraftApp) -> (Option<u64>, usize) {
+pub(crate) fn home_key(app: &LiviPenApp) -> (Option<u64>, usize) {
     (app.session.active().map(|d| d.uid), app.session.documents().len())
 }
 
 /// Whether the Home screen is up: chosen with the Home button (`app.home`), or no document is open
 /// and Preferences › General › Show The Home Screen When No Documents Are Open is on (#394). Off,
 /// an app with no document shows an empty window, and the Home button still opens the screen.
-pub(crate) fn home_showing(app: &VectorcraftApp) -> bool {
+pub(crate) fn home_showing(app: &LiviPenApp) -> bool {
     app.ui.home.is_some() || (app.session.active().is_none() && app.session.prefs.show_home_screen)
 }
 
@@ -3644,7 +3641,7 @@ fn queried_dialog(id: &str) -> Option<(&'static str, &'static [&'static str])> {
 }
 
 /// The dialog (kind, fields) the menu item of command `id` opens, as the reference app's does.
-fn menu_dialog(app: &VectorcraftApp, id: &str) -> Option<(&'static str, Value)> {
+fn menu_dialog(app: &LiviPenApp, id: &str) -> Option<(&'static str, Value)> {
     Some(match id {
         // Move opens on the offset moved last and the checkboxes it was last confirmed with.
         "object.move" => ("move", crate::dialogs::transform::move_fields(app)),
@@ -3675,7 +3672,7 @@ fn menu_dialog(app: &VectorcraftApp, id: &str) -> Option<(&'static str, Value)> 
 
 /// The event a focused text field takes for Edit-menu command `id` (Select All, Cut, Copy,
 /// Paste), as the same keys would send it.
-fn field_event(app: &mut VectorcraftApp, id: &str) -> Option<egui::Event> {
+fn field_event(app: &mut LiviPenApp, id: &str) -> Option<egui::Event> {
     Some(match id {
         "select.all" => egui::Event::Key { key: egui::Key::A, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::COMMAND },
         "edit.copy" => egui::Event::Copy,
@@ -3690,7 +3687,7 @@ fn field_event(app: &mut VectorcraftApp, id: &str) -> Option<egui::Event> {
 /// Copy and Paste act on the field's text, as their keys do. While its keys select every artboard
 /// ([`crate::panels::artboards::selects_all`]), Select All does too. Everything else (and those
 /// commands with no field focused) goes to [`invoke`].
-pub fn invoke_from_system_menu(app: &mut VectorcraftApp, ctx: &egui::Context, id: &str, p: Value) {
+pub fn invoke_from_system_menu(app: &mut LiviPenApp, ctx: &egui::Context, id: &str, p: Value) {
     match focused_text_field(ctx).and_then(|f| Some((f, field_event(app, id)?))) {
         Some((field, e)) => to_field(ctx, field, e),
         None if id == "select.all" && crate::panels::artboards::selects_all(app, ctx) => crate::panels::artboards::select_all(app),
@@ -3712,7 +3709,7 @@ fn to_field(ctx: &egui::Context, field: egui::Id, e: egui::Event) {
 /// Invoke a menu/command id with UI side effects (dialogs for "…" commands that need input).
 /// Object › Graph › Type… or Data… (`id`): its dialog, with the selected graph's current values
 /// (the command's query).
-pub(crate) fn graph_dialog(app: &mut VectorcraftApp, id: &str) -> Result<Value, String> {
+pub(crate) fn graph_dialog(app: &mut LiviPenApp, id: &str) -> Result<Value, String> {
     // Graph Data: the worksheet.
     if id == "graph.setData" {
         return crate::dialogs::graph_data::open(app);
@@ -3722,7 +3719,7 @@ pub(crate) fn graph_dialog(app: &mut VectorcraftApp, id: &str) -> Result<Value, 
     app.run("ui.paramDialog", json!({"command": id, "label": label, "params": fields})).map(|_| json!({ "dialog": "command" }))
 }
 
-pub fn invoke(app: &mut VectorcraftApp, id: &str, p: Value) {
+pub fn invoke(app: &mut LiviPenApp, id: &str, p: Value) {
     if waits_for_ime(app, id) {
         return;
     }
@@ -3818,7 +3815,7 @@ pub fn invoke(app: &mut VectorcraftApp, id: &str, p: Value) {
     }
     // Save Selection…: a name dialog, starting from the first free "Selection N".
     if id == "select.save" && p.as_object().is_none_or(|o| o.is_empty()) {
-        let name = app.session.active().map(|d| vectorcraft_engine::doc::SavedSelection::default_name(&d.doc.saved_selections)).unwrap_or_default();
+        let name = app.session.active().map(|d| livipen_engine::doc::SavedSelection::default_name(&d.doc.saved_selections)).unwrap_or_default();
         let _ = app.run("ui.paramDialog", json!({"command": id, "label": "Save Selection", "params": {"name": name}}));
         return;
     }
@@ -3873,7 +3870,7 @@ pub fn invoke(app: &mut VectorcraftApp, id: &str, p: Value) {
         return;
     }
     // Help links: the command returns the URL; a menu click opens it (agents just get the URL).
-    if matches!(id, "help.discord" | "help.website" | "help.appPage" | "help.github") {
+    if matches!(id, "help.website" | "help.appPage" | "help.github") {
         app.open_link(id);
         return;
     }
@@ -3931,7 +3928,7 @@ pub struct MenuEntry {
 }
 
 /// Flattened menu for `ui.menu.list`.
-pub fn menu_entries(app: &VectorcraftApp) -> Vec<MenuEntry> {
+pub fn menu_entries(app: &LiviPenApp) -> Vec<MenuEntry> {
     let mut out = vec![];
     for (title, items) in menu_tree_named(app.session.prefs.font_names_in_english) {
         flatten(app, vec![title.to_string()], &items, &mut out);
@@ -3940,13 +3937,13 @@ pub fn menu_entries(app: &VectorcraftApp) -> Vec<MenuEntry> {
 }
 
 /// Flattened canvas context menu for `ui.contextMenu.list` (paths are its submenus).
-pub fn context_entries(app: &VectorcraftApp) -> Vec<MenuEntry> {
+pub fn context_entries(app: &LiviPenApp) -> Vec<MenuEntry> {
     let mut out = vec![];
     flatten(app, vec![], &context_items(app), &mut out);
     out
 }
 
-fn flatten(app: &VectorcraftApp, path: Vec<String>, items: &[Item], out: &mut Vec<MenuEntry>) {
+fn flatten(app: &LiviPenApp, path: Vec<String>, items: &[Item], out: &mut Vec<MenuEntry>) {
     for it in items {
         match it {
             Item::Cmd(l, id, p) => {
@@ -4039,11 +4036,11 @@ fn insert_items(list: &[(&'static str, &'static str)]) -> Vec<Item> {
 /// Type → Font: one item per available family, the installed fonts included. Built again only when
 /// the fonts or Show Font Names in English change (the menu tree is built every frame); labels are
 /// interned once each, so rebuilding doesn't allocate forever. The command still sets the English
-/// family name ([`vectorcraft_text::FontDb::canonical`]).
+/// family name ([`livipen_text::FontDb::canonical`]).
 fn font_items(english_names: bool) -> Vec<Item> {
     static NAMES: std::sync::Mutex<std::collections::BTreeSet<&'static str>> = std::sync::Mutex::new(std::collections::BTreeSet::new());
     static ITEMS: std::sync::Mutex<(u64, bool, Vec<Item>)> = std::sync::Mutex::new((u64::MAX, true, Vec::new()));
-    let db = vectorcraft_text::FontDb::global();
+    let db = livipen_text::FontDb::global();
     // Read first: fonts that load meanwhile make the next frame build the list again.
     let generation = db.generation();
     let fams = db.menu_family_list();
@@ -4081,7 +4078,7 @@ fn font_items(english_names: bool) -> Vec<Item> {
 /// The raster effects' submenus of the Effect menu (the Photoshop-style effects, below the
 /// vector effects): (submenu, the catalogue's menu path of its effects).
 /// The raster Stylize submenu shares its path with the vector one and lists only the effects at
-/// that path that [`vectorcraft_effects::PIXEL_EFFECTS`] names.
+/// that path that [`livipen_effects::PIXEL_EFFECTS`] names.
 const RASTER_MENUS: [(&str, &[&str]); 10] = [
     ("Artistic", &["Effect", "Artistic"]),
     ("Blur", &["Effect", "Blur"]),
@@ -4097,7 +4094,7 @@ const RASTER_MENUS: [(&str, &[&str]); 10] = [
 
 /// The Effect menu, built from the effects catalogue (vector effects), plus raster effects.
 fn effect_menu() -> Vec<Item> {
-    let cat = vectorcraft_effects::effect_catalog();
+    let cat = livipen_effects::effect_catalog();
     let mut out = vec![
         c("Apply Last Effect", "effect.applyLast"),
         c("Last Effect…", "effect.last"),
@@ -4120,13 +4117,13 @@ fn effect_menu() -> Vec<Item> {
         "SVG Filters",
         "Warp",
     ];
-    let top_level = |e: &vectorcraft_effects::EffectInfo| e.menu == ["Effect"] && order.contains(&e.label);
+    let top_level = |e: &livipen_effects::EffectInfo| e.menu == ["Effect"] && order.contains(&e.label);
     // An effect goes in the vector submenu its path names unless it is a Photoshop-style effect,
     // which goes in the raster submenu of the same name when `RASTER_MENUS` has one (Stylize ›
     // Glowing Edges).
     let in_vector_menu =
-        |e: &vectorcraft_effects::EffectInfo| order.iter().any(|s| e.menu == ["Effect", *s]) && !vectorcraft_effects::PIXEL_EFFECTS.contains(&e.id);
-    let item = |e: &vectorcraft_effects::EffectInfo| match e.defaults.as_object().is_some_and(|o| o.is_empty()) {
+        |e: &livipen_effects::EffectInfo| order.iter().any(|s| e.menu == ["Effect", *s]) && !livipen_effects::PIXEL_EFFECTS.contains(&e.id);
+    let item = |e: &livipen_effects::EffectInfo| match e.defaults.as_object().is_some_and(|o| o.is_empty()) {
         // No options (Effect → Pathfinder, Crop Marks): apply directly, like Illustrator.
         true => Item::Cmd(e.label, "effect.apply", json!({ "effect": e.id })),
         false => Item::Cmd(e.label, "effect.dialog", json!({ "effect": e.id })),
@@ -4178,7 +4175,7 @@ fn effect_menu() -> Vec<Item> {
         out.extend(raster);
     }
     // Anything not placed above (future effects) still shows up.
-    let placed = |e: &vectorcraft_effects::EffectInfo| top_level(e) || in_vector_menu(e) || RASTER_MENUS.iter().any(|(_, path)| e.menu == *path);
+    let placed = |e: &livipen_effects::EffectInfo| top_level(e) || in_vector_menu(e) || RASTER_MENUS.iter().any(|(_, path)| e.menu == *path);
     for e in cat.iter().filter(|e| !placed(e)) {
         out.push(Item::Cmd(e.label, "effect.dialog", json!({ "effect": e.id })));
     }
@@ -4278,7 +4275,7 @@ pub fn menu_strings() -> std::collections::BTreeSet<String> {
                         .strip_suffix('°')
                         .map(|n| n.strip_prefix('-').unwrap_or(n))
                         .is_some_and(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()));
-                    // VectorCraft › Language lists each language by its own name.
+                    // Livi Pen › Language lists each language by its own name.
                     let language_name = *id == "app.language" && crate::i18n::Lang::all().any(|lang| lang.name() == *l);
                     if !user_data(id, params) && !size && !angle && !language_name && *l != "—" {
                         out.insert(l.to_string());
@@ -4307,22 +4304,22 @@ pub fn menu_strings() -> std::collections::BTreeSet<String> {
     out.extend(DYNAMIC_LABELS.iter().map(|s| s.to_string()));
     out.extend(CONTEXT_LABELS.iter().map(|s| s.to_string()));
     out.extend(UI_COMMANDS.iter().map(|c| c.1.to_string()));
-    for c in vectorcraft_engine::cmd::command_specs() {
+    for c in livipen_engine::cmd::command_specs() {
         out.insert(c.label.to_string());
         out.extend(c.menu.iter().map(|m| m.to_string()));
     }
     out.extend(crate::state::all_panels().map(|(_, label)| label.to_string()));
-    out.extend(vectorcraft_tools::catalog::all_tools().map(|t| t.label.to_string()));
+    out.extend(livipen_tools::catalog::all_tools().map(|t| t.label.to_string()));
     out.extend(crate::toolbar::BASIC.iter().map(|c| c.0.to_string()));
-    out.extend(vectorcraft_color::BlendMode::ALL.iter().map(|m| m.label().to_string()));
-    out.extend(vectorcraft_effects::effect_catalog().iter().map(|e| e.label.to_string()));
-    out.extend(vectorcraft_engine::cmd::prefscmds::PREF_CATEGORIES.iter().map(|c| c.to_string()));
-    for sp in vectorcraft_engine::cmd::prefscmds::PREF_SPECS {
+    out.extend(livipen_color::BlendMode::ALL.iter().map(|m| m.label().to_string()));
+    out.extend(livipen_effects::effect_catalog().iter().map(|e| e.label.to_string()));
+    out.extend(livipen_engine::cmd::prefscmds::PREF_CATEGORIES.iter().map(|c| c.to_string()));
+    for sp in livipen_engine::cmd::prefscmds::PREF_SPECS {
         out.insert(sp.label.to_string());
         if !sp.section.is_empty() {
             out.insert(sp.section.to_string());
         }
-        if let vectorcraft_engine::cmd::prefscmds::PrefKind::Choice(opts) = sp.kind {
+        if let livipen_engine::cmd::prefscmds::PrefKind::Choice(opts) = sp.kind {
             out.extend(opts.iter().map(|o| o.1.to_string()));
         }
     }
@@ -4342,7 +4339,7 @@ mod tests {
 
     /// One headless frame of the in-window menu bar; returns its titles (left to right) as
     /// (rect, id of the title's popup).
-    fn bar_frame(app: &mut VectorcraftApp, ctx: &egui::Context, events: Vec<egui::Event>) -> Vec<(egui::Rect, egui::Id)> {
+    fn bar_frame(app: &mut LiviPenApp, ctx: &egui::Context, events: Vec<egui::Event>) -> Vec<(egui::Rect, egui::Id)> {
         let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1200.0, 700.0));
         let mut layer = None;
         let mut out = ctx.run_ui(egui::RawInput { screen_rect: Some(screen), events, ..Default::default() }, |ui| {
@@ -4380,7 +4377,7 @@ mod tests {
     /// No application menu in the window (as in Illustrator): the bar starts at File.
     #[test]
     fn the_bar_starts_at_file() {
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), crate::Services::default());
+        let mut app = LiviPenApp::new(livipen_engine::Session::new(), crate::Services::default());
         let ctx = egui::Context::default();
         theme::install_fonts(&ctx);
         theme::apply(&ctx, Default::default());
@@ -4402,12 +4399,12 @@ mod tests {
         for t in titles {
             assert!(shown.iter().any(|s| s == t), "{t} missing from {shown:?}");
         }
-        assert!(!shown.iter().any(|s| s == "VectorCraft"), "{shown:?}");
+        assert!(!shown.iter().any(|s| s == "Livi Pen"), "{shown:?}");
     }
 
     #[test]
     fn hovering_another_title_switches_the_open_menu() {
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), crate::Services::default());
+        let mut app = LiviPenApp::new(livipen_engine::Session::new(), crate::Services::default());
         let ctx = egui::Context::default();
         theme::install_fonts(&ctx);
         theme::apply(&ctx, Default::default());
@@ -4416,7 +4413,7 @@ mod tests {
         // No application menu in the window: the bar starts at File on every platform.
         assert_eq!(titles.len(), menu_tree().len() - 1);
         let (file, edit, object) = (titles[0].0.center(), titles[1].0.center(), titles[2].0.center());
-        let frames = |app: &mut VectorcraftApp, events: Vec<egui::Event>| {
+        let frames = |app: &mut LiviPenApp, events: Vec<egui::Event>| {
             let mut t = bar_frame(app, &ctx, events);
             for _ in 0..2 {
                 t = bar_frame(app, &ctx, vec![]);
@@ -4490,7 +4487,7 @@ mod tests {
 
     #[test]
     fn last_effect_dialog_and_view_toggles() {
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), crate::Services::default());
+        let mut app = LiviPenApp::new(livipen_engine::Session::new(), crate::Services::default());
         app.run("file.new", json!({})).unwrap();
         app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 50, "height": 50})).unwrap();
         assert!(!enabled(&app, "effect.last"));
@@ -4523,7 +4520,7 @@ mod tests {
         let mut app = app_with_a_rectangle();
         app.run("effect.apply", json!({"effect": "stylize.feather"})).unwrap();
         assert_eq!(app.session.active().unwrap().history.undo.last().map(|h| h.label.as_str()), Some("Feather"));
-        let shown = |app: &VectorcraftApp, id: &'static str| {
+        let shown = |app: &LiviPenApp, id: &'static str| {
             let item = c(if id == "edit.undo" { "Undo" } else { "Redo" }, id);
             match entry(app, &item) {
                 Some(Entry::Item(row)) => row.label.to_string(),
@@ -4547,7 +4544,7 @@ mod tests {
     /// type inside a selected group too.
     #[test]
     fn optical_margin_alignment_is_a_checked_type_menu_item() {
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), crate::Services::default());
+        let mut app = LiviPenApp::new(livipen_engine::Session::new(), crate::Services::default());
         app.run("file.new", json!({})).unwrap();
         let ids: Vec<&str> = menu_tree()
             .into_iter()
@@ -4591,7 +4588,7 @@ mod tests {
         assert_eq!(normalize_panel("  Stroke  "), Some("stroke"));
         assert_eq!(normalize_panel("nope"), None);
 
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), crate::Services::default());
+        let mut app = LiviPenApp::new(livipen_engine::Session::new(), crate::Services::default());
         app.run("file.new", json!({})).unwrap();
         app.run("window.panel", json!({"panel": "Layers"})).unwrap();
         assert_eq!(app.ui.dock_tab, crate::state::DockTab::Layers);
@@ -4609,12 +4606,12 @@ mod tests {
 
     #[test]
     fn saved_views_store_and_restore_the_view() {
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), crate::Services::default());
+        let mut app = LiviPenApp::new(livipen_engine::Session::new(), crate::Services::default());
         app.run("file.new", json!({})).unwrap();
         {
             let v = app.view_mut().unwrap();
             v.zoom = 3.0;
-            v.center = vectorcraft_geom::Point::new(120.0, 80.0);
+            v.center = livipen_geom::Point::new(120.0, 80.0);
         }
         app.run("view.saved.new", json!({"name": "Detail"})).unwrap();
         assert!(enabled(&app, "view.goto1") && !enabled(&app, "view.goto2"));
@@ -4627,8 +4624,8 @@ mod tests {
         assert!(!menu_entries(&app).iter().any(|e| e.command.as_deref() == Some("view.goto2")));
     }
 
-    fn app_with_a_rectangle() -> VectorcraftApp {
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), crate::Services::default());
+    fn app_with_a_rectangle() -> LiviPenApp {
+        let mut app = LiviPenApp::new(livipen_engine::Session::new(), crate::Services::default());
         app.run("file.new", json!({})).unwrap();
         app.run("shape.rectangle", json!({"x": 0, "y": 0, "width": 10, "height": 10})).unwrap();
         app
@@ -4738,9 +4735,9 @@ mod tests {
 
     #[test]
     fn recent_fonts_and_corner_widget_toggle() {
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), crate::Services::default());
+        let mut app = LiviPenApp::new(livipen_engine::Session::new(), crate::Services::default());
         app.run("file.new", json!({})).unwrap();
-        let fams = vectorcraft_text::FontDb::global().families();
+        let fams = livipen_text::FontDb::global().families();
         let (a, b) = (fams[0].clone(), fams[fams.len() - 1].clone());
         app.run("text.create", json!({"x": 10, "y": 10, "text": "Hi"})).unwrap();
         app.run("text.setStyle", json!({"font": a})).unwrap();
@@ -4759,7 +4756,7 @@ mod tests {
     /// writes General › Use Precise Cursors, the value the dialog and the saved preferences read.
     #[test]
     fn precise_cursors_command_toggles_the_preference() {
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), crate::Services::default());
+        let mut app = LiviPenApp::new(livipen_engine::Session::new(), crate::Services::default());
         assert!(!app.session.prefs.use_precise_cursors);
         assert_eq!(app.run("view.preciseCursors", json!({})).unwrap(), json!(true));
         assert!(app.session.prefs.use_precise_cursors);
@@ -4791,9 +4788,9 @@ mod tests {
     /// The command is a preference, not an edit: no undo step, no unsaved changes, with a document open.
     #[test]
     fn precise_cursors_command_is_not_an_edit() {
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), crate::Services::default());
+        let mut app = LiviPenApp::new(livipen_engine::Session::new(), crate::Services::default());
         app.run("file.new", json!({})).unwrap();
-        let steps = |app: &VectorcraftApp| {
+        let steps = |app: &LiviPenApp| {
             let st = app.session.active().unwrap();
             (st.history.undo.len(), st.history.redo.len(), st.is_dirty())
         };
@@ -4808,26 +4805,26 @@ mod tests {
     /// selection to the middle; off, they keep the view's centre.
     #[test]
     fn zoom_to_selection_centres_the_selection() {
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), crate::Services::default());
+        let mut app = LiviPenApp::new(livipen_engine::Session::new(), crate::Services::default());
         app.run("file.new", json!({"width": 400, "height": 300})).unwrap();
         app.run("shape.rectangle", json!({"x": 10, "y": 20, "width": 40, "height": 20})).unwrap();
-        let center = |app: &VectorcraftApp| app.view().unwrap().center;
+        let center = |app: &LiviPenApp| app.view().unwrap().center;
         let start = center(&app);
         app.run("prefs.set", json!({"key": "zoomToSelection", "value": false})).unwrap();
         app.run("view.zoomIn", json!({})).unwrap();
         assert_eq!(center(&app), start, "off: the view's centre stays");
         app.run("prefs.set", json!({"key": "zoomToSelection", "value": true})).unwrap();
         app.run("view.zoomOut", json!({})).unwrap();
-        assert_eq!(center(&app), vectorcraft_geom::Point::new(30.0, 30.0), "on: the selection's centre");
+        assert_eq!(center(&app), livipen_geom::Point::new(30.0, 30.0), "on: the selection's centre");
     }
 
     /// Preferences › Type › Number of Recent Fonts (#394): Type › Recent Fonts lists that many.
     #[test]
     fn number_of_recent_fonts_sets_how_many_are_listed() {
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), crate::Services::default());
+        let mut app = LiviPenApp::new(livipen_engine::Session::new(), crate::Services::default());
         app.run("file.new", json!({})).unwrap();
         app.ui.recent_fonts = (1..=15).map(|i| format!("Font {i}")).collect();
-        let listed = |app: &VectorcraftApp| RECENT_FONT_IDS.iter().filter(|id| enabled(app, id)).count();
+        let listed = |app: &LiviPenApp| RECENT_FONT_IDS.iter().filter(|id| enabled(app, id)).count();
         assert_eq!(listed(&app), 10, "10 by default");
         for n in [15, 2] {
             app.run("prefs.set", json!({"key": "recentFontsCount", "value": n})).unwrap();
@@ -4841,8 +4838,8 @@ mod tests {
     fn recent_files_track_opens_and_saves() {
         let dir = std::env::temp_dir().join(format!("dc-recent-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        let mut app = VectorcraftApp::new(
-            vectorcraft_engine::Session::new(),
+        let mut app = LiviPenApp::new(
+            livipen_engine::Session::new(),
             crate::Services {
                 read: Some(Box::new(|p: &str| std::fs::read(p).map_err(|e| e.to_string()))),
                 write: Some(Box::new(|p: &str, b: &[u8]| std::fs::write(p, b).map_err(|e| e.to_string()))),
@@ -4850,12 +4847,12 @@ mod tests {
             },
         );
         app.run("file.new", json!({"width": 100, "height": 100})).unwrap();
-        let (a, b) = (dir.join("a.vectorcraft"), dir.join("b.vectorcraft"));
+        let (a, b) = (dir.join("a.livipen"), dir.join("b.livipen"));
         for p in [&a, &b, &a] {
             app.run("file.saveAs", json!({"path": p.to_string_lossy()})).unwrap();
         }
         assert_eq!(app.ui.recent_files, [a.to_string_lossy(), b.to_string_lossy()]);
-        assert_eq!(dynamic_label(&app, "file.openRecent2", ""), "b.vectorcraft");
+        assert_eq!(dynamic_label(&app, "file.openRecent2", ""), "b.livipen");
         assert!(enabled(&app, "file.openRecent2") && !enabled(&app, "file.openRecent3"));
         app.run("file.openRecent2", json!({})).unwrap();
         assert_eq!(app.session.documents().len(), 2);
@@ -4871,7 +4868,7 @@ mod tests {
             for it in items {
                 match it {
                     Item::Cmd(_, id, _)
-                        if vectorcraft_engine::find_command(id).is_none()
+                        if livipen_engine::find_command(id).is_none()
                             && !UI_COMMANDS.iter().any(|c| c.0 == *id)
                             && !id.starts_with("object.path.") =>
                     {
@@ -4902,7 +4899,7 @@ mod tests {
     /// with no form asking for a preset's name.
     #[test]
     fn image_trace_make_traces_with_the_default_preset() {
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), crate::Services::default());
+        let mut app = LiviPenApp::new(livipen_engine::Session::new(), crate::Services::default());
         app.run("file.new", json!({})).unwrap();
         for cmd in ["imageTrace.make", "imageTrace.makeAndExpand"] {
             let e = menu_entries(&app).into_iter().find(|e| e.command.as_deref() == Some(cmd)).unwrap();
@@ -4913,7 +4910,7 @@ mod tests {
 
     #[test]
     fn expand_appearance_is_an_object_menu_item_only() {
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), crate::Services::default());
+        let mut app = LiviPenApp::new(livipen_engine::Session::new(), crate::Services::default());
         app.run("file.new", json!({})).unwrap();
         let paths: Vec<Vec<String>> =
             menu_entries(&app).into_iter().filter(|e| e.command.as_deref() == Some("effect.expandAppearance")).map(|e| e.path).collect();
@@ -4923,7 +4920,7 @@ mod tests {
     #[test]
     fn menus_are_as_wide_as_their_items() {
         // Items size the popup to the widest label and shortcut instead of the widest a menu may be.
-        let app = VectorcraftApp::new(vectorcraft_engine::Session::new(), crate::Services::default());
+        let app = LiviPenApp::new(livipen_engine::Session::new(), crate::Services::default());
         let ctx = egui::Context::default();
         crate::theme::install_fonts(&ctx);
         let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1600.0, 1000.0));
@@ -4948,7 +4945,7 @@ mod tests {
     fn long_menus_scroll_inside_a_short_window() {
         // The Window menu is taller than a 600 pt window: it stops above the bottom edge and
         // scrolls instead of running off screen.
-        let app = VectorcraftApp::new(vectorcraft_engine::Session::new(), crate::Services::default());
+        let app = LiviPenApp::new(livipen_engine::Session::new(), crate::Services::default());
         let ctx = egui::Context::default();
         crate::theme::install_fonts(&ctx);
         let tree = menu_tree();
@@ -4976,11 +4973,11 @@ mod tests {
         assert!(tall.bottom() < 3000.0);
     }
 
-    /// #3724: Window › New Window is greyed out until VectorCraft can open a second window on a
+    /// #3724: Window › New Window is greyed out until Livi Pen can open a second window on a
     /// document, instead of being enabled and answering with an internal milestone note.
     #[test]
     fn new_window_is_disabled_until_it_opens_a_window() {
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), crate::Services::default());
+        let mut app = LiviPenApp::new(livipen_engine::Session::new(), crate::Services::default());
         app.run("file.new", json!({"width": 200, "height": 200})).unwrap();
         assert!(!enabled(&app, "window.newWindow"), "New Window is enabled but opens no window");
         let e = app.run("window.newWindow", json!({})).unwrap_err();

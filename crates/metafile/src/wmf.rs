@@ -9,8 +9,8 @@
 //! bitmaps composited over white.
 
 use kurbo::PathEl;
-use vectorcraft_doc::{LineCap, LineJoin};
-use vectorcraft_geom::{Affine, BezPath, FillRule, Point, Rect};
+use livipen_doc::{LineCap, LineJoin};
+use livipen_geom::{Affine, BezPath, FillRule, Point, Rect};
 
 use crate::bytes::Out;
 use crate::dib::{self, Rgba};

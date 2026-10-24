@@ -15,7 +15,7 @@ use serde_json::{Map, Value, json};
 use super::swatch_options::{grid, label};
 use super::{DialogSpec, form};
 use crate::state::Dialog;
-use crate::{VectorcraftApp, widgets};
+use crate::{LiviPenApp, widgets};
 
 /// The dialog kind of Hyphenation.
 pub const KIND: &str = "hyphenation";
@@ -26,7 +26,7 @@ const INITIAL: &str = "__initial";
 pub(super) const SPEC: DialogSpec = DialogSpec { heading: |_| tl!("Hyphenation").into(), body, confirm, min_width: 300.0, ..DialogSpec::FORM };
 
 /// Open Hyphenation on the paragraph attributes the Paragraph panel shows.
-pub fn open(app: &mut VectorcraftApp) -> Result<Value, String> {
+pub fn open(app: &mut LiviPenApp) -> Result<Value, String> {
     crate::panels::character::text_style(app).ok_or("select some type first")?;
     let mut values = Map::new();
     if let Some(v) = crate::panels::paragraph::shared_hyphenate(app) {
@@ -56,7 +56,7 @@ pub fn open(app: &mut VectorcraftApp) -> Result<Value, String> {
     Ok(Value::Null)
 }
 
-fn body(app: &mut VectorcraftApp, ui: &mut egui::Ui, d: &mut Dialog) -> bool {
+fn body(app: &mut LiviPenApp, ui: &mut egui::Ui, d: &mut Dialog) -> bool {
     let unit = app.session.general_unit();
     let hyphenate = d.fields.get("hyphenate").and_then(|v| v.as_bool());
     if widgets::check3(ui, tl!("Hyphenation"), hyphenate, true) {
@@ -115,7 +115,7 @@ fn params(d: &Dialog) -> Map<String, Value> {
     p
 }
 
-fn confirm(app: &mut VectorcraftApp, d: &Dialog) -> Result<Value, String> {
+fn confirm(app: &mut LiviPenApp, d: &Dialog) -> Result<Value, String> {
     let p = params(d);
     app.ui.dialog = None;
     if p.is_empty() {
@@ -127,12 +127,12 @@ fn confirm(app: &mut VectorcraftApp, d: &Dialog) -> Result<Value, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use vectorcraft_engine::Session;
-    use vectorcraft_engine::doc::{HyphenationOptions, NodeId, NodeKind, ParaStyle};
+    use livipen_engine::Session;
+    use livipen_engine::doc::{HyphenationOptions, NodeId, NodeKind, ParaStyle};
 
     /// A selected area type object with two paragraphs.
-    fn app() -> (VectorcraftApp, u64) {
-        let mut app = VectorcraftApp::new(Session::new(), Default::default());
+    fn app() -> (LiviPenApp, u64) {
+        let mut app = LiviPenApp::new(Session::new(), Default::default());
         app.run("file.new", json!({"width": 400, "height": 400})).unwrap();
         let id = app.run("text.create", json!({"x": 10, "y": 10, "text": "One\nTwo", "area": {"width": 200, "height": 100}})).unwrap()["id"]
             .as_u64()
@@ -141,7 +141,7 @@ mod tests {
         (app, id)
     }
 
-    fn paras(app: &VectorcraftApp, id: u64) -> (ParaStyle, ParaStyle) {
+    fn paras(app: &LiviPenApp, id: u64) -> (ParaStyle, ParaStyle) {
         match &app.session.active().unwrap().doc.node(NodeId(id)).unwrap().kind {
             NodeKind::Text(t) => (t.para_at(0).clone(), t.para_at(1).clone()),
             _ => panic!("not text"),

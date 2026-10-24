@@ -7,17 +7,17 @@
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, TryRecvError, channel};
 
+use livipen_engine::cmd::fileio::{self, ReadFile};
+use livipen_engine::file_access::ScopeHandle;
 use serde_json::{Value, json};
-use vectorcraft_engine::cmd::fileio::{self, ReadFile};
-use vectorcraft_engine::file_access::ScopeHandle;
 
-use crate::VectorcraftApp;
+use crate::LiviPenApp;
 
 /// A file being read.
 pub struct Pending {
     /// Where it is.
     pub path: String,
-    /// What the status bar shows ("Opening Poster.vectorcraft").
+    /// What the status bar shows ("Opening Poster.livipen").
     pub label: String,
     done: Receiver<Result<ReadFile, String>>,
 }
@@ -30,7 +30,7 @@ pub struct Opening {
 
 /// Is a long operation running that should show the busy cursor and status spinner (background
 /// save/export with a label, a file opening or being read for Place off the UI thread, or a heavy plug-in filter)?
-pub fn long_operation_busy(app: &VectorcraftApp) -> bool {
+pub fn long_operation_busy(app: &LiviPenApp) -> bool {
     app.background.jobs.iter().any(|j| !j.label.is_empty() && !j.cancelled())
         || !app.opening.pending.is_empty()
         || !app.plugin_runs.running.is_empty()
@@ -38,15 +38,15 @@ pub fn long_operation_busy(app: &VectorcraftApp) -> bool {
 }
 
 /// Does opening happen off the UI thread here? Not on wasm (no threads), in unit tests (they look
-/// at the document right after asking for it), or with `VECTORCRAFT_SYNC_OPEN` set.
+/// at the document right after asking for it), or with `LIVIPEN_SYNC_OPEN` set.
 pub fn available() -> bool {
-    !(cfg!(target_arch = "wasm32") || cfg!(test) || std::env::var_os("VECTORCRAFT_SYNC_OPEN").is_some())
+    !(cfg!(target_arch = "wasm32") || cfg!(test) || std::env::var_os("LIVIPEN_SYNC_OPEN").is_some())
 }
 
 /// Decode `bytes`, the file at `path`, read its linked files and lay out its type on a thread of its
 /// own ([`fileio::read_for_open`]) → `{background: true, status}`, or the bytes back when no thread
 /// could start (the caller opens the file at once).
-pub fn start(app: &mut VectorcraftApp, path: &str, bytes: Vec<u8>) -> Result<Value, Vec<u8>> {
+pub fn start(app: &mut LiviPenApp, path: &str, bytes: Vec<u8>) -> Result<Value, Vec<u8>> {
     let (tx, done) = channel();
     let bytes = Arc::new(bytes);
     let (name, file) = (path.to_string(), bytes.clone());
@@ -55,10 +55,10 @@ pub fn start(app: &mut VectorcraftApp, path: &str, bytes: Vec<u8>) -> Result<Val
     let low_res_proxy_eps = app.session.prefs.low_res_proxy_eps;
     // The automation roots in force here are in force there.
     let scope = ScopeHandle::capture();
-    let spawned = std::thread::Builder::new().name("vectorcraft-open".into()).spawn(move || {
+    let spawned = std::thread::Builder::new().name("livipen-open".into()).spawn(move || {
         let r = scope
             .run(|| {
-                vectorcraft_engine::guard::catch_panic(|| {
+                livipen_engine::guard::catch_panic(|| {
                     fileio::read_for_open(&name, &file, Some(name.clone()), &Value::Null, update_links, low_res_proxy_eps).map_err(|e| e.to_string())
                 })
             })
@@ -87,7 +87,7 @@ pub fn start(app: &mut VectorcraftApp, path: &str, bytes: Vec<u8>) -> Result<Val
 /// cancels it. A tool that is busy while the button is not held and no interaction is open is
 /// waiting between its clicks (the Dimension tool after its first point): the file opens, and the
 /// tool starts afresh, as when the user switches documents.
-pub fn poll(app: &mut VectorcraftApp) {
+pub fn poll(app: &mut LiviPenApp) {
     let s = &app.session;
     if app.ui.dialog.is_some() || s.in_interaction() || (s.tool_busy() && s.pointer_held()) {
         return;
@@ -112,7 +112,7 @@ pub fn poll(app: &mut VectorcraftApp) {
 }
 
 /// Open a file read off the UI thread, as [`crate::io::open_reporting`] opens one read at once.
-fn finish(app: &mut VectorcraftApp, path: &str, r: Result<ReadFile, String>) {
+fn finish(app: &mut LiviPenApp, path: &str, r: Result<ReadFile, String>) {
     let opened = r.and_then(|file| fileio::open_read(&mut app.session, file).map_err(|e| e.to_string()));
     match opened {
         Ok(r) => {
@@ -125,16 +125,16 @@ fn finish(app: &mut VectorcraftApp, path: &str, r: Result<ReadFile, String>) {
 
 #[cfg(test)]
 mod tests {
-    use vectorcraft_engine::Session;
+    use livipen_engine::Session;
 
     use super::*;
     use crate::Services;
 
     #[test]
     fn long_operation_busy_while_a_file_opens_or_a_background_save_runs() {
-        let mut app = VectorcraftApp::new(Session::new(), Services::default());
+        let mut app = LiviPenApp::new(Session::new(), Services::default());
         assert!(!long_operation_busy(&app));
-        start(&mut app, "/art/Wait.vectorcraft", vectorcraft_format::save(&vectorcraft_doc::Document::new(10.0, 10.0), false)).unwrap();
+        start(&mut app, "/art/Wait.livipen", livipen_format::save(&livipen_doc::Document::new(10.0, 10.0), false)).unwrap();
         assert!(long_operation_busy(&app));
         let t0 = std::time::Instant::now();
         while long_operation_busy(&app) && t0.elapsed().as_secs() < 30 {
@@ -144,11 +144,11 @@ mod tests {
         assert!(!long_operation_busy(&app));
         let (release, held) = std::sync::mpsc::channel::<()>();
         let services = Services { write_shared: Some(std::sync::Arc::new(|_: &str, _: &[u8]| Ok(()))), ..Default::default() };
-        app = VectorcraftApp::new(Session::new(), services);
+        app = LiviPenApp::new(Session::new(), services);
         crate::background::run(
             &mut app,
             true,
-            "Saving test.vectorcraft".into(),
+            "Saving test.livipen".into(),
             None,
             move |_| {
                 let _ = held.recv_timeout(std::time::Duration::from_secs(10));
@@ -171,11 +171,11 @@ mod tests {
     /// dialog's document stays the active one.
     #[test]
     fn a_file_ready_while_a_dialog_is_open_waits_for_it_to_close() {
-        let mut app = VectorcraftApp::new(Session::new(), Services::default());
+        let mut app = LiviPenApp::new(Session::new(), Services::default());
         app.run("file.new", json!({"width": 100, "height": 80})).unwrap();
         let (first, before) = (app.session.doc().unwrap().uid, app.session.documents().len());
-        app.ui.dialog = Some(crate::state::Dialog::new(crate::dialogs::save_options::KIND, json!({"path": "/art/First.vectorcraft"})));
-        start(&mut app, "/art/Second.vectorcraft", vectorcraft_format::save(&vectorcraft_doc::Document::new(120.0, 80.0), false)).unwrap();
+        app.ui.dialog = Some(crate::state::Dialog::new(crate::dialogs::save_options::KIND, json!({"path": "/art/First.livipen"})));
+        start(&mut app, "/art/Second.livipen", livipen_format::save(&livipen_doc::Document::new(120.0, 80.0), false)).unwrap();
         let t0 = std::time::Instant::now();
         while t0.elapsed().as_millis() < 400 {
             poll(&mut app);
@@ -190,23 +190,23 @@ mod tests {
             std::thread::yield_now();
         }
         assert_eq!(app.session.documents().len(), before + 1);
-        assert_eq!(app.session.doc().unwrap().path.as_deref(), Some("/art/Second.vectorcraft"));
+        assert_eq!(app.session.doc().unwrap().path.as_deref(), Some("/art/Second.livipen"));
     }
 
     /// A file that finishes opening while an object is being dragged waits for the drag to end, so
     /// the drag is not canceled.
     #[test]
     fn a_file_ready_during_a_drag_waits_for_it_to_end() {
-        use vectorcraft_tools::{PointerEvent, PointerKind};
-        let mut app = VectorcraftApp::new(Session::new(), Services::default());
+        use livipen_tools::{PointerEvent, PointerKind};
+        let mut app = LiviPenApp::new(Session::new(), Services::default());
         app.run("file.new", json!({"width": 400, "height": 300})).unwrap();
         let square = app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 20, "height": 20})).unwrap()["id"].as_u64().unwrap();
         app.select_tool("selection");
-        let view = vectorcraft_engine::ViewInfo::default();
+        let view = livipen_engine::ViewInfo::default();
         for (kind, x) in [(PointerKind::Down, 20.0), (PointerKind::Drag, 40.0), (PointerKind::Drag, 60.0)] {
             app.session.pointer(&PointerEvent::new(kind, x, 20.0), view).unwrap();
         }
-        start(&mut app, "/art/Second.vectorcraft", vectorcraft_format::save(&vectorcraft_doc::Document::new(120.0, 80.0), false)).unwrap();
+        start(&mut app, "/art/Second.livipen", livipen_format::save(&livipen_doc::Document::new(120.0, 80.0), false)).unwrap();
         let t0 = std::time::Instant::now();
         while t0.elapsed().as_millis() < 400 {
             poll(&mut app);
@@ -220,7 +220,7 @@ mod tests {
             std::thread::yield_now();
         }
         assert_eq!(app.session.documents().len(), 2);
-        let moved = app.session.documents()[0].doc.node(vectorcraft_doc::NodeId(square)).and_then(|n| n.geometric_bounds());
+        let moved = app.session.documents()[0].doc.node(livipen_doc::NodeId(square)).and_then(|n| n.geometric_bounds());
         assert_eq!(moved.map(|b| (b.x0, b.y0)), Some((50.0, 10.0)), "the drag was not canceled");
     }
 
@@ -228,17 +228,17 @@ mod tests {
     /// to itself, waits for the drag to end: the drag still places its file.
     #[test]
     fn a_file_ready_during_a_place_cursor_drag_waits_for_it_to_end() {
-        use vectorcraft_tools::{PointerEvent, PointerKind};
-        let mut app = VectorcraftApp::new(Session::new(), Services::default());
+        use livipen_tools::{PointerEvent, PointerKind};
+        let mut app = LiviPenApp::new(Session::new(), Services::default());
         app.run("file.new", json!({"width": 400, "height": 300})).unwrap();
         let mut png = vec![];
         image::RgbImage::new(8, 8).write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).unwrap();
-        app.run("file.place.queue", json!({"files": [{"name": "a.png", "dataBase64": vectorcraft_format::base64_encode(&png)}]})).unwrap();
-        let view = vectorcraft_engine::ViewInfo::default();
+        app.run("file.place.queue", json!({"files": [{"name": "a.png", "dataBase64": livipen_format::base64_encode(&png)}]})).unwrap();
+        let view = livipen_engine::ViewInfo::default();
         for (kind, x) in [(PointerKind::Down, 20.0), (PointerKind::Drag, 60.0)] {
             crate::canvas::dispatch(&mut app, &PointerEvent::new(kind, x, 20.0), view);
         }
-        start(&mut app, "/art/Second.vectorcraft", vectorcraft_format::save(&vectorcraft_doc::Document::new(120.0, 80.0), false)).unwrap();
+        start(&mut app, "/art/Second.livipen", livipen_format::save(&livipen_doc::Document::new(120.0, 80.0), false)).unwrap();
         let t0 = std::time::Instant::now();
         while t0.elapsed().as_millis() < 400 {
             poll(&mut app);
@@ -263,15 +263,15 @@ mod tests {
     /// pointer after its second point.
     #[test]
     fn a_file_ready_during_a_preview_waits_for_it_to_end() {
-        use vectorcraft_tools::{PointerEvent, PointerKind};
-        let view = vectorcraft_engine::ViewInfo::default();
-        let click = |app: &mut VectorcraftApp, x: f64| {
+        use livipen_tools::{PointerEvent, PointerKind};
+        let view = livipen_engine::ViewInfo::default();
+        let click = |app: &mut LiviPenApp, x: f64| {
             for kind in [PointerKind::Down, PointerKind::Up] {
                 crate::canvas::dispatch(app, &PointerEvent::new(kind, x, 20.0), view);
             }
         };
         for case in ["slider", "slider between clicks", "line"] {
-            let mut app = VectorcraftApp::new(Session::new(), Services::default());
+            let mut app = LiviPenApp::new(Session::new(), Services::default());
             app.run("file.new", json!({"width": 400, "height": 300})).unwrap();
             if case != "slider" {
                 app.select_tool("dimension");
@@ -284,7 +284,7 @@ mod tests {
                 app.session.begin_interaction("Preview").unwrap();
             }
             assert_eq!(app.session.tool_busy(), case != "slider", "{case}");
-            start(&mut app, "/art/Second.vectorcraft", vectorcraft_format::save(&vectorcraft_doc::Document::new(120.0, 80.0), false)).unwrap();
+            start(&mut app, "/art/Second.livipen", livipen_format::save(&livipen_doc::Document::new(120.0, 80.0), false)).unwrap();
             let t0 = std::time::Instant::now();
             while t0.elapsed().as_millis() < 400 {
                 poll(&mut app);
@@ -311,17 +311,17 @@ mod tests {
     /// switches documents.
     #[test]
     fn a_file_ready_between_a_tools_clicks_opens() {
-        use vectorcraft_tools::{PointerEvent, PointerKind};
-        let mut app = VectorcraftApp::new(Session::new(), Services::default());
+        use livipen_tools::{PointerEvent, PointerKind};
+        let mut app = LiviPenApp::new(Session::new(), Services::default());
         app.run("file.new", json!({"width": 400, "height": 300})).unwrap();
         app.select_tool("dimension");
-        let view = vectorcraft_engine::ViewInfo::default();
-        let click = |app: &mut VectorcraftApp, x: f64| {
+        let view = livipen_engine::ViewInfo::default();
+        let click = |app: &mut LiviPenApp, x: f64| {
             for kind in [PointerKind::Down, PointerKind::Up] {
                 crate::canvas::dispatch(app, &PointerEvent::new(kind, x, 20.0), view);
             }
         };
-        let opened = |app: &mut VectorcraftApp| {
+        let opened = |app: &mut LiviPenApp| {
             let t0 = std::time::Instant::now();
             while !app.opening.pending.is_empty() && t0.elapsed().as_secs() < 30 {
                 poll(app);
@@ -330,14 +330,14 @@ mod tests {
         };
         click(&mut app, 20.0);
         assert!(app.session.tool_busy() && !app.session.in_interaction(), "the first point waits for the second");
-        start(&mut app, "/art/Second.vectorcraft", vectorcraft_format::save(&vectorcraft_doc::Document::new(400.0, 300.0), false)).unwrap();
+        start(&mut app, "/art/Second.livipen", livipen_format::save(&livipen_doc::Document::new(400.0, 300.0), false)).unwrap();
         opened(&mut app);
         assert_eq!(app.session.documents().len(), 2, "the file opens after one click");
         assert!(!app.session.tool_busy(), "the tool starts afresh");
         click(&mut app, 20.0);
         click(&mut app, 80.0);
         assert!(app.session.tool_busy() && !app.session.in_interaction(), "the second point waits for the line's place");
-        start(&mut app, "/art/Third.vectorcraft", vectorcraft_format::save(&vectorcraft_doc::Document::new(120.0, 80.0), false)).unwrap();
+        start(&mut app, "/art/Third.livipen", livipen_format::save(&livipen_doc::Document::new(120.0, 80.0), false)).unwrap();
         opened(&mut app);
         assert_eq!(app.session.documents().len(), 3, "the file opens after two clicks");
         assert!(!app.session.tool_busy() && !app.session.in_interaction(), "the tool starts afresh");
@@ -347,14 +347,14 @@ mod tests {
 
     #[test]
     fn a_file_read_off_the_ui_thread_opens_as_one_read_at_once() {
-        let mut app = VectorcraftApp::new(Session::new(), Services::default());
-        let mut d = vectorcraft_doc::Document::new(120.0, 80.0);
+        let mut app = LiviPenApp::new(Session::new(), Services::default());
+        let mut d = livipen_doc::Document::new(120.0, 80.0);
         d.title = "Poster".into();
-        let bytes = vectorcraft_format::save(&d, false);
+        let bytes = livipen_format::save(&d, false);
         let before = app.session.documents().len();
-        let r = start(&mut app, "/art/Poster.vectorcraft", bytes).unwrap();
+        let r = start(&mut app, "/art/Poster.livipen", bytes).unwrap();
         assert_eq!(r["background"], true);
-        assert_eq!(app.ui.status, "Opening Poster.vectorcraft…");
+        assert_eq!(app.ui.status, "Opening Poster.livipen…");
         let t0 = std::time::Instant::now();
         while !app.opening.pending.is_empty() && t0.elapsed().as_secs() < 30 {
             poll(&mut app);
@@ -363,18 +363,18 @@ mod tests {
         assert_eq!(app.session.documents().len(), before + 1);
         assert!(!app.ui.status.starts_with("Opening"), "{}", app.ui.status);
         let st = app.session.doc().unwrap();
-        assert_eq!((st.path.as_deref(), st.doc.artboards[0].rect.width()), (Some("/art/Poster.vectorcraft"), 120.0));
-        assert_eq!(app.ui.recent_files.first().map(String::as_str), Some("/art/Poster.vectorcraft"));
+        assert_eq!((st.path.as_deref(), st.doc.artboards[0].rect.width()), (Some("/art/Poster.livipen"), 120.0));
+        assert_eq!(app.ui.recent_files.first().map(String::as_str), Some("/art/Poster.livipen"));
         // A file that can't be read: reported, nothing opened, not a recent file.
-        start(&mut app, "/art/Broken.vectorcraft", b"{\"format\":\"vectorcraft\"".to_vec()).unwrap();
+        start(&mut app, "/art/Broken.livipen", b"{\"format\":\"livipen\"".to_vec()).unwrap();
         let t0 = std::time::Instant::now();
         while !app.opening.pending.is_empty() && t0.elapsed().as_secs() < 30 {
             poll(&mut app);
             std::thread::yield_now();
         }
         assert_eq!(app.session.documents().len(), before + 1);
-        assert!(app.ui.status.starts_with("Couldn't open Broken.vectorcraft"), "{}", app.ui.status);
-        assert_ne!(app.ui.recent_files.first().map(String::as_str), Some("/art/Broken.vectorcraft"));
+        assert!(app.ui.status.starts_with("Couldn't open Broken.livipen"), "{}", app.ui.status);
+        assert_ne!(app.ui.recent_files.first().map(String::as_str), Some("/art/Broken.livipen"));
     }
 
     /// A file read off the UI thread opens as the document read at once. Its linked TIFF, BMP and JPEG
@@ -394,7 +394,7 @@ mod tests {
             image::RgbImage::from_pixel(60, 40, image::Rgb(rgb)).write_to(&mut std::io::Cursor::new(&mut out), format).unwrap();
             out
         };
-        let mut app = VectorcraftApp::new(Session::new(), Services::default());
+        let mut app = LiviPenApp::new(Session::new(), Services::default());
         app.session.execute("file.new", &json!({"width": 400, "height": 300})).unwrap();
         for (name, format) in [("a.tif", Tiff), ("b.bmp", Bmp), ("c.jpg", Jpeg), ("gone.png", Png), ("changed.png", Png)] {
             std::fs::write(file(&before, name), picture(format, [200, 40, 40])).unwrap();
@@ -403,7 +403,7 @@ mod tests {
         let area = json!({"width": 150, "height": 20, "fit": "autoHeight"});
         let t = app.session.execute("text.create", &json!({"x": 20, "y": 40, "text": "Type in two columns. ".repeat(12), "area": area})).unwrap();
         app.session.execute("text.areaOptions", &json!({"ids": [t["id"]], "columns": 2})).unwrap();
-        app.session.execute("document.save", &json!({"path": file(&before, "poster.vectorcraft")})).unwrap();
+        app.session.execute("document.save", &json!({"path": file(&before, "poster.livipen")})).unwrap();
         std::fs::remove_file(file(&before, "gone.png")).unwrap();
         let changed = file(&before, "changed.png");
         let stamp = std::fs::metadata(&changed).unwrap().modified().unwrap();
@@ -413,9 +413,9 @@ mod tests {
         std::fs::OpenOptions::new().write(true).open(&changed).unwrap().set_times(later).unwrap();
         // The folder moves: the linked files are found beside the document.
         std::fs::rename(&before, &after).unwrap();
-        let path = file(&after, "poster.vectorcraft");
+        let path = file(&after, "poster.livipen");
         let bytes = std::fs::read(&path).unwrap();
-        let asked = |app: &VectorcraftApp| app.ui.dialog.as_ref().map(|d| (d.kind.clone(), d.fields.clone()));
+        let asked = |app: &LiviPenApp| app.ui.dialog.as_ref().map(|d| (d.kind.clone(), d.fields.clone()));
         for update in ["askWhenModified", "automatically"] {
             app.session.prefs.update_links = update.into();
             let r = crate::io::open_bytes(&mut app, &path, &bytes, Some(path.clone())).unwrap();

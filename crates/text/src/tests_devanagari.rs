@@ -5,9 +5,9 @@
 //! No font is committed: the tests use an installed face and print SKIPPED when none is found.
 use super::*;
 use kurbo::{BezPath, Point};
+use livipen_doc::{CharStyle, TextKind};
+use livipen_geom::PathData;
 use std::sync::Arc;
-use vectorcraft_doc::{CharStyle, TextKind};
-use vectorcraft_geom::PathData;
 
 fn devanagari_test_face(test: &str) -> Option<Arc<FontFace>> {
     let db = FontDb::global();

@@ -1,11 +1,11 @@
 //! Revolve as live, shaded vector art, shared by the canvas and every exporter.
 use std::sync::Arc;
 
+use livipen_doc::color::{Color, Paint};
+use livipen_doc::{Appearance, AppearanceItem, Effect, FillLayer, LineJoin, Node, NodeKind, StrokeLayer};
+use livipen_geom::{PathData, Rect};
+use livipen_three_d::{Edge, Revolve};
 use serde_json::Value;
-use vectorcraft_doc::color::{Color, Paint};
-use vectorcraft_doc::{Appearance, AppearanceItem, Effect, FillLayer, LineJoin, Node, NodeKind, StrokeLayer};
-use vectorcraft_geom::{PathData, Rect};
-use vectorcraft_three_d::{Edge, Revolve};
 
 use crate::util::{flag, num, text};
 use crate::{GeomContext, apply_geometry_with, is_geometry, merged_params};
@@ -19,15 +19,15 @@ const MAX_PAINT_COPIES: usize = 256 << 20;
 
 /// About the bytes one copy of `paint` takes.
 fn paint_bytes(paint: &Paint) -> usize {
+    use livipen_doc::color::{FreeformPoint, GradientStop};
     use std::mem::size_of;
-    use vectorcraft_doc::color::{FreeformPoint, GradientStop};
     let own = size_of::<Paint>();
     let Paint::Gradient(g) = paint else { return own };
     let freeform = g
         .freeform
         .as_ref()
         .map_or(0, |f| f.points.len() * size_of::<FreeformPoint>() + f.lines.iter().map(|l| l.len() * size_of::<usize>()).sum::<usize>());
-    own + size_of::<vectorcraft_doc::color::GradientPaint>() + g.gradient.stops.len() * size_of::<GradientStop>() + freeform
+    own + size_of::<livipen_doc::color::GradientPaint>() + g.gradient.stops.len() * size_of::<GradientStop>() + freeform
 }
 
 fn visible(fx: &[Effect]) -> bool {
@@ -49,8 +49,8 @@ pub fn revolve_options(p: &Value) -> Revolve {
         rotation_z: num(p, "rotationZ", 0.0),
         perspective: num(p, "perspectiveAngle", 0.0),
         segments: num(p, "segments", 64.0).clamp(8.0, 128.0) as usize,
-        light_rotation: num(p, "lightRotation", vectorcraft_three_d::DEFAULT_LIGHT.0),
-        light_height: num(p, "lightHeight", vectorcraft_three_d::DEFAULT_LIGHT.1),
+        light_rotation: num(p, "lightRotation", livipen_three_d::DEFAULT_LIGHT.0),
+        light_height: num(p, "lightHeight", livipen_three_d::DEFAULT_LIGHT.1),
         light_behind: flag(p, "lightBehind", false),
         light_color: crate::lighting::light_color(p),
         lights: crate::lighting::lights(p),
@@ -78,7 +78,7 @@ pub fn validate_revolve(n: &Node, p: &Value) -> Result<(), String> {
     if p.get("cap").is_some_and(|v| v.as_bool().is_none()) {
         return Err("Revolve cap must be a boolean".into());
     }
-    vectorcraft_three_d::revolve(&path, b, revolve_options(p)).map(|_| ())
+    livipen_three_d::revolve(&path, b, revolve_options(p)).map(|_| ())
 }
 
 fn profile(n: &Node) -> Option<PathData> {
@@ -96,21 +96,13 @@ fn geometry(path: &PathData, fx: &[Effect], ctx: &GeomContext) -> PathData {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn surface(
-    n: &Node,
-    path: &PathData,
-    fx: &Effect,
-    paint: Paint,
-    opacity: f32,
-    blend: vectorcraft_doc::color::BlendMode,
-    expand: bool,
-) -> Option<Node> {
+fn surface(n: &Node, path: &PathData, fx: &Effect, paint: Paint, opacity: f32, blend: livipen_doc::color::BlendMode, expand: bool) -> Option<Node> {
     let b = path.bounds()?;
     // A loaded file or a profile edited past the limits keeps drawing its source path instead
     // of crashing the frame. Commands validate the same evaluator and report its errors.
     let options = revolve_options(&merged_params(REVOLVE, &fx.params));
     let colored = options.light_color != [1.0; 3] || options.lights.is_some();
-    let faces = vectorcraft_three_d::revolve(path, b, options).ok()?;
+    let faces = livipen_three_d::revolve(path, b, options).ok()?;
     // A face's fill, its shadow and their seam strokes: up to four copies of the paint.
     if faces.len().saturating_mul(4).saturating_mul(paint_bytes(&paint)) > MAX_PAINT_COPIES {
         return None;
@@ -124,12 +116,12 @@ fn surface(
         && opacity == 1.0
         && blend == Default::default()
         && n.has_default_transparency())
-    .then(|| vectorcraft_three_d::visible_faces(&faces).ok())
+    .then(|| livipen_three_d::visible_faces(&faces).ok())
     .flatten();
     let faces = visible.unwrap_or_else(|| {
         faces
             .into_iter()
-            .map(|f| vectorcraft_three_d::VisibleFace {
+            .map(|f| livipen_three_d::VisibleFace {
                 path: f.path(),
                 brightness: f.brightness,
                 depth: f.depth,
@@ -199,8 +191,8 @@ fn surface(
     Some(group)
 }
 
-fn shading_paint(g: vectorcraft_three_d::ShadeGradient, color: impl Fn(f64) -> Color, opacity: impl Fn(f64) -> f32) -> Paint {
-    use vectorcraft_doc::color::{Gradient, GradientGeom, GradientKind, GradientPaint, GradientStop};
+fn shading_paint(g: livipen_three_d::ShadeGradient, color: impl Fn(f64) -> Color, opacity: impl Fn(f64) -> f32) -> Paint {
+    use livipen_doc::color::{Gradient, GradientGeom, GradientKind, GradientPaint, GradientStop};
     let stops =
         g.brightness.into_iter().enumerate().map(|(i, s)| GradientStop { opacity: opacity(s), ..GradientStop::new(i as f32, color(s)) }).collect();
     let mut paint = GradientPaint::new(Gradient::new(GradientKind::Linear, stops));
@@ -208,7 +200,7 @@ fn shading_paint(g: vectorcraft_three_d::ShadeGradient, color: impl Fn(f64) -> C
     Paint::Gradient(Box::new(paint))
 }
 
-fn paint_of(item: &AppearanceItem) -> (Paint, f32, vectorcraft_doc::color::BlendMode) {
+fn paint_of(item: &AppearanceItem) -> (Paint, f32, livipen_doc::color::BlendMode) {
     match item {
         AppearanceItem::Fill(f) => (f.paint.clone(), f.opacity, f.blend),
         AppearanceItem::Stroke(s) => (s.paint.clone(), s.opacity, s.blend),
@@ -283,9 +275,9 @@ fn art(n: &Node, expand: bool) -> Option<Node> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use livipen_doc::{Document, NodeId};
+    use livipen_geom::{Affine, BezPath};
     use serde_json::json;
-    use vectorcraft_doc::{Document, NodeId};
-    use vectorcraft_geom::{Affine, BezPath};
     fn profile_node() -> Node {
         let mut b = BezPath::new();
         b.move_to((100.0, 40.0));
@@ -348,7 +340,7 @@ mod tests {
         assert_eq!(revolve_art(&n), Some(smooth.clone()));
         n.appearance.effects[0].params["smoothShading"] = json!(true);
         assert_eq!(revolve_art(&n), Some(smooth));
-        use vectorcraft_doc::color::{Gradient, GradientPaint};
+        use livipen_doc::color::{Gradient, GradientPaint};
         let base = Paint::Gradient(Box::new(GradientPaint::new(Gradient::default())));
         n.appearance.set_fill(base.clone());
         let art = revolve_art(&n).unwrap();
@@ -411,7 +403,7 @@ mod tests {
         let mut n = profile_node();
         n.id = d.alloc_id();
         n.appearance.effects.push(fx());
-        let mut stroke = |_: &mut Document, _: &PathData, _: vectorcraft_geom::FillRule, _: &vectorcraft_doc::StrokeLayer| None;
+        let mut stroke = |_: &mut Document, _: &PathData, _: livipen_geom::FillRule, _: &livipen_doc::StrokeLayer| None;
         let art = crate::expand_leaf(&mut d, &n, &mut stroke).unwrap();
         let mut ids = std::collections::HashSet::new();
         fn visit(n: &Node, ids: &mut std::collections::HashSet<NodeId>) {
@@ -460,7 +452,7 @@ mod tests {
                         f.opacity = 0.4;
                     }
                 }
-                2 => sample.blend = vectorcraft_doc::color::BlendMode::Multiply,
+                2 => sample.blend = livipen_doc::color::BlendMode::Multiply,
                 _ => sample.appearance.effects.push(crate::new_effect("distort.twist", &json!({"angle":45})).unwrap()),
             }
             assert_eq!(expand_revolve_art(&sample), revolve_art(&sample), "preserve surface for case {change}");

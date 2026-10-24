@@ -3,9 +3,9 @@
 
 use super::*;
 use kurbo::{Affine, Shape};
-use vectorcraft_doc::text::Kashida;
-use vectorcraft_doc::{CharStyle, JustificationOptions, Justify, SingleWordJustify, TextKind};
-use vectorcraft_geom::PathData;
+use livipen_doc::text::Kashida;
+use livipen_doc::{CharStyle, JustificationOptions, Justify, SingleWordJustify, TextKind};
+use livipen_geom::PathData;
 
 fn db() -> &'static FontDb {
     FontDb::global()

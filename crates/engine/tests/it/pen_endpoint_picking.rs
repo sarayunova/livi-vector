@@ -1,10 +1,10 @@
 //! Original tiny-geometry controls for Pen endpoint/Alt integration with continue-any-path.
 
+use livipen_doc::{Node, NodeId, NodeKind};
+use livipen_engine::{Session, ViewInfo};
+use livipen_geom::{AnchorKind, Point};
+use livipen_tools::{Cursor, Mods, PointerEvent, PointerKind};
 use serde_json::json;
-use vectorcraft_doc::{Node, NodeId, NodeKind};
-use vectorcraft_engine::{Session, ViewInfo};
-use vectorcraft_geom::{AnchorKind, Point};
-use vectorcraft_tools::{Cursor, Mods, PointerEvent, PointerKind};
 
 fn session() -> Session {
     let mut s = Session::new();

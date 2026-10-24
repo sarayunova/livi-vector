@@ -12,12 +12,12 @@
 
 use std::sync::mpsc::{Receiver, TryRecvError, channel};
 
+use livipen_doc::cancel::{self, CancelToken};
+use livipen_engine::EngineError;
+use livipen_engine::cmd::plugin::FilterRun;
 use serde_json::{Value, json};
-use vectorcraft_doc::cancel::{self, CancelToken};
-use vectorcraft_engine::EngineError;
-use vectorcraft_engine::cmd::plugin::FilterRun;
 
-use crate::VectorcraftApp;
+use crate::LiviPenApp;
 use crate::export_progress::{self, Pressed};
 
 pub use crate::export_progress::DELAY;
@@ -62,7 +62,7 @@ pub fn available() -> bool {
 
 /// Runs filter `p` (`plugin.run`'s params) on a thread of its own → `{background: true, status}`;
 /// where no thread can run it, at once (`plugin.run`'s result).
-pub fn start(app: &mut VectorcraftApp, p: Value) -> Result<Value, String> {
+pub fn start(app: &mut LiviPenApp, p: Value) -> Result<Value, String> {
     if !available() {
         return app.run("plugin.run", p);
     }
@@ -75,9 +75,9 @@ pub fn start(app: &mut VectorcraftApp, p: Value) -> Result<Value, String> {
     let token = CancelToken::new();
     let stop = token.clone();
     std::thread::Builder::new()
-        .name("vectorcraft-plugin".into())
+        .name("livipen-plugin".into())
         .spawn(move || {
-            let output = vectorcraft_engine::guard::catch_panic(|| cancel::scope(&stop, None, || run.run()))
+            let output = livipen_engine::guard::catch_panic(|| cancel::scope(&stop, None, || run.run()))
                 .map_err(|msg| format!("internal error: {msg} (please report this bug)"))
                 .and_then(|r| r.map_err(|e| e.to_string()));
             // The app may have quit meanwhile: nothing to hand it to.
@@ -94,7 +94,7 @@ pub fn start(app: &mut VectorcraftApp, p: Value) -> Result<Value, String> {
 
 /// Applies the runs that are done (each frame). Not while a dialog is open: its OK acts on the
 /// active document, which a run's result changes; the results wait until it is closed.
-pub fn poll(app: &mut VectorcraftApp) {
+pub fn poll(app: &mut LiviPenApp) {
     if app.ui.dialog.is_some() {
         return;
     }
@@ -119,7 +119,7 @@ pub fn poll(app: &mut VectorcraftApp) {
 
 /// Applies run `r`'s result: its output, as `plugin.run`, while the document and the plug-in are as
 /// they were; else why it has none, in the status bar.
-fn finish(app: &mut VectorcraftApp, r: Running, done: Option<Done>) {
+fn finish(app: &mut LiviPenApp, r: Running, done: Option<Done>) {
     // Cancel changes nothing, even when the run ended just before it.
     if r.token.is_cancelled() {
         app.status(EngineError::Cancelled.to_string());
@@ -148,7 +148,7 @@ fn finish(app: &mut VectorcraftApp, r: Running, done: Option<Done>) {
 
 /// The progress window's Cancel (also Esc): every heavy filter running stops at the next slice of
 /// its budget and changes nothing → `{cancelled: n}`.
-pub fn cancel_all(app: &mut VectorcraftApp) -> Value {
+pub fn cancel_all(app: &mut LiviPenApp) -> Value {
     let mut n = 0;
     for r in app.plugin_runs.running.iter().filter(|r| !r.token.is_cancelled()) {
         r.token.cancel();
@@ -159,7 +159,7 @@ pub fn cancel_all(app: &mut VectorcraftApp) -> Value {
 
 /// The progress window's Continue in Background: the runs go on, shown in the status bar only →
 /// `{hidden: n}`.
-pub fn hide_all(app: &mut VectorcraftApp) -> Value {
+pub fn hide_all(app: &mut LiviPenApp) -> Value {
     let mut n = 0;
     for r in app.plugin_runs.running.iter_mut().filter(|r| r.shown()) {
         r.hidden = true;
@@ -169,18 +169,18 @@ pub fn hide_all(app: &mut VectorcraftApp) -> Value {
 }
 
 /// Is a heavy filter running that hasn't been cancelled?
-pub fn any_running(app: &VectorcraftApp) -> bool {
+pub fn any_running(app: &LiviPenApp) -> bool {
     app.plugin_runs.running.iter().any(|r| !r.token.is_cancelled())
 }
 
 /// Is a heavy filter running that the progress window shows?
-pub fn any_shown(app: &VectorcraftApp) -> bool {
+pub fn any_shown(app: &LiviPenApp) -> bool {
     app.plugin_runs.running.iter().any(Running::shown)
 }
 
 /// The progress window of the first run it shows, once that has run for [`DELAY`]. Not while a
 /// dialog or the export progress window is open: never two modals at once.
-pub fn show(app: &mut VectorcraftApp, ctx: &egui::Context) {
+pub fn show(app: &mut LiviPenApp, ctx: &egui::Context) {
     let Some(first) = app.plugin_runs.running.iter().find(|r| r.shown()) else { return };
     let now = ctx.input(|i| i.time);
     let since = ctx.data_mut(|m| {

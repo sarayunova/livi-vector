@@ -1,8 +1,8 @@
 //! Shape Builder (Shift+M), Live Paint Bucket (K) and Live Paint Selection (Shift+L).
 //!
 //! The tools only emit commands (`shapeBuilder.merge`, `livePaint.fill`, `livePaint.strokeEdge`,
-//! `select.*`); the planar arrangement comes from `vectorcraft_pathops::shape_builder` (Shape
-//! Builder) and `vectorcraft_pathops::live_paint` (Live Paint).
+//! `select.*`); the planar arrangement comes from `livipen_pathops::shape_builder` (Shape
+//! Builder) and `livipen_pathops::live_paint` (Live Paint).
 //!
 //! **Live Paint groups** are ordinary groups (no special node kind): the group's name starts with
 //! [`LIVE_PAINT_PREFIX`]; its first child is a hidden group named [`SOURCES_NAME`] holding the
@@ -15,11 +15,11 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, TryRecvError};
 
+use livipen_color::{Paint, Swatch};
+use livipen_doc::{Document, Node, NodeId, NodeKind};
+use livipen_geom::{BezPath, FillRule, PathData, Point, Rect, Shape as _, SubPath};
+use livipen_pathops as po;
 use serde_json::{Value, json};
-use vectorcraft_color::{Paint, Swatch};
-use vectorcraft_doc::{Document, Node, NodeId, NodeKind};
-use vectorcraft_geom::{BezPath, FillRule, PathData, Point, Rect, Shape as _, SubPath};
-use vectorcraft_pathops as po;
 
 use crate::{Action, Cursor, Mods, Overlay, PointerEvent, PointerKind, Tool, ToolContext, ToolKey, json_ids};
 
@@ -359,7 +359,7 @@ impl BuilderMap {
             return self.region_at(from).into_iter().collect();
         }
         let c = r.center();
-        let touches = |(reg, bp, b): &Face| (b.contains(c) && bp.winding(c) != 0) || vectorcraft_geom::hit::intersects_rect(&reg.path, r);
+        let touches = |(reg, bp, b): &Face| (b.contains(c) && bp.winding(c) != 0) || livipen_geom::hit::intersects_rect(&reg.path, r);
         let mut out: Vec<usize> = self.regions.iter().enumerate().filter(|(_, f)| touches(f)).map(|(i, _)| i).collect();
         for p in [to, from] {
             if let Some(k) = self.region_at(p).and_then(|i| out.iter().position(|&j| j == i)) {
@@ -702,7 +702,7 @@ fn build_map(shapes: Vec<po::Shape>, live: bool, gap: f64) -> BuilderMap {
 #[cfg(not(target_arch = "wasm32"))]
 fn spawn_build(shapes: Vec<po::Shape>, live: bool, gap: f64) -> Option<Receiver<BuilderMap>> {
     let (tx, done) = std::sync::mpsc::channel();
-    let spawned = std::thread::Builder::new().name("vectorcraft-region-map".into()).spawn(move || {
+    let spawned = std::thread::Builder::new().name("livipen-region-map".into()).spawn(move || {
         // The tool may have dropped the receiver meanwhile (another tool, another selection).
         let _ = tx.send(build_map(shapes, live, gap));
     });
@@ -1505,10 +1505,10 @@ impl LivePaintSelectionTool {
 /// A highlight color option: `#rrggbb` or a layer color's name (any case).
 fn lp_color(v: &Value) -> Option<[u8; 3]> {
     let s = v.as_str()?.trim();
-    if let Some((_, c)) = vectorcraft_doc::LAYER_COLORS.iter().find(|(name, _)| name.eq_ignore_ascii_case(s)) {
+    if let Some((_, c)) = livipen_doc::LAYER_COLORS.iter().find(|(name, _)| name.eq_ignore_ascii_case(s)) {
         return Some(*c);
     }
-    let [r, g, b, _] = vectorcraft_color::Color::from_hex(s)?.to_rgba8(1.0);
+    let [r, g, b, _] = livipen_color::Color::from_hex(s)?.to_rgba8(1.0);
     Some([r, g, b])
 }
 
@@ -1589,8 +1589,8 @@ pub fn create(id: &str) -> Option<Box<dyn Tool>> {
 mod tests {
     use super::*;
     use crate::testutil::*;
-    use vectorcraft_doc::{Appearance, Selection};
-    use vectorcraft_geom::shapes;
+    use livipen_doc::{Appearance, Selection};
+    use livipen_geom::shapes;
 
     fn two_rects() -> (Document, NodeId, NodeId) {
         two_rects_at(0.0)

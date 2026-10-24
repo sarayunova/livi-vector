@@ -1,9 +1,9 @@
-//! VectorCraft renderer: document → premultiplied RGBA pixels.
+//! Livi Pen renderer: document → premultiplied RGBA pixels.
 //!
 //! The backend is `vello_cpu` (SIMD, sparse strips). Callers give a *view transform* mapping
 //! document points to output pixels; the renderer culls by bounds, evaluates appearance stacks
 //! (multiple fills/strokes, opacity, blend modes, stroke alignment, dashes), clip groups,
-//! gradients, images and text (via `vectorcraft-text` glyph outlines).
+//! gradients, images and text (via `livipen-text` glyph outlines).
 #![forbid(unsafe_code)]
 
 mod brush_fx;
@@ -26,8 +26,8 @@ pub mod proof;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use vectorcraft_doc::{AppearanceItem, Document, Node, NodeId, NodeKind, StrokeAlign, StrokeLayer, SymbolBoxes, TextObject, TraceView};
-use vectorcraft_geom::{Affine, BezPath, FillRule, Rect, Shape};
+use livipen_doc::{AppearanceItem, Document, Node, NodeId, NodeKind, StrokeAlign, StrokeLayer, SymbolBoxes, TextObject, TraceView};
+use livipen_geom::{Affine, BezPath, FillRule, Rect, Shape};
 use vello_cpu::kurbo;
 use vello_cpu::peniko::{self, BlendMode, Compose, Mix};
 use vello_cpu::{Pixmap, RenderContext, Resources};
@@ -41,8 +41,8 @@ pub use changed::{Changed, changed, view_pixels};
 pub use effects::stroke::width_outline;
 pub use images::{IMAGE_CACHE_MAX, image_cache_bytes, set_image_cache_budget};
 pub use live::expand_live;
+pub use livipen_effects as effects;
 pub use pattern::render_pattern_swatch;
-pub use vectorcraft_effects as effects;
 pub use vello_cpu;
 
 /// Bounds of everything `n` paints, as the renderer culls it: its members, strokes, brush art and
@@ -62,7 +62,7 @@ pub fn effect_bounds(symbols: &SymbolBoxes, n: &Node) -> Option<Rect> {
         NodeKind::Layer { children, clip: false, .. } | NodeKind::Group { children, clip: false } if !fx::has_object_fx(n) => children
             .iter()
             .skip(usize::from(n.extras().shaper.is_some()))
-            .fold(None, |acc, c| vectorcraft_geom::union_opt(acc, effect_bounds(symbols, c))),
+            .fold(None, |acc, c| livipen_geom::union_opt(acc, effect_bounds(symbols, c))),
         _ => fx::cull_bounds(symbols, n),
     }
 }
@@ -262,7 +262,7 @@ impl Default for RenderOptions {
             skip_templates: false,
             hide_templates: false,
             hide_guides: false,
-            tile_edge: vectorcraft_doc::LAYER_COLORS[0].1,
+            tile_edge: livipen_doc::LAYER_COLORS[0].1,
             guide: ([0x4a, 0xd8, 0xff], false),
             mask_view: None,
             highlight_substitutions: false,
@@ -407,7 +407,7 @@ struct StrokeEntry {
 }
 
 /// The slices of a stroke whose gradient runs along or across it, each with its paint and bounds.
-type Slices = Arc<Vec<(BezPath, vectorcraft_color::Paint, Rect)>>;
+type Slices = Arc<Vec<(BezPath, livipen_color::Paint, Rect)>>;
 
 /// [`Slices`] cached for a stroke: (owning node, slices, last frame used).
 struct SliceEntry {
@@ -446,7 +446,7 @@ struct PlacedEntry {
     art: std::sync::Weak<Node>,
     /// The art placed, or `None` for art placed again in every frame ([`depends_on_document`]).
     placed: Option<Arc<Node>>,
-    /// The font generation ([`vectorcraft_text::FontDb::generation`]) the art was placed in, when
+    /// The font generation ([`livipen_text::FontDb::generation`]) the art was placed in, when
     /// it holds type: the art is placed again when the fonts change.
     fonts: Option<u64>,
 }
@@ -456,7 +456,7 @@ struct PlacedEntry {
 pub struct Renderer {
     /// Glyph geometry per text object, keyed by `Arc` identity like `geom` (see [`Self::text_geom_of`]).
     texts: FrameCache<usize, (Arc<Node>, Arc<TextGeom>)>,
-    /// The [`vectorcraft_text::FontDb::generation`] `texts` was laid out with: type lays out
+    /// The [`livipen_text::FontDb::generation`] `texts` was laid out with: type lays out
     /// again when fonts are added or rescanned.
     text_fonts: u64,
     /// Clip regions per clipping path (see [`Self::clip_of`]).
@@ -553,7 +553,7 @@ pub struct Renderer {
     /// at the start of every frame.
     offscreen_live: u64,
     offscreen_budget: u64,
-    /// Objects the symbol instances drawn in this frame held, together ([`vectorcraft_doc::MAX_SYMBOL_NODES`]).
+    /// Objects the symbol instances drawn in this frame held, together ([`livipen_doc::MAX_SYMBOL_NODES`]).
     symbol_nodes: u64,
     /// Groups drawn twice (blending with their backdrop) that hold what is being drawn.
     twice_drawn: u32,
@@ -564,7 +564,7 @@ pub struct Renderer {
     stroke_slices: PtrMap<(usize, usize, i32), SliceEntry>,
     /// What the image keys colour adjustments give their recoloured images name: the image
     /// recoloured and the adjustment, with its hash (see [`Self::adjusted_image`]).
-    adjusts: HashMap<String, (String, u64, vectorcraft_effects::ColorMap)>,
+    adjusts: HashMap<String, (String, u64, livipen_effects::ColorMap)>,
     /// Layer Options → Dim Images to, of the layer being drawn (screen views only): images show
     /// faded to this opacity over white.
     dim_images: Option<f32>,
@@ -993,7 +993,7 @@ impl Renderer {
                 let source = a.extras().trace.is_some().then(|| children.first()).flatten();
                 for c in children {
                     if c.visible || source.is_some_and(|s| Arc::ptr_eq(s, c)) {
-                        acc = vectorcraft_geom::union_opt(acc, self.bounds_of(symbols, c));
+                        acc = livipen_geom::union_opt(acc, self.bounds_of(symbols, c));
                     }
                 }
                 acc
@@ -1122,7 +1122,7 @@ impl Renderer {
             let bounds = self.bounds_of(f.symbols, a);
             let Some((r, sub)) = group::area(ctx, f, bounds) else { return };
             let mask = Some(self.mask_values(&sub, m, r.w, r.h));
-            let blends = a.blend != vectorcraft_color::BlendMode::Normal || (!a.isolate && self.blends_through(a));
+            let blends = a.blend != livipen_color::BlendMode::Normal || (!a.isolate && self.blends_through(a));
             self.group(ctx, f, Composite { mask, blends, bounds, ..Default::default() }, &mut |r, c, fr| r.draw_arc_body(c, fr, a));
             return;
         }
@@ -1131,7 +1131,7 @@ impl Renderer {
 
     /// The coverage of opacity mask `m` per output pixel (row-major): its art rendered offscreen,
     /// as luminance ([`mask_value`]).
-    fn mask_values(&mut self, f: &Frame, m: &vectorcraft_doc::OpacityMask, w: u16, h: u16) -> Vec<u8> {
+    fn mask_values(&mut self, f: &Frame, m: &livipen_doc::OpacityMask, w: u16, h: u16) -> Vec<u8> {
         let mut mctx = f.offscreen_context(w, h);
         // Mask art is a picture of its own: it takes no part in a knockout group around the object,
         // and its luminance is that of its screen colours.
@@ -1153,7 +1153,7 @@ impl Renderer {
         // Fast path for plain paths: cached geometry, opacity folded into the paint.
         // A blend mode on a single plain fill applies per draw (exact for one paint operation);
         // a blend layer would composite the whole viewport.
-        let blended = a.blend != vectorcraft_color::BlendMode::Normal;
+        let blended = a.blend != livipen_color::BlendMode::Normal;
         if let NodeKind::Path { rule, guide: false, .. } = &a.kind
             && !f.opts.outline
             && (!blended || single_plain_fill(a))
@@ -1169,7 +1169,7 @@ impl Renderer {
             }
             self.draw_shape(ctx, f, a, &bp, *rule);
             if blended {
-                ctx.set_blend_mode(blend_mode(vectorcraft_color::BlendMode::Normal));
+                ctx.set_blend_mode(blend_mode(livipen_color::BlendMode::Normal));
             }
             self.cur = None;
             self.alpha = 1.0;
@@ -1181,7 +1181,7 @@ impl Renderer {
         }
         if let NodeKind::Text(t) = &a.kind
             && self.opacity_of(a) >= 1.0
-            && a.blend == vectorcraft_color::BlendMode::Normal
+            && a.blend == livipen_color::BlendMode::Normal
             && !fx::has_fx(a)
         {
             let t = &*f.doc.inline_resolved(t);
@@ -1193,7 +1193,7 @@ impl Renderer {
             self.stats.drawn += 1;
             return;
         }
-        if vectorcraft_doc::live::is_live(a) || effects::has_pathfinder(a) {
+        if livipen_doc::live::is_live(a) || effects::has_pathfinder(a) {
             return self.draw_live(ctx, f, a);
         }
         // Its live-effect geometry depends on the node alone, and for plug-in effects on the
@@ -1208,7 +1208,7 @@ impl Renderer {
             return;
         }
         // A cancelled export stops drawing; whoever asked for the picture drops it (see `cancel`).
-        if vectorcraft_doc::cancel::is_cancelled() {
+        if livipen_doc::cancel::is_cancelled() {
             return;
         }
         if force {
@@ -1303,7 +1303,7 @@ impl Renderer {
         // Whether this container's children knock each other out.
         let knockout = !outline && n.knocks_out(self.knockout);
         let enclosing = std::mem::replace(&mut self.knockout, knockout);
-        if !outline && (opacity < 1.0 || n.blend != vectorcraft_color::BlendMode::Normal || n.isolate || knockout) {
+        if !outline && (opacity < 1.0 || n.blend != livipen_color::BlendMode::Normal || n.isolate || knockout) {
             let blends = self.blends_through(n);
             let bounds = if blends { self.node_bounds(f.symbols, n) } else { None };
             let comp = Composite { blend: n.blend, opacity, isolated: n.isolate, blends, bounds, ..Default::default() };
@@ -1417,11 +1417,11 @@ impl Renderer {
         }
     }
 
-    /// Count symbol art `art`'s objects against the frame's [`vectorcraft_doc::MAX_SYMBOL_NODES`]: `false` (the
+    /// Count symbol art `art`'s objects against the frame's [`livipen_doc::MAX_SYMBOL_NODES`]: `false` (the
     /// instance isn't drawn) once they would pass it.
     fn charge_symbol(&mut self, art: &Node) -> bool {
         let total = self.symbol_nodes.saturating_add(art.count() as u64);
-        (total <= vectorcraft_doc::MAX_SYMBOL_NODES).then(|| self.symbol_nodes = total).is_some()
+        (total <= livipen_doc::MAX_SYMBOL_NODES).then(|| self.symbol_nodes = total).is_some()
     }
 
     /// Draw symbol art `art` as [`Self::placed_art`] placed it for an instance or an inline graphic
@@ -1440,7 +1440,7 @@ impl Renderer {
     /// same from frame to frame while the art does. When `a` is a live object,
     /// [`Self::draw_content`] draws its evaluation from the live cache ([`Self::live_root`]).
     fn draw_kept_node(&mut self, ctx: &mut RenderContext, f: &Frame, a: &Arc<Node>) {
-        let live = vectorcraft_doc::live::is_live(a).then(|| a.clone());
+        let live = livipen_doc::live::is_live(a).then(|| a.clone());
         let outer = std::mem::replace(&mut self.live_root, live);
         self.draw_node(ctx, f, a, true);
         self.live_root = outer;
@@ -1587,7 +1587,7 @@ impl Renderer {
             return;
         }
         // Bounds only matter to gradients and patterns (their geometry is relative to the object).
-        let solid = |p: &vectorcraft_color::Paint| matches!(p, vectorcraft_color::Paint::Solid { .. } | vectorcraft_color::Paint::None);
+        let solid = |p: &livipen_color::Paint| matches!(p, livipen_color::Paint::Solid { .. } | livipen_color::Paint::None);
         let needs_bounds = n.appearance.items.iter().any(|i| match i {
             AppearanceItem::Fill(fl) => !solid(&fl.paint),
             AppearanceItem::Stroke(st) => !solid(&st.paint),
@@ -1599,7 +1599,7 @@ impl Renderer {
                     if !fl.visible || fl.paint.is_none() {
                         continue;
                     }
-                    let layered = fl.opacity < 1.0 || fl.blend != vectorcraft_color::BlendMode::Normal;
+                    let layered = fl.opacity < 1.0 || fl.blend != livipen_color::BlendMode::Normal;
                     if layered {
                         ctx.set_transform(Affine::IDENTITY);
                         ctx.push_layer(None, Some(blend_mode(fl.blend)), Some(fl.opacity), None, None);
@@ -1628,9 +1628,9 @@ impl Renderer {
     }
 
     /// Multiply the folded object opacity into a solid paint.
-    fn fold_alpha(&self, ctx: &mut RenderContext, ink: Ink, p: &vectorcraft_color::Paint) {
+    fn fold_alpha(&self, ctx: &mut RenderContext, ink: Ink, p: &livipen_color::Paint) {
         if self.alpha < 1.0
-            && let vectorcraft_color::Paint::Solid { color, .. } = p
+            && let livipen_color::Paint::Solid { color, .. } = p
         {
             ctx.set_paint(ink.color(color, self.alpha));
         }
@@ -1657,7 +1657,7 @@ impl Renderer {
         // each folding it into its paint.
         let folded = if pieces.heads.is_empty() { 1.0 } else { std::mem::replace(&mut self.alpha, 1.0) };
         let opacity = st.opacity * folded;
-        let layered = opacity < 1.0 || st.blend != vectorcraft_color::BlendMode::Normal || st.align == StrokeAlign::Outside;
+        let layered = opacity < 1.0 || st.blend != livipen_color::BlendMode::Normal || st.align == StrokeAlign::Outside;
         if layered {
             ctx.set_transform(Affine::IDENTITY);
             ctx.push_layer(None, Some(blend_mode(st.blend)), Some(opacity), None, None);
@@ -1720,7 +1720,7 @@ impl Renderer {
         chars: Option<(&Arc<TextGeom>, usize)>,
         pieces: &effects::stroke::StrokePieces,
         width: f64,
-        g: &vectorcraft_color::Gradient,
+        g: &livipen_color::Gradient,
     ) {
         let level = (f.px * 0.25).log2().floor() as i32;
         let make = || -> Slices {
@@ -1872,15 +1872,15 @@ impl Renderer {
     /// ([`depends_on_document`]), and art that the cache has no room for. Art that holds type is
     /// placed again when the fonts change.
     fn placed_art(&mut self, art: &Arc<Node>, xf: Affine, scale_strokes: bool, inst: Option<&Node>) -> (Arc<Node>, bool) {
-        let kept_kind = matches!(art.kind, NodeKind::Group { .. } | NodeKind::Layer { .. }) || vectorcraft_doc::live::is_live(art);
+        let kept_kind = matches!(art.kind, NodeKind::Group { .. } | NodeKind::Layer { .. }) || livipen_doc::live::is_live(art);
         if !kept_kind || fx::has_object_fx(art) {
             return (place(art, xf, scale_strokes, inst), false);
         }
-        let stain = stain_bits(inst.and_then(vectorcraft_brush::stain));
+        let stain = stain_bits(inst.and_then(livipen_brush::stain));
         let key = (Arc::as_ptr(art) as usize, xf.as_coeffs().map(f64::to_bits), scale_strokes, stain);
         if let Some(e) = self.placed_arts.get(&key, self.stamp)
             && std::ptr::eq(e.art.as_ptr(), Arc::as_ptr(art))
-            && e.fonts.is_none_or(|g| g == vectorcraft_text::FontDb::global().generation())
+            && e.fonts.is_none_or(|g| g == livipen_text::FontDb::global().generation())
         {
             return match &e.placed {
                 Some(placed) => (placed.clone(), true),
@@ -1890,7 +1890,7 @@ impl Renderer {
         let placed = place(art, xf, scale_strokes, inst);
         let kept = (!depends_on_document(art)).then(|| placed.clone());
         let keeps = kept.is_some();
-        let fonts = (keeps && holds_type(art)).then(|| vectorcraft_text::FontDb::global().generation());
+        let fonts = (keeps && holds_type(art)).then(|| livipen_text::FontDb::global().generation());
         // The bytes count the key and the entry, the art's allocation that the weak reference
         // keeps, and the kept art.
         let bytes = size_of::<(PlacedKey, PlacedEntry, Node)>() + kept.as_deref().map_or(0, lru::node_bytes);
@@ -1906,7 +1906,7 @@ impl Renderer {
         if !matches!(&a.kind, NodeKind::Text(own) if std::ptr::eq(&**own, t)) {
             return (Arc::new(text_geom(t)), false);
         }
-        let fonts = vectorcraft_text::FontDb::global().generation();
+        let fonts = livipen_text::FontDb::global().generation();
         if fonts != self.text_fonts {
             self.texts.clear();
             self.char_strokes.clear();
@@ -1953,7 +1953,7 @@ impl Renderer {
         let overprints = proof::overprints(f.opts);
         let overprint = |ctx: &mut RenderContext, on: bool| {
             if overprints {
-                ctx.set_blend_mode(if on { blend_mode(vectorcraft_color::BlendMode::Darken) } else { BlendMode::default() });
+                ctx.set_blend_mode(if on { blend_mode(livipen_color::BlendMode::Darken) } else { BlendMode::default() });
             }
         };
         // The object's own fills and strokes paint the whole outline: those below the Characters
@@ -2026,7 +2026,7 @@ impl Renderer {
         for item in items.iter().filter(|i| i.visible() && !i.paint().is_none()) {
             match item {
                 AppearanceItem::Fill(fl) => {
-                    let layered = fl.opacity < 1.0 || fl.blend != vectorcraft_color::BlendMode::Normal;
+                    let layered = fl.opacity < 1.0 || fl.blend != livipen_color::BlendMode::Normal;
                     if layered {
                         ctx.set_transform(Affine::IDENTITY);
                         ctx.push_layer(None, Some(blend_mode(fl.blend)), Some(fl.opacity), None, None);
@@ -2061,7 +2061,7 @@ impl Renderer {
 
     /// Draw colour bitmap glyph `image` through `xf` (its pixels → document space), its pixels
     /// decoded once and kept with the images' pixels.
-    fn draw_glyph_image(&mut self, ctx: &mut RenderContext, f: &Frame, image: &vectorcraft_text::GlyphImage, xf: Affine) {
+    fn draw_glyph_image(&mut self, ctx: &mut RenderContext, f: &Frame, image: &livipen_text::GlyphImage, xf: Affine) {
         let Some((key, pm)) = blob_pixmap(&image.blob, true) else { return };
         let (key, pm) = ink::ink_image(&key, &pm, f.ink, Some(&image.blob), true);
         let unit = f.view * xf * Affine::scale_non_uniform(image.width as f64, image.height as f64);
@@ -2079,13 +2079,13 @@ impl Renderer {
         ctx.reset_paint_transform();
     }
 
-    fn draw_image(&mut self, ctx: &mut RenderContext, f: &Frame, im: &vectorcraft_doc::ImageObject) {
+    fn draw_image(&mut self, ctx: &mut RenderContext, f: &Frame, im: &livipen_doc::ImageObject) {
         self.draw_image_in(ctx, f, im, None);
     }
 
     /// Draw an image, or with `area` (a region in the document inside the image's frame, see
     /// [`plain_image`]) the image painted into that region.
-    fn draw_image_in(&mut self, ctx: &mut RenderContext, f: &Frame, im: &vectorcraft_doc::ImageObject, area: Option<&(BezPath, FillRule)>) {
+    fn draw_image_in(&mut self, ctx: &mut RenderContext, f: &Frame, im: &livipen_doc::ImageObject, area: Option<&(BezPath, FillRule)>) {
         let rect = Rect::new(0.0, 0.0, im.width as f64, im.height as f64);
         // Outline mode draws the image's frame, and with Document Setup → Show Images in Outline
         // Mode its pixels in greyscale under the frame.
@@ -2151,7 +2151,7 @@ impl Renderer {
     /// art's image takes): drawing `derived` draws the recoloured pixels, made when first drawn and
     /// kept with the decoded images. Names past a limit drop the art made with them too, so it is
     /// made again.
-    fn adjusted_image(&mut self, key: &str, derived: String, hash: u64, map: &vectorcraft_effects::ColorMap) {
+    fn adjusted_image(&mut self, key: &str, derived: String, hash: u64, map: &livipen_effects::ColorMap) {
         if self.adjusts.contains_key(&derived) {
             return;
         }
@@ -2169,7 +2169,7 @@ impl Renderer {
         &mut self,
         doc: &Document,
         key: &str,
-        own: Option<&vectorcraft_doc::ImageBlob>,
+        own: Option<&livipen_doc::ImageBlob>,
         grey: bool,
         touch: bool,
     ) -> Option<(images::ImageKey, Arc<Pixmap>)> {
@@ -2218,7 +2218,7 @@ impl Renderer {
 
     /// The key [`Self::image_pixmap`] gives the pixels of image `key` (or `own`) and their size, without
     /// making or looking at them: `None` until the image has been decoded.
-    fn image_key(&self, doc: &Document, key: &str, own: Option<&vectorcraft_doc::ImageBlob>, grey: bool) -> Option<(images::ImageKey, (u16, u16))> {
+    fn image_key(&self, doc: &Document, key: &str, own: Option<&livipen_doc::ImageBlob>, grey: bool) -> Option<(images::ImageKey, (u16, u16))> {
         let (key, size) = match own.or_else(|| doc.images.get(key)) {
             Some(blob) => {
                 let (key, _, size) = blob_key(blob);
@@ -2236,7 +2236,7 @@ impl Renderer {
     /// The mip [`image_mip`] draws image `key` (or `own`) with through `m`, in greyscale with
     /// `grey` (the outline view's), when the store holds it, marked used there; `None` when it
     /// draws the full pixels or the mip is yet to be made.
-    fn kept_mip(&self, f: &Frame, key: &str, own: Option<&vectorcraft_doc::ImageBlob>, grey: bool, m: Affine) -> Option<Arc<Pixmap>> {
+    fn kept_mip(&self, f: &Frame, key: &str, own: Option<&livipen_doc::ImageBlob>, grey: bool, m: Affine) -> Option<Arc<Pixmap>> {
         let (key, (w, h)) = self.image_key(f.doc, key, own, grey)?;
         let key = if grey { key } else { ink::ink_key(&key, f.ink) };
         let level = mip_level(m, w, h);
@@ -2255,7 +2255,7 @@ fn lookup(key: &images::ImageKey, touch: bool) -> Option<Arc<Pixmap>> {
 
 /// The key of `blob`'s decoded pixels in the shared store, the display table a CMYK image's inks
 /// show through (its generation is in the key), and the pixels' size once decoded.
-fn blob_key(blob: &vectorcraft_doc::ImageBlob) -> (images::ImageKey, Option<Arc<ink::InkLut>>, Option<(u16, u16)>) {
+fn blob_key(blob: &livipen_doc::ImageBlob) -> (images::ImageKey, Option<Arc<ink::InkLut>>, Option<(u16, u16)>) {
     let id = images::blob_id(blob);
     let lut = id.cmyk.then(ink::display_lut);
     let key =
@@ -2265,7 +2265,7 @@ fn blob_key(blob: &vectorcraft_doc::ImageBlob) -> (images::ImageKey, Option<Arc<
 
 /// The decoded pixels of `blob` (a CMYK image's inks shown through the working CMYK profile, again
 /// when the colour settings change), from the shared store, and their key there.
-fn blob_pixmap(blob: &vectorcraft_doc::ImageBlob, touch: bool) -> Option<(images::ImageKey, Arc<Pixmap>)> {
+fn blob_pixmap(blob: &livipen_doc::ImageBlob, touch: bool) -> Option<(images::ImageKey, Arc<Pixmap>)> {
     let (key, lut, size) = blob_key(blob);
     let pm = match lookup(&key, touch) {
         Some(pm) => pm,
@@ -2319,7 +2319,7 @@ fn image_mip(key: &images::ImageKey, pm: Arc<Pixmap>, m: Affine) -> Arc<Pixmap> 
 /// Can image node `n` (`im`) clipped by `region` be painted straight into the region: visible,
 /// with no transparency, effects or paint of its own, and the region inside the image's frame
 /// (within a pixel), so no paint past the image's edge shows?
-fn plain_image(n: &Node, im: &vectorcraft_doc::ImageObject, region: &BezPath) -> bool {
+fn plain_image(n: &Node, im: &livipen_doc::ImageObject, region: &BezPath) -> bool {
     if !(n.visible && n.has_default_transparency() && n.appearance.items.is_empty() && n.appearance.effects.is_empty()) {
         return false;
     }
@@ -2334,7 +2334,7 @@ fn plain_image(n: &Node, im: &vectorcraft_doc::ImageObject, region: &BezPath) ->
 /// Opacity-mask coverage of one premultiplied pixel: luminance, with the area outside the mask
 /// art black (clip) or white (no clip), optionally inverted.
 fn mask_value(r: u8, g: u8, b: u8, a: u8, clip: bool, invert: bool) -> u8 {
-    let [kr, kg, kb] = vectorcraft_color::blend::MASK_LUM;
+    let [kr, kg, kb] = livipen_color::blend::MASK_LUM;
     let mut l = (kr * r as f32 + kg * g as f32 + kb * b as f32) / 255.0;
     if !clip {
         l += 1.0 - a as f32 / 255.0;
@@ -2373,7 +2373,7 @@ fn single_plain_fill(n: &Node) -> bool {
         AppearanceItem::Fill(f) => f.visible && !f.paint.is_none(),
         AppearanceItem::Stroke(s) => s.visible && !s.paint.is_none() && s.width > 0.0,
     });
-    matches!((painted.next(), painted.next()), (Some(AppearanceItem::Fill(f)), None) if f.blend == vectorcraft_color::BlendMode::Normal && f.opacity >= 1.0 && !matches!(f.paint, vectorcraft_color::Paint::Pattern { .. }))
+    matches!((painted.next(), painted.next()), (Some(AppearanceItem::Fill(f)), None) if f.blend == livipen_color::BlendMode::Normal && f.opacity >= 1.0 && !matches!(f.paint, livipen_color::Paint::Pattern { .. }))
 }
 
 /// Number of visible painted fill/stroke items (opacity folding is exact only for one). A dashed
@@ -2385,11 +2385,11 @@ fn painted_items(n: &Node) -> usize {
         .items
         .iter()
         .filter(|i| match i {
-            AppearanceItem::Fill(f) => f.visible && !f.paint.is_none() && matches!(f.paint, vectorcraft_color::Paint::Solid { .. }),
-            AppearanceItem::Stroke(s) => s.visible && !s.paint.is_none() && s.width > 0.0 && matches!(s.paint, vectorcraft_color::Paint::Solid { .. }),
+            AppearanceItem::Fill(f) => f.visible && !f.paint.is_none() && matches!(f.paint, livipen_color::Paint::Solid { .. }),
+            AppearanceItem::Stroke(s) => s.visible && !s.paint.is_none() && s.width > 0.0 && matches!(s.paint, livipen_color::Paint::Solid { .. }),
         })
         .count()
-        .max(if n.appearance.items.iter().any(|i| matches!(i, AppearanceItem::Fill(f) if f.visible && !matches!(f.paint, vectorcraft_color::Paint::Solid { .. } | vectorcraft_color::Paint::None)) || matches!(i, AppearanceItem::Stroke(s) if s.visible && (!matches!(s.paint, vectorcraft_color::Paint::Solid { .. } | vectorcraft_color::Paint::None) || (s.dash.is_some() && s.brush.is_some() && !s.paint.is_none())))) { 2 } else { 0 })
+        .max(if n.appearance.items.iter().any(|i| matches!(i, AppearanceItem::Fill(f) if f.visible && !matches!(f.paint, livipen_color::Paint::Solid { .. } | livipen_color::Paint::None)) || matches!(i, AppearanceItem::Stroke(s) if s.visible && (!matches!(s.paint, livipen_color::Paint::Solid { .. } | livipen_color::Paint::None) || (s.dash.is_some() && s.brush.is_some() && !s.paint.is_none())))) { 2 } else { 0 })
 }
 
 /// Whether `st` is one of `n`'s own strokes (the strokes of the brush art drawn for `n` are not).
@@ -2412,7 +2412,7 @@ fn place(art: &Node, xf: Affine, scale_strokes: bool, inst: Option<&Node>) -> Ar
 /// with an inline graphic, an image, a placed document, or an object or a fill or stroke with a
 /// visible raster effect?
 fn depends_on_document(n: &Node) -> bool {
-    let raster = |fx: &[vectorcraft_doc::Effect]| fx.iter().any(|e| e.visible && effects::is_raster(&e.id));
+    let raster = |fx: &[livipen_doc::Effect]| fx.iter().any(|e| e.visible && effects::is_raster(&e.id));
     let mut depends = false;
     n.walk(&mut |c| {
         depends |= match &c.kind {
@@ -2449,10 +2449,10 @@ fn holds_plugin_effect(n: &Node) -> bool {
     holds
 }
 
-/// A symbol instance's stain ([`vectorcraft_brush::stain`]) as bits for a cache key: its color
+/// A symbol instance's stain ([`livipen_brush::stain`]) as bits for a cache key: its color
 /// model, the color's components and the amount (all 0 without a stain).
-fn stain_bits(stain: Option<(vectorcraft_color::Color, f32)>) -> [u32; 6] {
-    use vectorcraft_color::Color;
+fn stain_bits(stain: Option<(livipen_color::Color, f32)>) -> [u32; 6] {
+    use livipen_color::Color;
     let Some((color, amount)) = stain else { return [0; 6] };
     let (model, [p, q, r, s]) = match color {
         Color::Rgb { r, g, b } => (1, [r, g, b, 0.0]),
@@ -2512,8 +2512,8 @@ pub fn default_threads() -> u16 {
         if o >= 0 {
             return o.min(64) as u16;
         }
-        if std::env::var_os("VECTORCRAFT_RENDER_THREADS").is_some() {
-            return std::env::var("VECTORCRAFT_RENDER_THREADS").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
+        if std::env::var_os("LIVIPEN_RENDER_THREADS").is_some() {
+            return std::env::var("LIVIPEN_RENDER_THREADS").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
         }
         std::thread::available_parallelism().map(|n| (n.get().saturating_sub(1)).min(8) as u16).unwrap_or(0)
     }
@@ -2538,9 +2538,9 @@ struct TextGeom {
     /// shows them.
     alternate_glyphs: std::sync::OnceLock<BezPath>,
     /// Inline graphics placed by the layout.
-    inlines: Vec<vectorcraft_text::InlineGlyph>,
+    inlines: Vec<livipen_text::InlineGlyph>,
     /// Colour bitmap glyphs: (run, image, its pixels → text space), in text order.
-    images: Vec<(usize, Arc<vectorcraft_text::GlyphImage>, Affine)>,
+    images: Vec<(usize, Arc<livipen_text::GlyphImage>, Affine)>,
     /// COLR colour glyphs: (run, their layers placed in text space), in text order.
     colours: Vec<(usize, Arc<Node>)>,
 }
@@ -2590,8 +2590,8 @@ impl TextGeom {
             + self.alternate_candidates.iter().map(|c| size_of::<AlternateCandidate>() + lru::path_bytes(&c.cell)).sum::<usize>()
             + self.alternate_glyphs.get().map_or(0, lru::path_bytes)
             + self.spans.len() * size_of::<(usize, usize, usize)>()
-            + self.inlines.len() * size_of::<vectorcraft_text::InlineGlyph>()
-            + self.images.len() * size_of::<(usize, Arc<vectorcraft_text::GlyphImage>, Affine)>()
+            + self.inlines.len() * size_of::<livipen_text::InlineGlyph>()
+            + self.images.len() * size_of::<(usize, Arc<livipen_text::GlyphImage>, Affine)>()
             + self.colours.iter().map(|(_, art)| lru::node_bytes(art)).sum::<usize>()
     }
 }
@@ -2623,7 +2623,7 @@ fn required_shaping(t: &TextObject) -> std::collections::HashMap<(usize, usize),
     for run in &mut plain.runs {
         run.style.features = vec!["-liga".into(), "-calt".into()];
     }
-    let layout = vectorcraft_text::layout(vectorcraft_text::FontDb::global(), &plain);
+    let layout = livipen_text::layout(livipen_text::FontDb::global(), &plain);
     let mut glyphs: std::collections::HashMap<(usize, usize), Vec<(u32, u32)>> = std::collections::HashMap::new();
     for g in &layout.glyphs {
         glyphs.entry((g.byte, g.len)).or_default().push((g.font_id, g.gid));
@@ -2637,8 +2637,8 @@ fn text_geom(t: &TextObject) -> TextGeom {
 
 /// Glyph geometry of `t`; `snap` (text space → device pixels) puts the glyphs on whole pixels.
 fn text_geom_snapped(t: &TextObject, snap: Option<Affine>) -> TextGeom {
-    let db = vectorcraft_text::FontDb::global();
-    let mut layout = vectorcraft_text::layout(db, t);
+    let db = livipen_text::FontDb::global();
+    let mut layout = livipen_text::layout(db, t);
     if let Some(xf) = snap {
         layout.snap_to_pixels(xf);
     }
@@ -2666,7 +2666,7 @@ fn text_geom_snapped(t: &TextObject, snap: Option<Affine>) -> TextGeom {
             // Variable Font settings (see `FontDb::style_face`).
             Some((f, m)) => {
                 let face = db.style_face(&r.style).unwrap_or(f);
-                (m == vectorcraft_text::FontMatch::Missing, Some(face.id()))
+                (m == livipen_text::FontMatch::Missing, Some(face.id()))
             }
             None => (true, None),
         })
@@ -2708,7 +2708,7 @@ fn text_geom_snapped(t: &TextObject, snap: Option<Affine>) -> TextGeom {
         push(&mut all, g.run, &g.outline);
     }
     // Underline and strikethrough bars, painted as their run's type is (#847).
-    for (run, bar) in vectorcraft_text::decorations(&layout, db, t) {
+    for (run, bar) in livipen_text::decorations(&layout, db, t) {
         push(&mut all, run, &bar);
     }
     TextGeom {
@@ -2743,8 +2743,8 @@ fn fill_rule(r: FillRule) -> peniko::Fill {
     }
 }
 
-pub(crate) fn blend_mode(b: vectorcraft_color::BlendMode) -> BlendMode {
-    use vectorcraft_color::BlendMode as B;
+pub(crate) fn blend_mode(b: livipen_color::BlendMode) -> BlendMode {
+    use livipen_color::BlendMode as B;
     let mix = match b {
         B::Normal => Mix::Normal,
         B::Darken => Mix::Darken,

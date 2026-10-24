@@ -1,17 +1,17 @@
 //! Pathfinder panel (`object.pathfinder.*`) and Object → Path commands backed by
-//! `vectorcraft-pathops`: Offset Path, Outline Stroke, Simplify, Add Anchor Points, Split Into Grid,
+//! `livipen-pathops`: Offset Path, Outline Stroke, Simplify, Add Anchor Points, Split Into Grid,
 //! Clean Up and Divide Objects Below.
 
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
+use livipen_color::BlendMode;
+use livipen_doc::appearance::{AppearanceItem, StrokeLayer};
+use livipen_doc::{AnchorRef, Appearance, Document, Node, NodeId, NodeKind, SegmentRef, TextObject};
+use livipen_geom::{FillRule, PathData};
+use livipen_pathops as po;
+use livipen_pathops::{BoolOp, PathfinderOp};
 use serde_json::{Value, json};
-use vectorcraft_color::BlendMode;
-use vectorcraft_doc::appearance::{AppearanceItem, StrokeLayer};
-use vectorcraft_doc::{AnchorRef, Appearance, Document, Node, NodeId, NodeKind, SegmentRef, TextObject};
-use vectorcraft_geom::{FillRule, PathData};
-use vectorcraft_pathops as po;
-use vectorcraft_pathops::{BoolOp, PathfinderOp};
 
 use super::edit::selected_roots;
 use super::*;
@@ -194,7 +194,7 @@ pub(crate) fn num_param(p: &Value, key: &str) -> Option<f64> {
 /// points).
 pub(crate) fn len_param(p: &Value, key: &str) -> Option<f64> {
     match p.get(key)? {
-        Value::String(s) => vectorcraft_doc::Unit::Points.parse(s).filter(|v| v.is_finite()).or_else(|| num_param(p, key)),
+        Value::String(s) => livipen_doc::Unit::Points.parse(s).filter(|v| v.is_finite()).or_else(|| num_param(p, key)),
         _ => num_param(p, key),
     }
 }
@@ -242,7 +242,7 @@ pub(crate) fn node_path(n: &Node) -> Option<(PathData, FillRule)> {
 
 /// Glyph outlines of a text object in document coordinates.
 pub(crate) fn text_outline(t: &TextObject) -> PathData {
-    let lay = vectorcraft_text::layout(vectorcraft_text::FontDb::global(), t);
+    let lay = livipen_text::layout(livipen_text::FontDb::global(), t);
     PathData::from_bezpath(&lay.to_bezpath()).transformed(t.xf)
 }
 
@@ -511,10 +511,10 @@ fn run_pf(s: &mut Session, op: PathfinderOp) -> Result<Value> {
 
 // ---------- Trap ----------
 
-/// Pathfinder panel › Trap ([`vectorcraft_render::effects::trap`]): the traps between the selected
+/// Pathfinder panel › Trap ([`livipen_render::effects::trap`]): the traps between the selected
 /// objects' leaf shapes, as one group of overprinting paths above the topmost selected object.
 fn trap(s: &mut Session, p: &Value) -> Result<Value> {
-    use vectorcraft_render::effects::trap::{TRAP_LABEL, TrapOptions, TrapSource, trap_appearance, traps};
+    use livipen_render::effects::trap::{TRAP_LABEL, TrapOptions, TrapSource, trap_appearance, traps};
     const ID: &str = "object.pathfinder.trap";
     let mut q = p.clone();
     if let Some(t) = len_param(p, "thickness") {
@@ -660,15 +660,9 @@ pub(crate) fn with_transparency(d: &mut Document, mut n: Node, opacity: f32, ble
 /// stroke's opacity, blend mode and raster effects), or the outline of the stroke (as on the canvas)
 /// filled with the stroke's paint, opacity, blend mode and effects (a gradient along or across the stroke: gradient meshes in a clip group shaped
 /// like the outline). `None` when it paints nothing.
-pub(crate) fn outlined_stroke(
-    d: &mut Document,
-    brushes: &[vectorcraft_brush::Brush],
-    path: &PathData,
-    rule: FillRule,
-    st: &StrokeLayer,
-) -> Option<Node> {
+pub(crate) fn outlined_stroke(d: &mut Document, brushes: &[livipen_brush::Brush], path: &PathData, rule: FillRule, st: &StrokeLayer) -> Option<Node> {
     if let Some(b) = st.brush.as_deref().and_then(|name| brushes.iter().find(|b| b.name == name)) {
-        let mut pieces = vectorcraft_brush::stroke_pieces(d, b, &path.to_bezpath(), st);
+        let mut pieces = livipen_brush::stroke_pieces(d, b, &path.to_bezpath(), st);
         let art = match pieces.len() {
             0 => return None,
             1 => pieces.remove(0),
@@ -676,7 +670,7 @@ pub(crate) fn outlined_stroke(
         };
         let art = d.reid(&art);
         let mut art = with_transparency(d, art, st.opacity, st.blend);
-        let raster: Vec<_> = st.effects.iter().filter(|e| !vectorcraft_render::effects::is_geometry(&e.id)).cloned().collect();
+        let raster: Vec<_> = st.effects.iter().filter(|e| !livipen_render::effects::is_geometry(&e.id)).cloned().collect();
         if !raster.is_empty() {
             if !art.appearance.effects.is_empty() {
                 art = Node::group(d.alloc_id(), vec![Arc::new(art)]);
@@ -685,13 +679,13 @@ pub(crate) fn outlined_stroke(
         }
         return Some(art);
     }
-    let outline = vectorcraft_render::effects::stroke::outline_region(path, rule, st);
+    let outline = livipen_render::effects::stroke::outline_region(path, rule, st);
     if outline.is_empty() {
         return None;
     }
     if let Some(g) = st.path_gradient() {
         // A gradient along or across the stroke: gradient meshes clipped to its outline.
-        let meshes = vectorcraft_render::effects::stroke::gradient_meshes(&path.to_bezpath(), rule, st, &g.gradient);
+        let meshes = livipen_render::effects::stroke::gradient_meshes(&path.to_bezpath(), rule, st, &g.gradient);
         let mut clip = shape_node(d, outline, None);
         super::object::as_clipping_path(&mut clip).ok()?;
         let meshes: Vec<Node> = meshes.into_iter().map(|m| Node::new(d.alloc_id(), NodeKind::Mesh(m))).collect();
@@ -702,12 +696,12 @@ pub(crate) fn outlined_stroke(
         return Some(art);
     }
     let mut n = shape_node(d, outline, None);
-    let fill = vectorcraft_doc::appearance::FillLayer {
+    let fill = livipen_doc::appearance::FillLayer {
         opacity: st.opacity,
         blend: st.blend,
         effects: st.effects.clone(),
         overprint: st.overprint,
-        ..vectorcraft_doc::appearance::FillLayer::new(st.paint.stroke_as_fill())
+        ..livipen_doc::appearance::FillLayer::new(st.paint.stroke_as_fill())
     };
     n.appearance = Appearance { items: vec![AppearanceItem::Fill(fill)], ..Default::default() }.into();
     Some(n)
@@ -716,7 +710,7 @@ pub(crate) fn outlined_stroke(
 /// Path `l` with every stroke outlined, in appearance order: runs of fills stay on copies of
 /// the path, each stroke becomes its outline (or brush art), grouped when there are several.
 /// `None` when `l` has no stroke to outline.
-pub(crate) fn outline_strokes(d: &mut Document, brushes: &[vectorcraft_brush::Brush], l: &Node) -> Option<Node> {
+pub(crate) fn outline_strokes(d: &mut Document, brushes: &[livipen_brush::Brush], l: &Node) -> Option<Node> {
     if !l.appearance.items.iter().any(|i| matches!(i, AppearanceItem::Stroke(st) if outlinable(st))) {
         return None;
     }
@@ -773,7 +767,7 @@ pub(crate) fn assemble(d: &mut Document, l: &Node, mut parts: Vec<Node>) -> Opti
 
 /// Outline the strokes of every path under `root` in place: → (the id now standing for `root`,
 /// how many paths changed).
-pub(crate) fn outline_strokes_under(d: &mut Document, brushes: &[vectorcraft_brush::Brush], root: NodeId) -> Result<(NodeId, usize)> {
+pub(crate) fn outline_strokes_under(d: &mut Document, brushes: &[livipen_brush::Brush], root: NodeId) -> Result<(NodeId, usize)> {
     replace_leaves(d, root, |d, l| if matches!(l.kind, NodeKind::Text(_)) { None } else { outline_strokes(d, brushes, l) })
 }
 
@@ -799,7 +793,7 @@ pub(crate) fn replace_leaves(d: &mut Document, root: NodeId, mut f: impl FnMut(&
 fn outline_stroke(s: &mut Session, _: &Value) -> Result<Value> {
     let roots = selected_roots(s)?;
     let ids = s.edit("Outline Stroke", |d, sel| {
-        let brushes = vectorcraft_brush::library(d);
+        let brushes = livipen_brush::library(d);
         let mut new_sel = vec![];
         let mut changed = 0;
         for root in &roots {
@@ -1002,7 +996,7 @@ fn split_into_grid(s: &mut Session, p: &Value) -> Result<Value> {
     let (row_gutter, height) = grid_axis(p, rows, ["height", "rowGutter", "totalHeight"], b.height());
     let (col_gutter, width) = grid_axis(p, cols, ["width", "columnGutter", "totalWidth"], b.width());
     let (rows, cols) = (rows as usize, cols as usize);
-    let cells = po::split_into_grid(vectorcraft_geom::Rect::new(b.x0, b.y0, b.x0 + width, b.y0 + height), rows, cols, (row_gutter, col_gutter));
+    let cells = po::split_into_grid(livipen_geom::Rect::new(b.x0, b.y0, b.x0 + width, b.y0 + height), rows, cols, (row_gutter, col_gutter));
     if cells.is_empty() {
         return Err(too_small());
     }
@@ -1025,7 +1019,7 @@ fn split_into_grid(s: &mut Session, p: &Value) -> Result<Value> {
             let node = shape_node(d, c, Some(&top));
             out.push(d.insert(par, idx + k, node)?);
         }
-        d.guides.extend(edges.iter().map(|&(vertical, pos)| vectorcraft_doc::Guide { layer, ..vectorcraft_doc::Guide::new(vertical, pos) }));
+        d.guides.extend(edges.iter().map(|&(vertical, pos)| livipen_doc::Guide { layer, ..livipen_doc::Guide::new(vertical, pos) }));
         sel.set(out.iter().copied());
         Ok(out)
     })?;

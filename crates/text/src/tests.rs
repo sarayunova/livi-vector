@@ -1,7 +1,7 @@
 use super::*;
 use kurbo::{Affine, Shape};
-use vectorcraft_doc::{CharStyle, Justify, TextKind, TextRun};
-use vectorcraft_geom::PathData;
+use livipen_doc::{CharStyle, Justify, TextKind, TextRun};
+use livipen_geom::PathData;
 
 /// The bundled fonts only: what these tests measure doesn't change with the fonts installed.
 fn db() -> &'static FontDb {
@@ -293,8 +293,8 @@ fn indents_and_paragraph_spacing() {
 fn each_paragraph_has_its_own_attributes() {
     let frame = Rect::new(0.0, 0.0, 200.0, 400.0);
     let mut t = area("left\ncentred\nright", style(10.0), frame, Justify::Left);
-    let centred = vectorcraft_doc::ParaStyle { justify: Justify::Center, space_before: 20.0, ..Default::default() };
-    let right = vectorcraft_doc::ParaStyle { justify: Justify::Right, left_indent: 7.0, ..Default::default() };
+    let centred = livipen_doc::ParaStyle { justify: Justify::Center, space_before: 20.0, ..Default::default() };
+    let right = livipen_doc::ParaStyle { justify: Justify::Right, left_indent: 7.0, ..Default::default() };
     t.set_paragraph_styles(vec![t.para.clone(), centred, right]);
     let l = layout(db(), &t);
     assert_eq!(l.lines.len(), 3);
@@ -398,7 +398,7 @@ fn on_path_placement() {
 
 #[test]
 fn on_path_effects_orient_glyphs() {
-    use vectorcraft_doc::PathEffect;
+    use livipen_doc::PathEffect;
     let mut diag = BezPath::new();
     diag.move_to((0.0, 0.0));
     diag.line_to((400.0, 400.0));
@@ -549,7 +549,7 @@ fn layout_is_fast() {
 
 #[test]
 fn tab_stops_position_text() {
-    use vectorcraft_doc::{TabAlign, TabStop};
+    use livipen_doc::{TabAlign, TabStop};
     let stop = |position: f64, align: TabAlign| TabStop { position, align, leader: String::new(), align_on: '.' };
     let x_of = |t: &TextObject, byte: usize| layout(db(), t).glyphs.iter().find(|g| g.byte == byte).map(|g| g.origin.x).unwrap();
     // Default stops every 36 pt.
@@ -594,7 +594,7 @@ fn a_leading_tab_takes_its_width_in_the_line_and_the_justification() {
 
 #[test]
 fn a_centred_or_right_aligned_line_sets_its_tabs_as_if_it_started_at_the_left() {
-    use vectorcraft_doc::{TabAlign, TabStop};
+    use livipen_doc::{TabAlign, TabStop};
     // "A<tab>B" with a stop at 100 pt is 100 pt plus B wide whatever the alignment: the whole line
     // moves, the gap between A and B stays 100 pt, and a right aligned line ends on the edge (#2457).
     for justify in [Justify::Center, Justify::Right, Justify::JustifyCenter, Justify::JustifyRight] {
@@ -612,7 +612,7 @@ fn a_centred_or_right_aligned_line_sets_its_tabs_as_if_it_started_at_the_left() 
 
 #[test]
 fn tab_leaders_line_up_from_line_to_line_and_stop_short_of_the_stop() {
-    use vectorcraft_doc::{TabAlign, TabStop};
+    use livipen_doc::{TabAlign, TabStop};
     let mut t = point("A\t1\nAAAAA\t2", style(12.0));
     t.para.tabs = vec![TabStop { position: 120.0, align: TabAlign::Left, leader: ".".into(), align_on: '.' }];
     let lay = layout(db(), &t);
@@ -644,7 +644,7 @@ fn tab_leaders_line_up_from_line_to_line_and_stop_short_of_the_stop() {
 /// the bullet out, and a paragraph without text has no bullet.
 #[test]
 fn a_list_paragraph_starts_with_its_bullet_and_its_text_at_the_left_indent() {
-    use vectorcraft_doc::text::{Bullet, ParaList};
+    use livipen_doc::text::{Bullet, ParaList};
     let bulleted = |text: &str, size: f64| {
         let mut t = area(text, style(size), Rect::new(0.0, 0.0, 200.0, 400.0), Justify::Left);
         t.para.left_indent = 18.0;
@@ -701,7 +701,7 @@ fn a_list_paragraph_starts_with_its_bullet_and_its_text_at_the_left_indent() {
 /// characters are set tate-chu-yoko.
 #[test]
 fn a_vertical_list_paragraphs_bullet_is_not_set_tate_chu_yoko() {
-    use vectorcraft_doc::text::{Bullet, ParaList};
+    use livipen_doc::text::{Bullet, ParaList};
     let bullet = |tcy: bool| {
         let mut t = point("", style(12.0));
         t.vertical = true;
@@ -720,7 +720,7 @@ fn a_vertical_list_paragraphs_bullet_is_not_set_tate_chu_yoko() {
 /// the text, and the caret before its first character stands at the text.
 #[test]
 fn a_right_to_left_list_paragraph_starts_with_its_bullet_at_the_right() {
-    use vectorcraft_doc::text::{Bullet, ParaList};
+    use livipen_doc::text::{Bullet, ParaList};
     let mut t = area("שלום עולם", style(12.0), Rect::new(0.0, 0.0, 200.0, 100.0), Justify::Auto);
     t.para.list = Some(ParaList::bulleted(Bullet::Dot));
     t.para.left_indent = 18.0;
@@ -751,7 +751,7 @@ fn a_right_to_left_list_paragraph_starts_with_its_bullet_at_the_right() {
 /// left and first-line indents at the left, and a left-to-right list keeps its bullet at the left.
 #[test]
 fn a_right_to_left_list_paragraph_mirrors_its_hanging_indent() {
-    use vectorcraft_doc::text::{Bullet, ParaList};
+    use livipen_doc::text::{Bullet, ParaList};
     let hebrew = "שלום עולם ".repeat(12);
     let para = |text: &str, justify: Justify, list: bool| {
         let mut t = area(text.trim_end(), style(12.0), Rect::new(0.0, 0.0, 200.0, 400.0), justify);
@@ -813,8 +813,8 @@ fn a_right_to_left_list_paragraph_mirrors_its_hanging_indent() {
 /// settles, and keeps one marker for each list paragraph, at that paragraph's bullet.
 #[test]
 fn vertically_centered_list_paragraphs_in_a_round_frame_keep_one_bullet_each() {
-    use vectorcraft_doc::VerticalAlign;
-    use vectorcraft_doc::text::{Bullet, ParaList};
+    use livipen_doc::VerticalAlign;
+    use livipen_doc::text::{Bullet, ParaList};
     let text = format!("{LOREM}\n{LOREM}");
     let frame = kurbo::Ellipse::new((150.0, 150.0), (150.0, 150.0), 0.0).to_path(0.1);
     let mut t = area(&text, style(12.0), Rect::new(0.0, 0.0, 300.0, 300.0), Justify::Left);
@@ -839,7 +839,7 @@ fn vertically_centered_list_paragraphs_in_a_round_frame_keep_one_bullet_each() {
 /// line goes down to where they fit, and every line stays inside the frame.
 #[test]
 fn a_list_paragraph_starts_where_its_bullet_and_first_word_fit() {
-    use vectorcraft_doc::text::{Bullet, ParaList};
+    use livipen_doc::text::{Bullet, ParaList};
     let mut triangle = BezPath::new();
     triangle.move_to((150.0, 0.0));
     triangle.line_to((300.0, 300.0));
@@ -865,7 +865,7 @@ fn a_list_paragraph_starts_where_its_bullet_and_first_word_fit() {
 /// alone.
 #[test]
 fn type_on_a_path_starts_with_its_bullet() {
-    use vectorcraft_doc::text::{Bullet, ParaList};
+    use livipen_doc::text::{Bullet, ParaList};
     let mut line = BezPath::new();
     line.move_to((0.0, 50.0));
     line.line_to((500.0, 50.0));
@@ -913,8 +913,8 @@ fn type_on_a_path_starts_with_its_bullet() {
 /// and Optical Margin Alignment leave the bullet and the gap after it as they are.
 #[test]
 fn a_list_paragraph_starts_its_text_at_the_next_tab_stop_after_the_bullet() {
-    use vectorcraft_doc::text::{Bullet, ParaList};
-    use vectorcraft_doc::{TabAlign, TabStop};
+    use livipen_doc::text::{Bullet, ParaList};
+    use livipen_doc::{TabAlign, TabStop};
     let text_x = |t: &TextObject| layout(db(), t).glyphs.iter().find(|g| g.byte == 0 && g.len > 0).map(|g| g.origin.x).unwrap();
     for (text, justify, optical) in
         [(LOREM, Justify::JustifyLeft, false), (LOREM, Justify::Left, true), (LOREM, Justify::JustifyAll, true), ("Item", Justify::JustifyAll, false)]
@@ -976,11 +976,11 @@ fn marker_texts(t: &TextObject) -> Vec<String> {
 }
 
 /// Area type `text` whose paragraphs have the lists `lists` and an 18 pt hanging indent.
-fn listed(text: &str, lists: &[Option<vectorcraft_doc::text::ParaList>]) -> TextObject {
+fn listed(text: &str, lists: &[Option<livipen_doc::text::ParaList>]) -> TextObject {
     let mut t = area(text, style(12.0), Rect::new(0.0, 0.0, 200.0, 400.0), Justify::Left);
     t.para.left_indent = 18.0;
     t.para.first_line_indent = -18.0;
-    let styles = lists.iter().map(|&list| vectorcraft_doc::ParaStyle { list, ..t.para.clone() }).collect();
+    let styles = lists.iter().map(|&list| livipen_doc::ParaStyle { list, ..t.para.clone() }).collect();
     t.set_paragraph_styles(styles);
     t
 }
@@ -992,7 +992,7 @@ fn listed(text: &str, lists: &[Option<vectorcraft_doc::text::ParaList>]) -> Text
 /// numbers and rolls over, and a number wider than the indent takes the text to the next tab stop.
 #[test]
 fn numbered_list_paragraphs_are_numbered_in_order() {
-    use vectorcraft_doc::text::{Bullet, NumberStyle, ParaList};
+    use livipen_doc::text::{Bullet, NumberStyle, ParaList};
     let numbered = Some(ParaList::numbered(NumberStyle::Arabic));
     let t = listed("One\nTwo\nThree", &[numbered; 3]);
     assert_eq!(marker_texts(&t), ["1.", "2.", "3."]);
@@ -1045,7 +1045,7 @@ fn numbered_list_paragraphs_are_numbered_in_order() {
 /// reads left to right, with its period at its left and the gap before the text left of that.
 #[test]
 fn a_right_to_left_numbered_paragraph_has_its_period_left_of_its_number() {
-    use vectorcraft_doc::text::{NumberStyle, ParaList};
+    use livipen_doc::text::{NumberStyle, ParaList};
     let numbered = Some(ParaList::numbered(NumberStyle::Arabic));
     // The glyphs of "1", "2" and "." in a left-to-right "12.".
     let mut ltr = listed("One", &[numbered]);
@@ -1186,7 +1186,7 @@ fn justified_japanese_lines_spread_between_characters() {
 /// with sizes mixed, a line's leading is the space below it (baseline leading: above it).
 #[test]
 fn em_box_top_leading_hangs_lines_from_the_line_above() {
-    use vectorcraft_doc::{LeadingModel, TextRun};
+    use livipen_doc::{LeadingModel, TextRun};
     let st = |size: f64| CharStyle { size, leading: Some(size * 1.5), ..style(size) };
     let lay = |t: &TextObject, m: LeadingModel| {
         let mut t = t.clone();
@@ -1222,7 +1222,7 @@ fn em_box_top_leading_hangs_lines_from_the_line_above() {
 /// it; in area type a top-to-top first paragraph puts its em box on the frame's top.
 #[test]
 fn leading_model_is_per_paragraph() {
-    use vectorcraft_doc::{LeadingModel, ParaStyle, TextRun};
+    use livipen_doc::{LeadingModel, ParaStyle, TextRun};
     let st = |size: f64| CharStyle { size, leading: Some(size * 1.5), ..style(size) };
     let model = |m: LeadingModel| ParaStyle { leading_model: m, ..ParaStyle::default() };
     let top = |size: f64| 0.88 * size;
@@ -1262,7 +1262,7 @@ fn leading_model_is_per_paragraph() {
 /// the column (top → right).
 #[test]
 fn character_alignment_lines_small_characters_up_with_the_largest_em_box() {
-    use vectorcraft_doc::{CharAlign, TextRun};
+    use livipen_doc::{CharAlign, TextRun};
     for vertical_type in [false, true] {
         let place = |a: CharAlign| {
             let mut t = point("", style(40.0));
@@ -1290,7 +1290,7 @@ fn character_alignment_lines_small_characters_up_with_the_largest_em_box() {
 /// box). The Japanese faces need craft-fonts (skipped without them).
 #[test]
 fn character_alignment_on_the_icf_lines_small_characters_up_with_the_largest_face() {
-    use vectorcraft_doc::{CharAlign, TextRun};
+    use livipen_doc::{CharAlign, TextRun};
     let place = |family: &str, a: CharAlign, vertical_type: bool| {
         let st = |size: f64| CharStyle { font_family: family.into(), ..style(size) };
         let mut t = point("", st(40.0));
@@ -1328,7 +1328,7 @@ fn character_alignment_on_the_icf_lines_small_characters_up_with_the_largest_fac
 /// Latin line ending in a full stop isn't shortened by Forced.
 #[test]
 fn burasagari_leaves_latin_commas_and_full_stops_inside_the_line() {
-    use vectorcraft_doc::Burasagari;
+    use livipen_doc::Burasagari;
     let measure = width(&point("abcd", style(20.0)));
     let lay = |text: &str, b: Burasagari| {
         let mut t = area(text, style(20.0), Rect::new(0.0, 0.0, measure + 0.01, 400.0), Justify::JustifyLeft);

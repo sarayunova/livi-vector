@@ -24,8 +24,8 @@
 use std::collections::HashMap;
 
 use kurbo::{Affine, Point, Vec2};
-use vectorcraft_color::gradient::{Gradient, GradientGeom, GradientKind, GradientPaint, GradientStop};
-use vectorcraft_color::{Color, Paint};
+use livipen_color::gradient::{Gradient, GradientGeom, GradientKind, GradientPaint, GradientStop};
+use livipen_color::{Color, Paint};
 
 use super::obj::V;
 
@@ -101,7 +101,7 @@ fn registration(vals: &[V]) -> Option<(Paint, Option<Named>)> {
     let at = vals.iter().rposition(|v| matches!(v, V::Str(_)))?;
     let tint = 1.0 - vals.get(at + 1).and_then(V::num).unwrap_or(0.0).clamp(0.0, 1.0) as f32;
     let full = Color::cmyk(1.0, 1.0, 1.0, 1.0);
-    Some((Paint::Solid { color: full.tinted(tint), swatch: Some(vectorcraft_color::swatch::REGISTRATION.into()), tint }, None))
+    Some((Paint::Solid { color: full.tinted(tint), swatch: Some(livipen_color::swatch::REGISTRATION.into()), tint }, None))
 }
 
 /// The colour of a gradient stop's colour values and style.

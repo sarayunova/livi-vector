@@ -7,10 +7,10 @@
 //! corner, of which each page shows one tile.
 
 use kurbo::{Affine, Rect};
+use livipen_doc::marks::outset;
+use livipen_doc::range::parse_range;
+use livipen_doc::{Document, Node, NodeKind, SymbolBoxes};
 use serde::Serialize;
-use vectorcraft_doc::marks::outset;
-use vectorcraft_doc::range::parse_range;
-use vectorcraft_doc::{Document, Node, NodeKind, SymbolBoxes};
 
 use super::{Emulsion, Orientation, PrintArtboards, PrintScaling, PrintSettings};
 use crate::PdfError;
