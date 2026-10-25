@@ -6,6 +6,9 @@ updates:
       - "/"
       - "/crates/affinity/fuzz"
       - "/crates/plugins/example"
+    # Only updates the current version requirements allow (Cargo.lock alone): breaking upgrades
+    # (egui, vello, zbus…) need code changes, so they come with upstream merges instead.
+    versioning-strategy: lockfile-only
     schedule:
       interval: "daily"
       time: "06:00"
