@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/app-icon/hicolor/256x256/apps/com.livi_pen.liviverse.png" width="128" height="128" alt="Livi Pen icon: an engraved dragon on a red tile">
+  <img src="assets/app-icon/hicolor/256x256/apps/com.livi_pen.liviverse.png" width="128" height="128" alt="Livi Pen icon: white curved blades around a star on a blue tile">
 </p>
 
 <h1 align="center">Livi Pen</h1>
@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <img alt="Status: in active development" src="https://img.shields.io/badge/status-in%20active%20development-e8573f?style=flat-square">
+  <img alt="Status: in active development" src="https://img.shields.io/badge/status-in%20active%20development-0a74c2?style=flat-square">
   <img alt="Written in pure Rust" src="https://img.shields.io/badge/pure-Rust-b83a24?style=flat-square&logo=rust&logoColor=white">
   <img alt="Runs on macOS, Windows, Linux, FreeBSD and the web" src="https://img.shields.io/badge/runs%20on-macOS%20%C2%B7%20Windows%20%C2%B7%20Linux%20%C2%B7%20FreeBSD%20%C2%B7%20Web-555555?style=flat-square">
   <img alt="MCP server for agents" src="https://img.shields.io/badge/agents-MCP%20server-555555?style=flat-square">
@@ -304,5 +304,5 @@ with its author, source and license in [ASSETS.md](ASSETS.md). Release builds al
 fonts of [craft-fonts](https://github.com/storytold/craft-fonts/blob/main/ATTRIBUTION.md) (Japanese,
 Simplified Chinese and Arabic faces; SIL Open Font License 1.1).
 
-The app icon (an engraved dragon on red, `#e8573f`) is VectorCraft's, by the ArtCraft team under
-MIT OR Apache-2.0; its palette and files are in [`assets/app-icon/`](assets/app-icon/README.md).
+The app icon is Livi's own, under MIT OR Apache-2.0; its palette and files are in
+[`assets/app-icon/`](assets/app-icon/README.md).

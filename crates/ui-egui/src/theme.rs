@@ -37,12 +37,12 @@ impl Brightness {
     }
 }
 
-/// User Interface › Accent Color: the one colour for what is on, chosen or focused. Coral, the
+/// User Interface › Accent Color: the one colour for what is on, chosen or focused. Blue, the
 /// default, is the app icon's.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Accent {
-    #[default]
     Coral,
+    #[default]
     Blue,
     Violet,
     Green,
@@ -51,7 +51,7 @@ pub enum Accent {
 }
 
 impl Accent {
-    pub const ALL: [Accent; 6] = [Accent::Coral, Accent::Blue, Accent::Violet, Accent::Green, Accent::Amber, Accent::Pink];
+    pub const ALL: [Accent; 6] = [Accent::Blue, Accent::Coral, Accent::Violet, Accent::Green, Accent::Amber, Accent::Pink];
     pub fn id(self) -> &'static str {
         match self {
             Accent::Coral => "coral",
@@ -71,8 +71,8 @@ impl Accent {
         match (self, dark) {
             (Accent::Coral, true) => (0xf06a52, 0xe8573f),
             (Accent::Coral, false) => (0xd9472f, 0xd14a33),
-            (Accent::Blue, true) => (0x5b96ff, 0x2f74f0),
-            (Accent::Blue, false) => (0x2563eb, 0x1f5ad6),
+            (Accent::Blue, true) => (0x4aaee8, 0x0a74c2),
+            (Accent::Blue, false) => (0x075c9c, 0x0a64a8),
             (Accent::Violet, true) => (0xa98bff, 0x7c55f0),
             (Accent::Violet, false) => (0x7146dc, 0x6a3fd4),
             (Accent::Green, true) => (0x3fcf8e, 0x1f9d63),
@@ -173,7 +173,7 @@ impl Tokens {
     pub fn for_brightness(b: Brightness) -> Self {
         let hex = |s: u32| Color32::from_rgb((s >> 16) as u8, (s >> 8) as u8, s as u8);
         // The Craft look: cool slate greys, flat faces with soft corners, and one accent (the app
-        // icon's coral) for what is on, chosen or focused. The four brightness levels share the
+        // icon's blue) for what is on, chosen or focused. The four brightness levels share the
         // style and differ only in their greys.
         let base = Tokens {
             dark: true,
@@ -190,9 +190,9 @@ impl Tokens {
             icon: hex(0xc9d0dc),
             hover: hex(0x262b35),
             tool_active: hex(0x2f3541),
-            accent: hex(0xf06a52),
-            accent_strong: hex(0xe8573f),
-            row_selected: hex(0x3a2a2c),
+            accent: hex(0x4aaee8),
+            accent_strong: hex(0x0a74c2),
+            row_selected: hex(0x243e52),
             pasteboard: hex(0x101217),
             ruler: hex(0x13161c),
             ruler_tick: hex(0x6f788a),
@@ -206,7 +206,7 @@ impl Tokens {
             button_border: hex(0x4a5363),
             selection: hex(0x4f80ff),
             anchor_selected: hex(0x3d82ff),
-            flyout_active: hex(0xff8a74),
+            flyout_active: hex(0x4aaee8),
             font_size: 13.0,
             caption_close: hex(0xc42b1c),
             caption_close_text: Color32::WHITE,
@@ -237,7 +237,7 @@ impl Tokens {
                 icon: hex(0xccd3de),
                 hover: hex(0x353c49),
                 tool_active: hex(0x3d4553),
-                row_selected: hex(0x4a3236),
+                row_selected: hex(0x2f4b61),
                 pasteboard: hex(0x1e222a),
                 ruler: hex(0x21262f),
                 ruler_tick: hex(0x7c8597),
@@ -263,10 +263,10 @@ impl Tokens {
                 icon: hex(0x272c36),
                 hover: hex(0xc5ccd6),
                 tool_active: hex(0xb6bec9),
-                accent: hex(0xd9472f),
-                accent_strong: hex(0xd14a33),
-                flyout_active: hex(0xc23e28),
-                row_selected: hex(0xe7c4bd),
+                accent: hex(0x075c9c),
+                accent_strong: hex(0x0a64a8),
+                flyout_active: hex(0x0a64a8),
+                row_selected: hex(0xaabfd2),
                 pasteboard: hex(0xb9c0cb),
                 ruler: hex(0xccd2db),
                 ruler_tick: hex(0x4a5160),
@@ -292,10 +292,10 @@ impl Tokens {
                 icon: hex(0x2a303b),
                 hover: hex(0xe3e7ed),
                 tool_active: hex(0xd5dbe3),
-                accent: hex(0xd9472f),
-                accent_strong: hex(0xd14a33),
-                flyout_active: hex(0xc23e28),
-                row_selected: hex(0xf8d9d2),
+                accent: hex(0x075c9c),
+                accent_strong: hex(0x0a64a8),
+                flyout_active: hex(0x0a64a8),
+                row_selected: hex(0xc4d6e6),
                 pasteboard: hex(0xdfe3e9),
                 ruler: hex(0xeceff3),
                 ruler_tick: hex(0x58606e),
