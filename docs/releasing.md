@@ -1,6 +1,6 @@
 # Releasing Livi Pen
 
-> **Last updated:** 2026-10-25 · **Change:** minor (the release workflow is self-contained again: no shared storytold pipeline; macOS builds on the standard `macos-15` runner, and missing signing secrets give ad-hoc-signed macOS and unsigned Windows installers instead of a failed run)
+> **Last updated:** 2026-10-25 · **Change:** minor (the release workflow is self-contained again: no shared storytold pipeline; macOS builds on the standard `macos-15` runner, and missing signing secrets give ad-hoc-signed macOS and unsigned Windows installers instead of a failed run; a section on publishing the download page and browser version on liviverse.com)
 
 Every push to the `release` branch runs `.github/workflows/release.yml`. The workflow builds
 installers for macOS, Windows, Linux (including Flatpak bundles and a RISC-V tarball) and FreeBSD, plus the web build, and creates or updates a
@@ -230,6 +230,22 @@ the draft `Livi Pen v<version>` with notes generated from the merged pull reques
 already exists, it replaces its assets and keeps it a draft. If that version is already published,
 the job fails and asks for a version bump (`cargo xtask version set`).
 
+## Publishing on liviverse.com
+
+After publishing a release, update the Livi Pen pages of the website. liviverse.com is served
+from [sarayunova/LiVi-Software-Company-Landingpage](https://github.com/sarayunova/LiVi-Software-Company-Landingpage)
+and goes live about 30 seconds after a change lands on its `main` (changes go in as pull requests):
+
+1. **`livipen/index.html`** (the download page): the version, every download link, the file sizes
+   and the SHA-256 table, copied from the release's `SHA256SUMS.txt`. Update the version on the
+   home page card in `index.html` too.
+2. **`livipen/app/`** (the browser version): replace its contents with those of the release's
+   `livipen-web-<version>.zip` (the files inside `livipen-web-<version>/`), unchanged, `.htaccess`
+   included. Check the zip against `SHA256SUMS.txt` first. The `.wasm` is about 75 MB; don't put it
+   in Git LFS, which the deploy doesn't fetch.
+3. Check the live pages: every download link answers, and `livipen/app/` starts (the `.wasm` comes
+   as `application/wasm`).
+
 ## Secrets
 
 The jobs that sign (macOS, Windows) and the draft-release job run in the `release` environment,
@@ -248,6 +264,7 @@ warning, never a failed build.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-25 | minor | Self-contained release workflow (no shared storytold pipeline; standard `macos-15` runner; unsigned builds warn instead of failing); new section on publishing the download page and browser version on liviverse.com |
 | 2026-10-14 | minor | RPM glibc floor names libm's `GLIBC_2.35`: RHEL 9's glibc 2.34 provides libc's through backports |
 | 2026-10-12 | minor | RPM dependencies use 64-bit runtime capabilities and enforce glibc 2.35 (#1275); real distro install/start-up checks remain pending |
 | 2026-10-12 | minor | Portable mode (#1366): the Windows portable zip ships `portable.txt`; where the marker goes on macOS and Linux, and what Flatpak can't do |

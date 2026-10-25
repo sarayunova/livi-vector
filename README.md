@@ -251,7 +251,7 @@ signed and published. Every bundled asset is listed with its licence in [`ASSETS
 
 ## Downloads
 
-Release builds are published on this repository's [GitHub Releases page](https://github.com/sarayunova/livi-vector/releases). `<ver>` in the file names is the version number, and `SHA256SUMS.txt` lists a checksum for every file.
+Release builds are published on this repository's [GitHub Releases page](https://github.com/sarayunova/livi-vector/releases) and on [liviverse.com/livipen](https://liviverse.com/livipen/), with install steps for each system. To try Livi Pen without installing it, open the [browser version](https://liviverse.com/livipen/app/). `<ver>` in the file names is the version number, and `SHA256SUMS.txt` lists a checksum for every file.
 
 ### Windows
 
