@@ -1,6 +1,6 @@
 # Releasing Livi Pen
 
-> **Last updated:** 2026-10-12 · **Change:** minor (RPM runtime capabilities and metadata checks, #1275)
+> **Last updated:** 2026-10-25 · **Change:** minor (the release workflow is self-contained again: no shared storytold pipeline; macOS builds on the standard `macos-15` runner, and missing signing secrets give ad-hoc-signed macOS and unsigned Windows installers instead of a failed run)
 
 Every push to the `release` branch runs `.github/workflows/release.yml`. The workflow builds
 installers for macOS, Windows, Linux (including Flatpak bundles and a RISC-V tarball) and FreeBSD, plus the web build, and creates or updates a
